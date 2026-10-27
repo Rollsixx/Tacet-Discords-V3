@@ -16,6 +16,13 @@ const STAT_NAMES: Record<string, string> = {
   "heavy attack dmg bonus": "Heavy Attack DMG Bonus",
   "resonance skill dmg bonus": "Resonance Skill DMG Bonus",
   "resonance liberation dmg bonus": "Resonance Liberation DMG Bonus",
+  // Build cards wrap these labels across two lines. A single-line OCR region
+  // can omit the suffix; these exact aliases are unambiguous in a substat field.
+  "basic attack dmg": "Basic Attack DMG Bonus",
+  "heavy attack dmg": "Heavy Attack DMG Bonus",
+  "resonance skill dmg": "Resonance Skill DMG Bonus",
+  "resonance liberation dmg": "Resonance Liberation DMG Bonus",
+  "resonance liberation": "Resonance Liberation DMG Bonus",
 };
 
 const PERCENT_ONLY = new Set([
@@ -106,7 +113,9 @@ export function validateEchoSlot(
           ? commonMain
           : [];
 
-  if (!main || !allowed.includes(main)) {
+  const knownMain = [...commonMain, ...costFourMain, ...costThreeMain];
+  const costKnown = [1, 3, 4].includes(cost);
+  if (!main || !knownMain.includes(main) || (costKnown && !allowed.includes(main))) {
     issues.push({
       code: "INVALID_MAIN",
       message:
