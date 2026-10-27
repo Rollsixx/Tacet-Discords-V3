@@ -98,3 +98,37 @@ test('official Carlotta score appears only after approval and identity verificat
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:info.outputPath('official-leaderboard-mobile.png'),fullPage:true});
 });
+
+test('unreadable initial fifth cost is recovered from real image OCR without editing',async({page},info)=>{
+ test.skip(!directory,'Set USER_BUILD_CARDS_DIRECTORY to local private originals.');
+ // Reproduce a decoder/OCR first-pass miss while leaving both retry reads real.
+ await page.addInitScript(()=>{
+  const native=Object.getOwnPropertyDescriptor(Worker.prototype,'onmessage')!;
+  Object.defineProperty(Worker.prototype,'onmessage',{
+   configurable:true,get:native.get,
+   set(handler:Worker['onmessage']){
+    let reads=0;
+    native.set!.call(this,(event:MessageEvent)=>{
+     let forwarded=event;
+     if(event.data?.status==='resolve'&&event.data?.action==='recognize'){
+      reads++;
+      if(reads===29){
+       forwarded=new MessageEvent('message',{data:{...event.data,data:{...event.data.data,text:'',confidence:0}}});
+      }
+     }
+     handler?.call(this,forwarded);
+    });
+   },
+  });
+ });
+ await page.goto('/import');
+ await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Hiyuki(3).jpg'));
+ await page.getByRole('button',{name:'Recognize Echo stats'}).click();
+ await expect(page.getByRole('heading',{name:'5 Echo slots processed'})).toBeVisible({timeout:60000});
+ await expect(page.getByLabel('Echo 5 cost',{exact:true})).toHaveValue('1');
+ await expect(page.getByText('Cost: Unreadable (recovered from image: 1)',{exact:true})).toHaveCount(1);
+ const fifth=page.getByRole('heading',{name:'Echo 5',exact:true}).locator('..');
+ await fifth.locator('summary').click();
+ await fifth.screenshot({path:info.outputPath('recovered-fifth-cost.png')});
+ await expect(page.getByRole('heading',{name:'No structural warnings',exact:true})).toBeVisible();
+});
