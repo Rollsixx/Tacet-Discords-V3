@@ -38,7 +38,7 @@ test("transactional pending → approved journey, durable storage and private re
     await moderate(second.id, "rejected", "Test moderator", "Bad screenshot", false, db);
     assert.equal((await listBuilds({}, db)).builds.length, 1);
     assert.equal((await listBuilds({ pending: true }, db)).builds.length, 0);
-    assert.equal(scoringReadiness.enabled, false);
+    assert.equal(scoringReadiness.enabled, true);
     await rateLimit("test", 1, db);
     await assert.rejects(rateLimit("test", 1, db), e => e.status === 429);
   } finally { db.close(); await rm(dir, { recursive: true, force: true }); }

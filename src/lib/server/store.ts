@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Client } from "@libsql/client";
+import type { Client, Row } from "@libsql/client";
 import { database } from "./database.ts";
 import { HttpError, type SubmissionInput } from "./validation.ts";
 import { DAMAGE_CORE_VERSION } from "./damage-core.ts";
+import { assessSource } from "./source-evidence.mjs";
+import { ENGINE_VERSION, DATA_VERSION, POLICY_VERSION, SUPPORTED } from "./scoring.mjs";
 
 export async function rateLimit(key: string, max: number, db: Client = database()) {
   const window = Math.floor(Date.now() / 60000);
@@ -19,7 +21,9 @@ export async function rateLimit(key: string, max: number, db: Client = database(
   if (Number(result.rows[0].count) > max) throw new HttpError(429, "Too many requests. Wait one minute.");
 }
 export async function submit(input: SubmissionInput, db: Client = database()) {
+  const assessment = await assessSource(input);
   const data = {
+    assessment,
     character: input.character,
     slots: input.slots.map(({ slot, cost, mainStat, substats }) => ({ slot, cost, mainStat, substats })),
     recognition: "unverified",
@@ -55,41 +59,62 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
     const now = new Date().toISOString();
     const updated = await tx.execute({ sql: "UPDATE submissions SET status=?,reviewed_at=?,identity_verified=? WHERE id=? AND status='pending'", args: [action, now, identityVerified ? 1 : 0, id] });
     if (updated.rowsAffected !== 1) throw new HttpError(409, "Submission is missing or has already been reviewed.");
+    if (action === "approved") {
+      const saved = await tx.execute({sql: "SELECT data FROM submissions WHERE id=?", args: [id]});
+      const assessment = JSON.parse(String(saved.rows[0].data)).assessment;
+      const calculation = assessment?.eligible ? assessment.calculation : null;
+      if (calculation && calculation.engineVersion === ENGINE_VERSION && calculation.dataVersion === DATA_VERSION && calculation.policyId === POLICY_VERSION && Number.isFinite(calculation.score) && calculation.score > 0) {
+        await tx.execute({sql: "INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)", args: [id,calculation.score,ENGINE_VERSION,DATA_VERSION,calculation.referenceCaseVersion,now,POLICY_VERSION,JSON.stringify(calculation)]});
+      }
+    }
     await tx.execute({ sql: "INSERT INTO moderation_events VALUES (?,?,?,?,?,?)", args: [randomUUID(), id, action, reviewer, note, now] });
     await tx.commit();
   } finally { tx.close(); }
 }
 export const scoringReadiness = {
-  enabled: false,
-  reason: "Official Solo rankings await a verified calculation engine and versioned reference cases.",
-  engineVersion: null,
-  numericCoreVersion: DAMAGE_CORE_VERSION,
-  missing: [
-    "Verified character identity and released-version base stats",
-    "Verified weapon identity, level and standardized R1 passive rules",
-    "Five verified Echo and Sonata identities, levels and main-stat amounts",
-    "Versioned character talents, S0 self-buff rules and a defined Solo rotation",
-    "Fixed enemy and energy constraints with per-character reference results",
-  ],
+  enabled: true,
+  reason: "Versioned permanent-passive S0/signature-R1 rotation benchmark. Only approved, identity-verified builds with source-validated inputs are ranked.",
+  engineVersion: ENGINE_VERSION, numericCoreVersion: DAMAGE_CORE_VERSION,
+  dataVersion: DATA_VERSION, policyId: POLICY_VERSION, supportedCharacters: SUPPORTED,
+  metric: "Expected standardized rotation damage (not DPS)",
+  missing: ["Hiyuki and Chisa have no supplied reference rotation; other characters remain outside this release's validated coverage."],
 };
 export async function listBuilds(options: { search?: string; character?: string; id?: string; page?: number; pending?: boolean } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
   const character = (options.character || "").slice(0, 64).trim();
   const result = await db.execute({
-    sql: `SELECT id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data
-      FROM submissions WHERE status=? AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
-      AND (?='' OR character=?) AND (?='' OR id=?)
-      ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?`,
+    sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,
+      CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id='${POLICY_VERSION}' THEN c.score ELSE NULL END AS verified_score
+      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE status=? AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
+      AND (?='' OR character=?) AND (?='' OR s.id=?)
+      ORDER BY created_at DESC,s.id DESC LIMIT 21 OFFSET ?`,
     args: [options.pending ? "pending" : "approved", query, query, query, character, character, options.id || "", options.id || "", (page - 1) * 20],
   });
   return {
-    builds: result.rows.slice(0, 20).map(row => ({
-      id: String(row.id), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
-      status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
-      identityVerified: Boolean(row.identity_verified), score: null,
-      data: JSON.parse(String(row.data)) as { slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
-    })),
+    builds: result.rows.slice(0, 20).map(publicBuild),
     page, hasMore: result.rows.length > 20, scoring: scoringReadiness,
   };
+}
+
+function publicBuild(row: Row) { return {
+      id: String(row.id), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
+      status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
+      identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
+      data: JSON.parse(String(row.data)) as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+    }; }
+
+export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
+  const character = options.character || SUPPORTED[0];
+  const page = Number.isFinite(options.page) ? Math.min(10000,Math.max(1,Math.floor(options.page || 1))) : 1;
+  if (!SUPPORTED.includes(character)) return {builds: [],page,hasMore:false,scoring:scoringReadiness};
+  const search = (options.search || "").slice(0,64).trim();
+  const result = await db.execute({sql: `WITH candidates AS (
+    SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,c.score AS verified_score,
+    row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
+    FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
+    WHERE s.status='approved' AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=?
+  ) SELECT * FROM candidates WHERE player_best=1 AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
+    ORDER BY verified_score DESC,id ASC LIMIT 21 OFFSET ?`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,search,search,search,(page-1)*20]});
+  return {builds:result.rows.slice(0,20).map(publicBuild),page,hasMore:result.rows.length>20,scoring:scoringReadiness};
 }

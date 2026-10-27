@@ -1,0 +1,114 @@
+{
+  "source": "cypress/e2e/calculator/data/Carlotta/base.ts",
+  "commit": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
+  "cases": [
+    [
+      "Basic Attack Stage 1 DMG",
+      "113",
+      "116",
+      "170"
+    ],
+    [
+      "Basic Attack Stage 2 DMG",
+      "275",
+      "282",
+      "413"
+    ],
+    [
+      "Necessary Measures Stage 1 DMG",
+      "138",
+      "141",
+      "207"
+    ],
+    [
+      "Necessary Measures Stage 2 DMG",
+      "279",
+      "286",
+      "418"
+    ],
+    [
+      "Necessary Measures Stage 3 DMG",
+      "487",
+      "499",
+      "730"
+    ],
+    [
+      "Heavy Attack DMG",
+      "318",
+      "326",
+      "476"
+    ],
+    [
+      "Containment Tactics DMG",
+      "476",
+      "488",
+      "714"
+    ],
+    [
+      "Mid-air Attack DMG",
+      "219",
+      "224",
+      "328"
+    ],
+    [
+      "Customary Greetings DMG",
+      "501",
+      "513",
+      "751"
+    ],
+    [
+      "Dodge Counter DMG",
+      "504",
+      "516",
+      "755"
+    ],
+    [
+      "Art of Violence DMG",
+      "601",
+      "616",
+      "902"
+    ],
+    [
+      "Chromatic Splendor DMG",
+      "1175",
+      "1205",
+      "1763"
+    ],
+    [
+      "Era of New Wave DMG",
+      "840",
+      "861",
+      "1260"
+    ],
+    [
+      "Death Knell DMG",
+      "504",
+      "517",
+      "756"
+    ],
+    [
+      "Fatal Finale DMG",
+      "1344",
+      "1377",
+      "2015"
+    ],
+    [
+      "Imminent Oblivion DMG",
+      "1742",
+      "1785",
+      "2612"
+    ],
+    [
+      "Wintertime Aria DMG",
+      "622",
+      "638",
+      "933"
+    ],
+    [
+      "Closing Remark DMG",
+      "1656",
+      "1697",
+      "2484"
+    ]
+  ]
+}

@@ -33,7 +33,7 @@ const publicResult = await (await fetch(publicUrl)).json();
 assert.equal(publicResult.builds[0].id, saved.id);
 assert.equal(publicResult.builds[0].data.slots[0].substats[0].raw, "Crit. Rate 105%");
 assert.equal(publicResult.builds[0].score, null);
-assert.equal(publicResult.scoring.enabled, false);
+assert.equal(publicResult.scoring.enabled, true);
 const secondInput = fixture(String(Number(firstInput.uid) + 1));
 const rejected = await (await post("/api/submissions", secondInput)).json();
 assert.equal((await post("/api/moderation", { ...review, id: rejected.id, action: "rejected" }, true)).status, 200);

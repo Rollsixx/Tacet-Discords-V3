@@ -43,6 +43,11 @@ export function validateSubmission(input: unknown) {
     if (issues.length) throw new HttpError(400, `Echo ${index + 1}: ${issues[0].message}`);
     return { ...stats, portrait: png(item.portrait, 192, 182), sonata: png(item.sonata, 56, 56) };
   });
-  return { uid: input.uid, ign: text(input.ign, 32, 2), character: text(input.character, 64), slots };
+  let sourceImage: Buffer | undefined;
+  if (input.sourceImage !== undefined) {
+    if (typeof input.sourceImage !== "string" || input.sourceImage.length > 1500000 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(input.sourceImage)) throw new HttpError(400, "Invalid or oversized original screenshot evidence.");
+    sourceImage = Buffer.from(input.sourceImage.split(",")[1], "base64");
+  }
+  return { uid: input.uid, ign: text(input.ign, 32, 2), character: text(input.character, 64), slots, sourceImage };
 }
 export type SubmissionInput = ReturnType<typeof validateSubmission>;

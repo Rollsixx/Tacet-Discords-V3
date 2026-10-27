@@ -1,0 +1,93 @@
+{
+  "version": "reference-cases/1",
+  "sourceCommit": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
+  "cases": [
+    {
+      "character": "Carlotta",
+      "score": 296418.56387210166,
+      "actionCount": 11,
+      "rotation": "Kushy was here :3",
+      "weapon": "TheLastDance",
+      "echoes": [
+        {
+          "echo": "SentryConstruct",
+          "set": "FrostyResolve"
+        },
+        {
+          "echo": "QuestlessKnight",
+          "set": "FrostyResolve"
+        },
+        {
+          "echo": "AbyssalMercator",
+          "set": "FrostyResolve"
+        },
+        {
+          "echo": "ChopChopLeftless",
+          "set": "FrostyResolve"
+        },
+        {
+          "echo": "GoldenJunrock",
+          "set": "FrostyResolve"
+        }
+      ]
+    },
+    {
+      "character": "Cartethyia",
+      "score": 245765.30501955934,
+      "actionCount": 13,
+      "rotation": "Rexlent's Fleurdelys Rotation",
+      "weapon": "DefiersThorn",
+      "echoes": [
+        {
+          "echo": "ReminiscenceFleurdelys",
+          "set": "WindwardPilgrimage"
+        },
+        {
+          "echo": "NightmareKelpie",
+          "set": "WindwardPilgrimage"
+        },
+        {
+          "echo": "Sacerdos",
+          "set": "WindwardPilgrimage"
+        },
+        {
+          "echo": "FusionDrake",
+          "set": "WindwardPilgrimage"
+        },
+        {
+          "echo": "SpectroDrake",
+          "set": "WindwardPilgrimage"
+        }
+      ]
+    },
+    {
+      "character": "Aemeath",
+      "score": 407262.2444491054,
+      "actionCount": 21,
+      "rotation": "Basic Rotation (Tune Break)",
+      "weapon": "EverbrightPolestar",
+      "echoes": [
+        {
+          "echo": "Sigillum",
+          "set": "TrailblazingStar"
+        },
+        {
+          "echo": "Glommoth",
+          "set": "TrailblazingStar"
+        },
+        {
+          "echo": "ReminiscenceKronaclaw",
+          "set": "TrailblazingStar"
+        },
+        {
+          "echo": "IceglintDancer",
+          "set": "TrailblazingStar"
+        },
+        {
+          "echo": "ShadowStepper",
+          "set": "TrailblazingStar"
+        }
+      ]
+    }
+  ]
+}
