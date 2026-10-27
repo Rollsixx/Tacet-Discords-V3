@@ -86,3 +86,5 @@ Thumbs.db
 /playwright-report/
 
 /test-results-debug/
+
+/test-results-user/
