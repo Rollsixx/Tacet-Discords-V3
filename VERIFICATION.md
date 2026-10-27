@@ -4,7 +4,7 @@ Source: merged MVP on main, b03e8b9a2a5ce95fad4a65f7ebe1bd401e585e63. Reference:
 
 ## Executed results
 
-- Automated unit/server suite: 114/114 tests passing (106 scanner, 8 server/numeric tests).
+- Automated unit/server suite: 116/116 tests passing (108 scanner, 8 server/numeric tests).
 - Numeric core: 324 cases matched the reference's calcHitDamage implementation, across character/enemy levels, resistance, defense ignore/reduction and independent multipliers. The core calculates explicit normal/critical/expected damage and explicit rotation aggregation. This is formula compatibility, not official character-score verification.
 - Chromium: six Playwright tests passed at desktop 1440 × 1000 and mobile 390 × 844.
 - All four pages rendered, navigation links were present, and no horizontal overflow or page errors occurred in the page checks.
@@ -23,3 +23,9 @@ Source: merged MVP on main, b03e8b9a2a5ce95fad4a65f7ebe1bd401e585e63. Reference:
 - Hosting/database accounts and credentials were not provisioned; remote connectivity, HTTPS, backup/retention policies and deployed smoke checks remain external setup steps.
 
 Browser install limitations from the earlier MVP pass have been resolved using Playwright 1.51.1 and Chromium Headless Shell 134. Test images, screenshots, private tokens, temporary databases and generated dependencies are excluded from the source delivery. No V2 changes, force pushes or copied GPL calculator implementation are included.
+
+## User screenshot follow-up: wrapped labels
+
+The user's Hiyuki browser screenshots show seven label-related warnings plus an unreadable fifth cost and a redundant main-stat compatibility warning. Exact, unambiguous wrapped label variants (for example `Resonance Skill DMG` and `Resonance Liberation`) now parse to their canonical substat names without altering the OCR strings or numeric values. Unknown labels and out-of-range numbers still fail validation. A known main label is no longer reported as missing just because cost OCR is unreadable; cost compatibility is checked once a valid cost is supplied.
+
+The manually transcribed five-slot browser results now produce only INVALID_COST. An explicit user correction of Echo 5's cost to 1 clears the remaining issue in that regression test. These are text/parser results, not an original-image accuracy claim. The original Hiyuki.jpg was not attached; the fifth-cost OCR miss still requires that source image for reproduction.

@@ -116,3 +116,35 @@ test("empty-slot flag remains a blocker even if text is entered", () => {
   input.presence = "empty";
   assert.equal(validateEchoSlot(input)[0].code, "EMPTY_SLOT");
 });
+
+test("wrapped damage-label aliases retain the recognized numeric value", () => {
+  for (const [label, canonical] of [
+    ["Resonance Skill DMG", "Resonance Skill DMG Bonus"],
+    ["Resonance Liberation", "Resonance Liberation DMG Bonus"],
+    ["Resonance Liberation DMG", "Resonance Liberation DMG Bonus"],
+    ["Heavy Attack DMG", "Heavy Attack DMG Bonus"],
+  ]) {
+    const parsed = parseSubstat(label + " 8.6%");
+    assert.equal(parsed.name, canonical);
+    assert.equal(parsed.amount, 8.6);
+    assert.equal(parsed.percent, true);
+  }
+  assert.equal(parseSubstat("Resonance 8.6%"), null);
+  assert.equal(parseSubstat("Skill 8.6%"), null);
+});
+
+test("Hiyuki screenshot transcription leaves only the genuinely missing fifth cost", () => {
+  // Manually transcribed browser screenshots, not an original-image OCR fixture.
+  const builds = [
+    slot("4", "Crit. DMG", ["Resonance Skill DMG 8.6%", "Crit. DMG 21%", "Crit. Rate 10.5%", "Resonance Liberation 9.4%", "HP 10.1%"]),
+    slot("3", "Glacio DMG Bonus", ["Crit. DMG 19.8%", "DEF 60", "Resonance Liberation 6.4%", "ATK 9.4%", "Crit. Rate 6.3%"]),
+    slot("3", "Glacio DMG Bonus", ["Energy Regen 10%", "ATK 8.6%", "Crit. DMG 21%", "Resonance Skill DMG 8.6%", "Resonance Liberation 6.4%"]),
+    slot("1", "ATK", ["Crit. Rate 10.5%", "ATK 40", "Energy Regen 9.2%", "Crit. DMG 13.8%", "Resonance Liberation 10.1%"]),
+    slot("", "ATK", ["Resonance Liberation 8.6%", "Crit. Rate 10.5%", "Crit. DMG 21%", "HP 9.4%", "ATK 11.6%"]),
+  ];
+  const issues = builds.flatMap(validateEchoSlot);
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].code, "INVALID_COST");
+  builds[4].cost.value = "1"; // Explicit screenshot-confirmed user correction.
+  assert.equal(builds.flatMap(validateEchoSlot).length, 0);
+});
