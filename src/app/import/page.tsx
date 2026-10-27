@@ -2,7 +2,7 @@
 
 import { validateEchoSlot } from "@/lib/scanner/stat-validation";
 import { EchoVisualPreview } from "@/lib/scanner/echo-visual-preview";
-import { VisualRecognitionDiagnostics } from "@/lib/scanner/visual-recognition-diagnostics";
+import { SubmitBuild } from "@/components/submit-build";
 
 import { useRef, useState } from "react";
 import { PageHeading, Panel } from "@/components/ui";
@@ -162,8 +162,7 @@ export default function ImportPage() {
       <div className="demo-banner">
         <span className="status-dot" />
         OCR BETA — Text recognition is functional but unverified.
-        Echo identity, Sonata sets, Solo scores and submissions
-        are not connected.
+        Review all extracted fields. Submissions are stored for moderator review; Echo identities and Solo scores remain unverified.
       </div>
 
       <div className="workspace-grid">
@@ -173,7 +172,7 @@ export default function ImportPage() {
               <span className="eyebrow">Build card scanner</span>
               <h2 className="panel-title">Screenshot recognition</h2>
           <EchoVisualPreview file={file} />
-          <VisualRecognitionDiagnostics file={file} />
+
             </div>
             <span className="tag">OCR BETA</span>
           </div>
@@ -336,8 +335,13 @@ export default function ImportPage() {
                   <h3 className="panel-title">
                     Echo {slot.slot}
                   </h3>
+                  <details><summary>Compare original OCR with your corrections</summary>
+                    <p className="muted">Cost: {slot.cost.raw || "Unreadable"} {slot.cost.raw !== slot.cost.value ? "(corrected)" : ""}</p>
+                    <p className="muted">Main stat: {slot.mainStat.raw || "Unreadable"} {slot.mainStat.raw !== slot.mainStat.value ? "(corrected)" : ""}</p>
+                    {slot.substats.map((stat, index) => <p className="muted" key={index}>Substat {index + 1}: {stat.raw || "Unreadable"} {stat.raw !== stat.value ? "(corrected)" : ""}</p>)}
+                  </details>
                   <div className="card-row">
-                    <span>Cost (raw OCR)</span>
+                    <span>Cost (reviewed value)</span>
                     <input
                       aria-label={`Echo ${slot.slot} cost`}
                       value={slot.cost.value}
@@ -424,6 +428,7 @@ export default function ImportPage() {
                 </section>
               ))}
 
+              {file && <SubmitBuild key={file.name + file.lastModified} file={file} result={result} />}
               {result.warnings.length > 0 && (
                 <div className="workspace-note">
                   <span className="eyebrow">Review required</span>
@@ -440,8 +445,7 @@ export default function ImportPage() {
             <p className="muted">
               Screenshot processing runs in your browser.
               Tesseract.js may download OCR worker and language
-              resources from external hosts. Your screenshot is not
-              submitted to the Tacet Discords server in this step.
+              resources from external hosts. Only after you submit, ten visual crops and reviewed statistics are stored for moderation. The original screenshot stays in your browser.
               Recognition supports only the specified build-card layout.
             </p>
           </div>
@@ -456,8 +460,8 @@ export default function ImportPage() {
               ["01", "Select screenshot", file ? "Ready" : "Waiting"],
               ["02", "Read Echo text", result ? "Completed" : running ? "Processing" : "Waiting"],
               ["03", "Review OCR results", result ? "Ready" : "Waiting"],
-              ["04", "Match Echo and Sonata", "Not connected"],
-              ["05", "Calculate and submit", "Not connected"],
+              ["04", "Review five visual crops", file ? "Ready" : "Waiting"],
+              ["05", "Submit for moderation", result ? "Ready after corrections" : "Waiting"],
             ].map(([number, title, status]) => (
               <div className="pipeline-step" key={number}>
                 <span className="pipeline-number">{number}</span>
@@ -483,6 +487,7 @@ export default function ImportPage() {
     </>
   );
 }
+
 
 
 

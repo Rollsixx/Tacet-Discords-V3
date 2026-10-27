@@ -1,0 +1,86 @@
+import { createHash, randomUUID } from "node:crypto";
+import type { Client } from "@libsql/client";
+import { database } from "./database.ts";
+import { HttpError, type SubmissionInput } from "./validation.ts";
+
+export async function rateLimit(key: string, max: number, db: Client = database()) {
+  const window = Math.floor(Date.now() / 60000);
+  const result = await db.execute({
+    sql: `INSERT INTO rate_limits(key,window,count) VALUES (?,?,1)
+      ON CONFLICT(key) DO UPDATE SET
+      count=CASE WHEN window=excluded.window THEN count+1 ELSE 1 END,
+      window=excluded.window RETURNING count`,
+    args: [key, window],
+  });
+  if (key === "submission-global" && Number(result.rows[0].count) === 1) {
+    await db.execute({ sql: "DELETE FROM rate_limits WHERE window<?", args: [window - 10] });
+  }
+  if (Number(result.rows[0].count) > max) throw new HttpError(429, "Too many requests. Wait one minute.");
+}
+export async function submit(input: SubmissionInput, db: Client = database()) {
+  const data = {
+    character: input.character,
+    slots: input.slots.map(({ slot, cost, mainStat, substats }) => ({ slot, cost, mainStat, substats })),
+    recognition: "unverified",
+  };
+  const hash = createHash("sha256").update(input.uid).update(input.character.toLowerCase());
+  for (const slot of input.slots) {
+    hash.update(JSON.stringify([slot.cost.value, slot.mainStat.value, slot.substats.map(x => x.value)]));
+    hash.update(slot.portrait).update(slot.sonata);
+  }
+  const fingerprint = hash.digest("hex");
+  const id = randomUUID();
+  const createdAt = new Date().toISOString();
+  const tx = await db.transaction("write");
+  try {
+    const duplicate = await tx.execute({ sql: "SELECT id FROM submissions WHERE fingerprint=?", args: [fingerprint] });
+    if (duplicate.rows.length) throw new HttpError(409, "This build has already been submitted.");
+    const recent = await tx.execute({ sql: "SELECT COUNT(*) AS count FROM submissions WHERE uid=? AND created_at>?", args: [input.uid, new Date(Date.now() - 60000).toISOString()] });
+    if (Number(recent.rows[0].count) >= 2) throw new HttpError(429, "Please wait before submitting another build for this UID.");
+    await tx.execute({ sql: "INSERT INTO players(uid,created_at) VALUES (?,?) ON CONFLICT(uid) DO NOTHING", args: [input.uid, createdAt] });
+    await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at) VALUES (?,?,?,?,?,?,?)", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt] });
+    for (const slot of input.slots) {
+      for (const kind of ["portrait", "sonata"] as const) {
+        await tx.execute({ sql: "INSERT INTO assets(id,submission_id,slot,kind,png) VALUES (?,?,?,?,?)", args: [`${id}-${slot.slot}-${kind}`, id, slot.slot, kind, slot[kind]] });
+      }
+    }
+    await tx.commit();
+    return { ok: true, id, status: "pending", createdAt };
+  } finally { tx.close(); }
+}
+export async function moderate(id: string, action: "approved" | "rejected", reviewer: string, note: string, identityVerified: boolean, db: Client = database()) {
+  const tx = await db.transaction("write");
+  try {
+    const now = new Date().toISOString();
+    const updated = await tx.execute({ sql: "UPDATE submissions SET status=?,reviewed_at=?,identity_verified=? WHERE id=? AND status='pending'", args: [action, now, identityVerified ? 1 : 0, id] });
+    if (updated.rowsAffected !== 1) throw new HttpError(409, "Submission is missing or has already been reviewed.");
+    await tx.execute({ sql: "INSERT INTO moderation_events VALUES (?,?,?,?,?,?)", args: [randomUUID(), id, action, reviewer, note, now] });
+    await tx.commit();
+  } finally { tx.close(); }
+}
+export const scoringReadiness = {
+  enabled: false,
+  reason: "Official Solo rankings await a verified calculation engine and versioned reference cases.",
+  engineVersion: null,
+};
+export async function listBuilds(options: { search?: string; character?: string; id?: string; page?: number; pending?: boolean } = {}, db: Client = database()) {
+  const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
+  const query = (options.search || "").slice(0, 64).trim();
+  const character = (options.character || "").slice(0, 64).trim();
+  const result = await db.execute({
+    sql: `SELECT id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data
+      FROM submissions WHERE status=? AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
+      AND (?='' OR character=?) AND (?='' OR id=?)
+      ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?`,
+    args: [options.pending ? "pending" : "approved", query, query, query, character, character, options.id || "", options.id || "", (page - 1) * 20],
+  });
+  return {
+    builds: result.rows.slice(0, 20).map(row => ({
+      id: String(row.id), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
+      status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
+      identityVerified: Boolean(row.identity_verified), score: null,
+      data: JSON.parse(String(row.data)) as { slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+    })),
+    page, hasMore: result.rows.length > 20, scoring: scoringReadiness,
+  };
+}

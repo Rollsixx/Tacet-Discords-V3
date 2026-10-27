@@ -1,24 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRequire } from "node:module";
-import path from "node:path";
-import os from "node:os";
 
 const require = createRequire(import.meta.url);
 
-const runtime = path.join(
-  os.tmpdir(),
-  "tacet-v3-step3i12g",
-  "runtime",
-);
-
-const decoder = require(
-  path.join(runtime, "sonata-rgb-decoder.ts"),
-);
-
-const matcher = require(
-  path.join(runtime, "image-matcher.ts"),
-);
+const decoder = require(new URL("./sonata-rgb-decoder.ts", import.meta.url).pathname);
+const matcher = require(new URL("./image-matcher.ts", import.meta.url).pathname);
 
 function syntheticRgb(r, g, b) {
   const bytes = Buffer.alloc(32 * 32 * 3);
