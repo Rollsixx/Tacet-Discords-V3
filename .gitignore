@@ -74,3 +74,8 @@ Thumbs.db
 /coverage/
 /dist/
 /build/
+
+
+*.db
+*.db-*
+!.env.example

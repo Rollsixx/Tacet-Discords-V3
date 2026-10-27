@@ -1,4 +1,5 @@
-﻿import Link from "next/link";
+import { BuildDirectory } from "@/components/build-directory";
+import Link from "next/link";
 import { Panel } from "@/components/ui";
 import {
   ResonatorCard,
@@ -13,14 +14,13 @@ export default function Home() {
           <span className="eyebrow">Wuthering Waves / Build intelligence</span>
           <div className="hero-status">
             <span className="status-dot" />
-            V3 interface preview
+            Screenshot submissions / moderator reviewed
           </div>
           <h1>
             The art of <span className="gradient-text">building better.</span>
           </h1>
           <p>
-            Discover Resonator builds, explore player profiles, and compete
-            through standardized Solo damage rankings.
+            Discover Resonator builds, explore player profiles, and share screenshot builds for moderator review. Official Solo scoring awaits verification.
           </p>
           <div className="hero-actions">
             <Link className="action" href="/leaderboards">
@@ -39,6 +39,7 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="section-block"><h2>Recently approved builds</h2><BuildDirectory mode="recent" /><p className="muted">Official ranking preview: unavailable until the Solo engine is verified.</p></section>
       <section className="section-block">
         <div className="section-heading">
           <div>
@@ -78,7 +79,7 @@ export default function Home() {
             <h3>From screenshot to build.</h3>
             <p className="muted">
               A streamlined workspace for importing and reviewing your
-              Resonator statistics. Scanner integration is upcoming.
+              Resonator statistics. Scan five Echo slots, review OCR and submit for moderation.
             </p>
             <Link href="/import" className="text-link">
               Open build workspace →
@@ -90,8 +91,7 @@ export default function Home() {
             <div className="feature-symbol">◎</div>
             <h3>Your roster. Your identity.</h3>
             <p className="muted">
-              Public player profiles will organize Resonator builds,
-              achievements, and leaderboard placements.
+              Public profiles organize approved Resonator builds by UID and in-game name.
             </p>
             <Link href="/profiles" className="text-link">
               Explore profiles →
@@ -102,8 +102,7 @@ export default function Home() {
             <span className="eyebrow">Competitive standard</span>
             <h3>Built for fair comparison.</h3>
             <p className="muted">
-              Solo rankings standardize Resonance Chain S0 and weapon
-              Syntonization R1, without team buffs.
+              The planned Solo standard is Resonance Chain S0 and weapon Syntonization R1, without team buffs. Official rankings remain disabled until verified.
             </p>
             <div className="standard-tags">
               <span>S0 RESONANCE</span>
@@ -122,3 +121,4 @@ export default function Home() {
     </>
   );
 }
+

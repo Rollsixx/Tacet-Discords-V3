@@ -135,6 +135,13 @@ export function validateEchoSlot(
       return;
     }
 
+    if ((parsed.percent && parsed.amount > 100) || parsed.amount > 100000) {
+      issues.push({
+        code: "NUMERIC_RANGE",
+        message: `Substat ${position}: value is outside the accepted numeric range; check the screenshot for a missing decimal.`,
+      });
+    }
+
     if (seen.has(parsed.name)) {
       issues.push({
         code: "DUPLICATE_SUBSTAT",
@@ -205,3 +212,4 @@ export function validateEchoSlot(
 
   return issues;
 }
+

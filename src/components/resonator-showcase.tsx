@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
 export type ResonatorPreview = {
   name: string;
@@ -46,7 +46,7 @@ export function ResonatorCard({
 }) {
   return (
     <Link
-      href={`/leaderboards?resonator=${encodeURIComponent(resonator.name)}`}
+      href={`/leaderboards?character=${encodeURIComponent(resonator.name)}`}
       className={`resonator-card tone-${resonator.tone}`}
     >
       <div className="resonator-art" aria-hidden="true">
@@ -61,3 +61,4 @@ export function ResonatorCard({
     </Link>
   );
 }
+
