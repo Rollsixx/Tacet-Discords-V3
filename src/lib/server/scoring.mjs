@@ -1,11 +1,12 @@
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import catalog from '../game-data/fingerprints.json' with {type:'json'};
 import {fingerprint,rankFingerprint} from './image-fingerprint.mjs';
+import {SCORING_CHARACTERS,scoringPreset} from '../game-data/scoring-policies.mjs';
 import {parseSubstat} from '../scanner/stat-validation.ts';
-export const ENGINE_VERSION='wuthering-tools-b32cdbd+tacet/1.0';
+export const ENGINE_VERSION='wuthering-tools-b32cdbd+tacet/2.0';
 export const DATA_VERSION='b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5';
-export const POLICY_VERSION='solo-permanent-s0-signature-r1/1';
-export const SUPPORTED=['Carlotta','Cartethyia','Aemeath'];
+export const POLICY_VERSION='solo-permanent-s0-signature-r1/2';
+export const SUPPORTED=SCORING_CHARACTERS;
 const attributes={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Basic Attack DMG Bonus':'BasicAttackDMGBonus','Heavy Attack DMG Bonus':'HeavyAttackDMGBonus','Resonance Skill DMG Bonus':'ResonanceSkillDMGBonus','Resonance Liberation DMG Bonus':'ResonanceLiberationDMGBonus','Glacio DMG Bonus':'Glacio','Fusion DMG Bonus':'Fusion','Aero DMG Bonus':'Aero','Electro DMG Bonus':'Electro','Spectro DMG Bonus':'Spectro','Havoc DMG Bonus':'Havoc','Healing Bonus':'HealingBonus',ATK:'ATK',DEF:'DEF',HP:'HP'};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
 export function matchVisual(f,references,maximum,margin,equivalent=false){
@@ -59,7 +60,7 @@ export async function calculateStandard(character,slots,identities){
  const enemy={enemyLevel:90,enemyResist:.1,enemyType:'Calamity'};
  const options={alwaysEnabledOnly:true};
  const context=await engine.buildCharacterCalculationContext(character,{[character]:build},enemy,[],options);
- const preset=chosen.rotations[0];if(!preset?.data?.actions?.length)throw Error('Missing rotation.');
+ const preset=scoringPreset(character,chosen);if(!preset?.data?.actions?.length)throw Error('Missing rotation.');
  const actions=preset.data.actions.filter(a=>!a.isDisabled).map((a,i)=>({...a,id:'action-'+i,count:Number(a.count??1)}));
  for(const action of actions){if(!Number.isInteger(action.count)||action.count<1||!engine.resolveRotationActionToAttackData(action,chosen,'90'))throw Error('Unresolved rotation action '+action.key);}
  const rotation={...preset.data,id:POLICY_VERSION+'-'+character,actions};
@@ -67,5 +68,5 @@ export async function calculateStandard(character,slots,identities){
  if(result.attacks.length!==actions.length)throw Error('Incomplete rotation evaluation.');
  const score=result.damageAggregation.avgDamage;
  if(typeof score!=='number'||!Number.isFinite(score)||score<=0)throw Error('Invalid calculation result.');
- return {score,character,policyId:POLICY_VERSION,engineVersion:ENGINE_VERSION,dataVersion:DATA_VERSION,referenceCaseVersion:'reference-cases/1',metric:'Expected standardized rotation damage',rotation:preset.name,weapon,enemy,conditions:'Level 90; talents 10; S0; signature weapon level 90 R1; max-level five-star Echoes; permanent passives only; no team buffs; not DPS.',identities,finalStats:context.finalStats,actions:result.attacks.map(a=>({key:a.key,count:a.count,damage:{normal:a.damage?.totalDamage,expected:a.damage?.avgDamage,critical:a.damage?.critDamage}})),normalDamage:result.damageAggregation.normalDamage,criticalDamage:result.damageAggregation.critDamage};
+ return {score,character,policyId:POLICY_VERSION,engineVersion:ENGINE_VERSION,dataVersion:DATA_VERSION,referenceCaseVersion:'reference-cases/2',metric:'Expected standardized benchmark damage',rotation:preset.name,rotationOrigin:preset.provenance||'First pinned upstream rotation preset.',startState:preset.startState||'Resource availability assumed by the pinned upstream rotation preset.',weapon,enemy,conditions:'Level 90; talents 10; S0; signature weapon level 90 R1; max-level five-star Echoes; permanent passives only; no team buffs; not DPS.',identities,finalStats:context.finalStats,actions:result.attacks.map(a=>({key:a.key,count:a.count,damage:{normal:a.damage?.totalDamage,expected:a.damage?.avgDamage,critical:a.damage?.critDamage}})),normalDamage:result.damageAggregation.normalDamage,criticalDamage:result.damageAggregation.critDamage};
 }

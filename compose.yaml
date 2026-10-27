@@ -1,0 +1,13 @@
+services:
+  web:
+    build: .
+    ports: ["3000:3000"]
+    environment:
+      TURSO_DATABASE_URL: file:/data/tacet.db
+      ALLOW_LOCAL_DATABASE: "true"
+      MODERATOR_TOKEN: ${MODERATOR_TOKEN:?Set MODERATOR_TOKEN in your environment}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+    volumes: ["tacet-data:/data"]
+    restart: unless-stopped
+volumes:
+  tacet-data:

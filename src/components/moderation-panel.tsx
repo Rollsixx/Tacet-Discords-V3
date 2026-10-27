@@ -4,6 +4,8 @@ import { BuildCard } from "./build-directory";
 import type { listBuilds } from "@/lib/server/store";
 type Results = Awaited<ReturnType<typeof listBuilds>>;
 export function ModerationPanel() {
+  const [view,setView]=useState("pending");
+  const [search,setSearch]=useState("");
   const [token, setToken] = useState("");
   const [reviewer, setReviewer] = useState("");
   const [note, setNote] = useState("");
@@ -15,7 +17,7 @@ export function ModerationPanel() {
   async function load(target = page) {
     setBusy(true); setError("");
     try {
-      const response = await fetch("/api/moderation?page=" + target, { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+      const response = await fetch("/api/moderation?" + new URLSearchParams({page:String(target),status:view,search}), { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       setResult(data); setPage(target);
@@ -32,21 +34,31 @@ export function ModerationPanel() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Review failed."); }
     finally { setBusy(false); }
   }
+  async function verify(id:string,value:boolean){
+    setBusy(true);setError("");
+    try{
+      const response=await fetch("/api/moderation",{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({id,identityVerified:value,reviewer,note})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error);
+      setNote("");await load();
+    }catch(cause){setError(cause instanceof Error?cause.message:"Verification failed.");}finally{setBusy(false);}
+  }
   return <details className="moderation-panel"><summary>Moderator access</summary>
-    <p className="muted">Use your private moderator token over HTTPS. It is held only in this tab. Inspect every crop and corrected value before approving. Manual UID/IGN membership checks happen outside this website.</p>
+    <p className="muted">Use your private moderator token over HTTPS. It is held only in this tab. Inspect every crop and corrected value before approving. Match membership and UID/IGN in the designated Discord verification channel. This website has no Discord bot or account integration. Approved players can be verified or unverified later; the change applies to all their approved builds and is audited.</p>
     <form onSubmit={e => { e.preventDefault(); void load(1); }}>
       <label className="field"><span>Moderator token</span><input type="password" autoComplete="off" value={token} onChange={e => { setToken(e.target.value); setResult(null); }} required minLength={32} /></label>
-      <button className="action" disabled={busy}>Load pending submissions</button>
+      <label className="field"><span>Review queue</span><select aria-label="Review queue" value={view} onChange={e=>{setView(e.target.value);setResult(null);setPage(1);}}><option value="pending">Pending submissions</option><option value="approved">Approved players</option></select></label>
+      {view==="approved" && <label className="field"><span>Find approved UID or IGN</span><input value={search} maxLength={64} onChange={e=>setSearch(e.target.value)} /></label>}
+      <button className="action" disabled={busy}>{view==="pending"?"Load pending submissions":"Load approved players"}</button>
       <button type="button" className="outline-button" onClick={() => { setToken(""); setResult(null); }}>Clear access</button>
     </form>
     {error && <p role="alert" className="field-error">{error}</p>}
     {result && <>
       <label className="field"><span>Reviewer name (audit trail)</span><input value={reviewer} onChange={e => setReviewer(e.target.value)} maxLength={64} /></label>
       <label className="field"><span>Review note</span><textarea value={note} onChange={e => setNote(e.target.value)} maxLength={500} /></label>
-      <label><input type="checkbox" checked={verified} onChange={e => setVerified(e.target.checked)} /> I manually matched this UID/IGN to the member outside the website.</label>
-      {!result.builds.length && <p>No pending submissions.</p>}
+      {view==="pending" && <label><input type="checkbox" checked={verified} onChange={e => setVerified(e.target.checked)} /> I manually matched this UID/IGN to the member outside the website.</label>}
+      {!result.builds.length && <p>{view==="pending"?"No pending submissions.":"No approved players found."}</p>}
       {result.builds.map(build => <div key={build.id}><BuildCard build={build} token={token} />
-        <div className="hero-actions"><button className="action" disabled={busy || reviewer.trim().length < 2} onClick={() => review(build.id, "approved")}>Approve {build.character}</button><button className="outline-button" disabled={busy || reviewer.trim().length < 2} onClick={() => review(build.id, "rejected")}>Reject {build.character}</button></div>
+        <div className="hero-actions">{view==="pending"?<><button className="action" disabled={busy || reviewer.trim().length < 2} onClick={() => review(build.id, "approved")}>Approve {build.character}</button><button className="outline-button" disabled={busy || reviewer.trim().length < 2} onClick={() => review(build.id, "rejected")}>Reject {build.character}</button></>:<button className="action" disabled={busy||reviewer.trim().length<2} onClick={()=>verify(build.id,!build.identityVerified)}>{build.identityVerified?"Unverify":"Verify"} {build.uid}</button>}</div>
       </div>)}
       <div className="pagination"><button className="outline-button" disabled={busy || page === 1} onClick={() => load(page - 1)}>Previous</button><span>Page {page}</span><button className="outline-button" disabled={busy || !result.hasMore} onClick={() => load(page + 1)}>Next</button></div>
     </>}

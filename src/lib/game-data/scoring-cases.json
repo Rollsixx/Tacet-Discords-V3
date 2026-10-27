@@ -1,5 +1,5 @@
 {
-  "version": "reference-cases/1",
+  "version": "reference-cases/2",
   "sourceCommit": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
   "cases": [
     {
@@ -88,6 +88,168 @@
           "set": "TrailblazingStar"
         }
       ]
+    },
+    {
+      "character": "Hiyuki",
+      "score": 234283.27539526785,
+      "actionCount": 9,
+      "weapon": "Frostburn",
+      "echoes": [
+        {
+          "echo": "ReminiscenceThrenodianVoidborneConstruct",
+          "set": "WishesofQuietSnowfall",
+          "echoMatch": {
+            "key": "ReminiscenceThrenodianVoidborneConstruct",
+            "difference": 0.16030092592592593,
+            "margin": 1
+          },
+          "setMatch": {
+            "key": "WishesofQuietSnowfall",
+            "difference": 0.08854166666666666,
+            "margin": 0.09809027777777776
+          }
+        },
+        {
+          "echo": "Ironhoof",
+          "set": "WishesofQuietSnowfall",
+          "echoMatch": {
+            "key": "Ironhoof",
+            "difference": 0.0853587962962963,
+            "margin": 0.2677951388888889
+          },
+          "setMatch": {
+            "key": "WishesofQuietSnowfall",
+            "difference": 0.11776620370370372,
+            "margin": 0.07248263888888887
+          }
+        },
+        {
+          "echo": "WindlashColeoid",
+          "set": "WishesofQuietSnowfall",
+          "echoMatch": {
+            "key": "WindlashColeoid",
+            "difference": 0.03255208333333333,
+            "margin": 0.31597222222222227
+          },
+          "setMatch": {
+            "key": "WishesofQuietSnowfall",
+            "difference": 0.12008101851851852,
+            "margin": 0.07132523148148148
+          }
+        },
+        {
+          "echo": "IceglintDancer",
+          "set": "WishesofQuietSnowfall",
+          "echoMatch": {
+            "key": "IceglintDancer",
+            "difference": 0.08275462962962962,
+            "margin": 0.04441550925925927
+          },
+          "setMatch": {
+            "key": "WishesofQuietSnowfall",
+            "difference": 0.08969907407407407,
+            "margin": 0.10850694444444442
+          }
+        },
+        {
+          "echo": "TremorWarrior",
+          "set": "WishesofQuietSnowfall",
+          "echoMatch": {
+            "key": "TremorWarrior",
+            "difference": 0.10734953703703703,
+            "margin": 0.14713541666666669
+          },
+          "setMatch": {
+            "key": "WishesofQuietSnowfall",
+            "difference": 0.08260995370370369,
+            "margin": 0.10734953703703706
+          }
+        }
+      ],
+      "rotation": "Tacet Foreclaimed Self window v1",
+      "origin": "Tacet-authored benchmark using pinned Hiyuki basic/skill/liberation/forte kit rules; not an upstream preset or an optimal-DPS claim.",
+      "startState": "Already in Foreclaimed Self, Frostheart 300, Frostharden Iai 3, Whiteout Bitterfrost 0, Snowforged Blade 0. Preparation damage excluded. No Intro, Outro, team buffs or status-proc damage."
+    },
+    {
+      "character": "Chisa",
+      "score": 81751.70188193902,
+      "actionCount": 5,
+      "weapon": "Kumokiri",
+      "echoes": [
+        {
+          "echo": "ReminiscenceThrenodianLeviathan",
+          "set": "ThreadofSeveredFate",
+          "echoMatch": {
+            "key": "ReminiscenceThrenodianLeviathan",
+            "difference": 0.06090856481481481,
+            "margin": 1
+          },
+          "setMatch": {
+            "key": "ThreadofSeveredFate",
+            "difference": 0.040509259259259266,
+            "margin": 0.12991898148148145
+          }
+        },
+        {
+          "echo": "NightmareRoseshroom",
+          "set": "ThreadofSeveredFate",
+          "echoMatch": {
+            "key": "NightmareRoseshroom",
+            "difference": 0.051359953703703706,
+            "margin": 0.39062499999999994
+          },
+          "setMatch": {
+            "key": "ThreadofSeveredFate",
+            "difference": 0.07103587962962962,
+            "margin": 0.10532407407407407
+          }
+        },
+        {
+          "echo": "Tambourinist",
+          "set": "HavocEclipse",
+          "echoMatch": {
+            "key": "Tambourinist",
+            "difference": 0.06076388888888889,
+            "margin": 0.3800636574074074
+          },
+          "setMatch": {
+            "key": "HavocEclipse",
+            "difference": 0.09577546296296297,
+            "margin": 0.09707754629629628
+          }
+        },
+        {
+          "echo": "NightmareDwarfCassowary",
+          "set": "ThreadofSeveredFate",
+          "echoMatch": {
+            "key": "NightmareDwarfCassowary",
+            "difference": 0.09924768518518519,
+            "margin": 0.22193287037037035
+          },
+          "setMatch": {
+            "key": "ThreadofSeveredFate",
+            "difference": 0.04745370370370372,
+            "margin": 0.12876157407407404
+          }
+        },
+        {
+          "echo": "HavocWarrior",
+          "set": "HavocEclipse",
+          "echoMatch": {
+            "key": "HavocWarrior",
+            "difference": 0.12369791666666666,
+            "margin": 0.12557870370370372
+          },
+          "setMatch": {
+            "key": "HavocEclipse",
+            "difference": 0.1189236111111111,
+            "margin": 0.020833333333333343
+          }
+        }
+      ],
+      "rotation": "Tacet Chainsaw window v1",
+      "origin": "Tacet-authored benchmark using pinned Chisa skill/liberation/forte kit rules; not an upstream preset or an optimal-DPS claim.",
+      "startState": "Normal mode, Ring of Chainsaw 100, full Liberation energy. Cast Liberation, Serrated Loop, press Normal into Blitz Stage 2, continue Stage 3 and Eradication. Preparation damage excluded. Convergence and consumed-Ring multiplier bonuses excluded by permanent-passive policy; no Intro, Outro or status-proc damage."
     }
   ]
 }

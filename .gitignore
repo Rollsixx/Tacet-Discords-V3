@@ -94,3 +94,5 @@ Thumbs.db
 /vendor/wuthering-tools/reference-cases/
 /vendor/wuthering-tools/dist/
 /vendor/wuthering-tools/entry.ts
+
+/backups/

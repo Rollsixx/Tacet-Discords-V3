@@ -112,3 +112,22 @@ test("public queries are bounded, deterministic and preserve multiple builds per
     assert.equal(page1.builds.some(a => page2.builds.some(b => b.id === a.id)), false);
   } finally { db.close(); }
 });
+
+test('post-approval player verification is audited and reversible',async()=>{
+ const {setPlayerVerification}=await import('./store.ts');
+ const db=createClient({url:'file::memory:'});
+ try{
+  await migrate(db);const saved=await submit(validateSubmission(fixture()),db);
+  await assert.rejects(setPlayerVerification(saved.id,true,'QA','check',db),/Approved build/);
+  await moderate(saved.id,'approved','QA','review',false,db);
+  await setPlayerVerification(saved.id,true,'QA','Matched UID externally',db);
+  assert.equal((await listBuilds({id:saved.id},db)).builds[0].identityVerified,true);
+  await db.execute("CREATE TRIGGER fail_identity_audit BEFORE INSERT ON build_events BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
+  await assert.rejects(setPlayerVerification(saved.id,false,'QA','rollback check',db));
+  assert.equal((await listBuilds({id:saved.id},db)).builds[0].identityVerified,true);
+  await db.execute('DROP TRIGGER fail_identity_audit');
+  await setPlayerVerification(saved.id,false,'QA','Revoked verification',db);
+  assert.equal((await listBuilds({id:saved.id},db)).builds[0].identityVerified,false);
+  assert.equal(Number((await db.execute('SELECT COUNT(*) AS n FROM build_events')).rows[0].n),2);
+ }finally{db.close();}
+});

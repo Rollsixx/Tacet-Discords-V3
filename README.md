@@ -2,6 +2,19 @@
 
 Four-page Wuthering Waves screenshot-build community website: Home, Import Build, Profiles and Leaderboards. Next.js 16.4.3 / React 19.3 / TypeScript / Tesseract.js 7. V2 is untouched.
 
+## Start the complete local app
+
+Node.js24+, then:
+
+```powershell
+npm ci
+npm run setup
+npm run build
+npm run start:production
+```
+
+Open http://localhost:3000. Setup creates a private .env.local without overwriting an existing one. The production launcher applies migrations and upgrades previously validated calculations before serving. Find your moderator token only in your local .env.local. The application has exactly four public pages; moderation is inside Profiles.
+
 ## What works
 
 - Browser screenshot OCR and automatic extraction of five Echo portraits and five Sonata icons from the supported 1920 × 1080 build-card layout.
@@ -71,13 +84,17 @@ See `VERIFICATION.md` for results and remaining manual checks.
 
 ## Official scoring
 
-Versioned official leaderboard categories are enabled for **Carlotta, Cartethyia and Aemeath**. The score is expected standardized rotation damage, not DPS and not Kuro-certified damage. Every category uses the first rotation preset in the pinned reference, level 90, talents 10, S0, signature weapon level 90 R1, maximum-level five-star Echo main stats, permanent passives only, no team buffs, and a level-90 Calamity enemy with 10% resistance. Conditional effects are deliberately excluded; this benchmark does not claim optimal combat rotation damage. Weapon and talent settings are standardized, not inferred from the screenshot.
+Official categories now cover **Carlotta, Cartethyia, Aemeath, Hiyuki and Chisa**. The score is expected standardized damage, not DPS or a Kuro-certified score. All categories use level90, talents10, S0, signature90/R1, maximum-level five-star Echo main stats, permanent passives only, no team buffs and a level90 Calamity enemy with10% resistance. Categories are compared separately.
 
-The server independently re-reads character, UID, Echo cost, main-stat label/amount and all substats from the original card, compares reviewed numbers, recognizes Echo/Sonata fingerprints, checks exact legal roll values and evaluates every rotation action. Unknown or ambiguous scoring-relevant identities, source mismatches and unsupported policies stay unscored. Cosmetic variants with identical effects can be treated as equivalent only outside the main slot. Approval and manual identity verification are both required for ranking. Clients and moderators cannot supply scores. Approval, calculation issuance and the audit record share one database transaction. Rankings select one best build per UID and character, use stable tie ordering and exclude stale engine/data/policy versions. Old submissions require resubmission with original evidence; they are not silently assigned scores.
+Carlotta, Cartethyia and Aemeath use the first pinned reference preset. **Hiyuki and Chisa use Tacet-authored damage windows**, with normalized initial resources, preparation excluded and every action recorded. They are not upstream presets or complete zero-resource/optimal-DPS rotations. Their origin and starting conditions appear on each scored build. Exact rules and source paths are in src/lib/game-data/SCORING_POLICY.md.
 
-`src/lib/game-data/official-scoring.json` contains versioned numeric data for five characters, their signature weapons and attacks, 230 Echoes, 37 Sonata labels, main stats and legal substat rolls. The SHA-256 manifest and frozen rotation cases are adjacent. Visual fingerprints cover 220 Echo assets and 37 Sonata icons; absent identities fail closed. **Hiyuki and Chisa remain unscored because the pinned reference provides no rotation presets for them.** Character data alone does not establish a validated scoring category.
+The server independently reads source UID/character, Echo costs, main-stat labels/amounts and substats, recognizes portraits/Sonatas and checks legal rolls. Unknown, ambiguous or mismatched evidence stays unscored. Only approved, manually verified players enter rankings. Moderators can change verification after approval from Profiles → Moderator access → Approved players; revocation removes all that UID's approved builds from rankings immediately and creates audit events. No Discord bot, OAuth or automatic membership integration is used.
 
-The integration reuses GPL-3.0-or-later reference calculator modules with corresponding source, license and modification notes in `vendor/wuthering-tools`. Read `THIRD_PARTY_NOTICES.md` before redistribution. `npm ci` followed by `npm run build` verifies/extracts the source archive and builds the engine locally. `npm run data:export` regenerates numeric snapshots from that pinned engine. To regenerate visual fingerprints, obtain the asset repository at the commit recorded in fingerprints.json, set `SCORING_ASSETS_DIRECTORY`, and run `node scripts/generate-scoring-fingerprints.mjs`. Source artwork is not shipped.
+Data includes five characters, signature weapon stats/passives,230 Echoes,37 Sonata labels/effects, main stats and substat rolls. Fingerprints cover220 Echo assets/37 icons. Snapshot/source manifests and five frozen cases are versioned. npm run data:export regenerates numeric exports. This integration reuses GPL reference modules with corresponding source/license/modification notes under vendor/wuthering-tools; see THIRD_PARTY_NOTICES.md.
+
+Policy2 excludes stale calculations. npm run db:rescore upgrades only retained, previously server-validated evidence from the known snapshot. Unverifiable old builds can be resubmitted with original evidence; duplicate protection remains within a policy. The submission cap permits a five-character roster while retaining per-UID/global limits.
+
+For a persistent-volume container, set a private MODERATOR_TOKEN and run docker compose --env-file .env.local up --build -d. The database lives in the named volume. For Vercel, connect a remote libSQL/Turso database and configure TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, MODERATOR_TOKEN and APP_ORIGIN. vercel.json builds, migrates and rescores before release. Never use a file database on Vercel. /api/health reports database schema and moderator-configuration readiness without exposing secrets. npm run db:backup creates a consistent local SQLite backup under ignored backups/; use provider backups for remote data. The container configuration requires Docker to build and has not been executed in this workspace.
 
 ## Reference-backed verification
 
@@ -101,13 +118,13 @@ $env:REFERENCE_FORMULAS_PATH = "C:\path\to\wuthering-waves-optimizer\packages\fo
 node scripts/compare-reference-formulas.mjs
 ```
 
-The independent numeric core remains separately tested. Official score issuance uses the complete pinned GPL reference engine, covered by 18 upstream full-calculator attack cases and three frozen complete-rotation cases. These checks establish reproducibility against that reference, not independent certification of all in-game mechanics.
+The independent numeric core remains separately tested. Official score issuance uses the complete pinned GPL reference engine, covered by 18 upstream full-calculator attack cases and five frozen benchmark cases. These checks establish reproducibility against that reference, not independent certification of all in-game mechanics.
 
 Desktop/mobile browser workflow checks now also cover the five original cards supplied by the user: Hiyuki, Chisa, Aemeath, Carlotta and Cartethyia. All 175 scanned cost/main-label/substat fields match independently inspected values after canonical label parsing, at both viewport sizes. A genuine Hiyuki card completes submission and moderation without manual OCR corrections. The previously displayed fifth-cost miss did not reproduce with the supplied Hiyuki(3).jpg in this Chromium environment; this does not establish identical results on every browser/decoder.
 
 To rerun the private-image checks, place the unchanged original files outside the source tree, set `USER_BUILD_CARDS_DIRECTORY` to that folder, then run `npm run test:browser`. The exact filenames and SHA-256 hashes are recorded in `tests/browser/user-card-expectations.json`. Without those originals, private-image tests skip explicitly. Only text expectations and hashes are committed; uploaded images and player identity are not included.
 
-Private source-scoring tests additionally require USER_BUILD_CARD_UID matching the private originals. Hosted deployment and broader image/mechanic coverage remain unverified; the three explicitly listed categories are implemented.
+Private source-scoring tests additionally require USER_BUILD_CARD_UID matching the private originals. Hosted deployment and broader image/mechanic coverage remain unverified; the five explicitly listed categories are implemented.
 
 ## Small cost-digit recovery
 

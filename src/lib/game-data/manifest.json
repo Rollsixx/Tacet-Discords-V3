@@ -1,16 +1,15 @@
 {
   "version": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
-  "sha256": "8980b1220a0ad4106e261ffe9679f2104e7198cc12425c575031ab223006bd95",
+  "sha256": "90bfbbd75faef1ab139214ac1248c9bd1e2e6a56059a242dd694990e07ac80f2",
   "characters": 5,
   "echoes": 230,
   "sets": 37,
   "supported": [
     "Carlotta",
     "Cartethyia",
-    "Aemeath"
+    "Aemeath",
+    "Hiyuki",
+    "Chisa"
   ],
-  "unsupported": {
-    "Hiyuki": "No reference rotation",
-    "Chisa": "No reference rotation"
-  }
+  "unsupported": {}
 }

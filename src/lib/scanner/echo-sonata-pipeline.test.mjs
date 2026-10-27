@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -87,7 +87,7 @@ async function runWithReferences(
     blob: async () => ({ url }),
   });
 
-  globalThis.createImageBitmap = async (blob) => ({
+  globalThis.createImageBitmap = async () => ({
     close() {},
   });
 
