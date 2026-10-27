@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Client } from "@libsql/client";
 import { database } from "./database.ts";
 import { HttpError, type SubmissionInput } from "./validation.ts";
+import { DAMAGE_CORE_VERSION } from "./damage-core.ts";
 
 export async function rateLimit(key: string, max: number, db: Client = database()) {
   const window = Math.floor(Date.now() / 60000);
@@ -62,6 +63,14 @@ export const scoringReadiness = {
   enabled: false,
   reason: "Official Solo rankings await a verified calculation engine and versioned reference cases.",
   engineVersion: null,
+  numericCoreVersion: DAMAGE_CORE_VERSION,
+  missing: [
+    "Verified character identity and released-version base stats",
+    "Verified weapon identity, level and standardized R1 passive rules",
+    "Five verified Echo and Sonata identities, levels and main-stat amounts",
+    "Versioned character talents, S0 self-buff rules and a defined Solo rotation",
+    "Fixed enemy and energy constraints with per-character reference results",
+  ],
 };
 export async function listBuilds(options: { search?: string; character?: string; id?: string; page?: number; pending?: boolean } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;

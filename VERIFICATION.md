@@ -1,23 +1,25 @@
 # Verification — 27 October 2026
 
-Source: GitHub main baseline 2a498690a68ae95805a8044cd822b918f5618e04. The unavailable website.zip was not used; the user authorized main as the source.
+Source: merged MVP on main, b03e8b9a2a5ce95fad4a65f7ebe1bd401e585e63. Reference: ryanbenson/wuthering-waves-optimizer b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5.
 
-## Executed
+## Executed results
 
-- Scanner baseline initially failed because a test loaded a missing step-specific temporary directory. Fixed it to load adjacent repository modules.
-- Full automated suite: 106/106 passing (101 scanner tests and 5 server tests).
-- ESLint: no errors; two pre-existing unused-variable warnings in echo-sonata-pipeline.test.mjs.
-- TypeScript: `npx tsc --noEmit` passed.
-- Next.js production build passed with exactly four primary pages and API routes.
-- Production-server HTTP smoke passed against an isolated local database: all four pages return 200; save pending record; ten crop assets; pending excluded publicly; unauthorized crop/review blocked; duplicate rejected; authorized approval; repeated approval rejected; raw/corrected data retained; approved lookup; rejected build/crops excluded; all scores null and official scoring disabled.
-- Database tests cover repeatable migration, persistence after reconnect, private pending/rejected records, atomic approval plus audit rollback, duplicate protection, rate limits, UID/IGN search, character filters, multiple approved builds per UID and deterministic pagination.
-- Input tests cover five ordered slots, required crops, crop dimensions, malformed UID, missing review confirmation, OCR numeric ranges, missing decimals requiring correction, oversized streamed requests and cross-origin writes.
+- Automated unit/server suite: 114/114 tests passing (106 scanner, 8 server/numeric tests).
+- Numeric core: 324 cases matched the reference's calcHitDamage implementation, across character/enemy levels, resistance, defense ignore/reduction and independent multipliers. The core calculates explicit normal/critical/expected damage and explicit rotation aggregation. This is formula compatibility, not official character-score verification.
+- Chromium: six Playwright tests passed at desktop 1440 × 1000 and mobile 390 × 844.
+- All four pages rendered, navigation links were present, and no horizontal overflow or page errors occurred in the page checks.
+- Real bot-card OCR: all 28 occupied fields on the four-Echo reference image matched manually inspected ground truth at both viewport sizes (4 costs, 4 main labels, 20 substats). The empty fifth slot was correctly detected; fields and submission were blocked. Ten visual crops were extracted. OCR used same-origin worker/core/English resources, with no external browser requests.
+- Full browser workflow: a clearly labeled derived image copied the fourth Echo into the fifth solely for integration testing. OCR, user corrections, UID/IGN/character entry, pending save, protected moderator crop inspection, approval and approved profile lookup all passed at both widths. Scores remained null. This is not an authentic five-Echo accuracy fixture.
+- Browser checks exposed and fixed a real same-origin validation problem caused by Next.js's internal localhost URL differing from the browser's Host. Cross-origin rejection and proxied same-origin behavior are covered by server tests. APP_ORIGIN supports a fixed deployment origin.
+- OCR fixes: reduce main/substat crop height to prevent row bleed; distinguish flat ATK/DEF/HP from their percentage variants; preserve incomplete-card rejection instead of inventing the fifth Echo.
+- TypeScript and Next.js production build pass. ESLint has no errors and two existing unused-variable warnings in echo-sonata-pipeline.test.mjs. Generated OCR assets and test artifacts are excluded from source linting.
+- Previous production-server HTTP coverage remains: private pending/rejected crops, duplicates, unauthorized review, atomic audit/approval rollback, rejection, bounded public queries and approved-only visibility.
 
-## Not executed / external gates
+## Limits and remaining work
 
-- A real build-card screenshot was not supplied. OCR accuracy and the full image-to-public-build browser journey remain unverified.
-- Browser visual checks were attempted but could not run: the environment had no installed Chromium and the browser download returned invalid/empty ZIP files. Desktop/mobile layout, keyboard flow and visual crop alignment still need real-browser review.
-- Turso/Vercel accounts, remote credentials, hosting, HTTPS, backups and retention were not provisioned. Hosted connectivity and free-plan capacity require operator verification.
-- No verified automatic Echo/Sonata identity catalog or Solo calculation engine exists in this baseline. Identities and official rankings remain unverified/disabled.
+- One authentic four-Echo English screenshot is covered. General OCR accuracy across patches, devices, compression and layouts is not established. A genuine complete five-Echo card from the user is still needed for full-card real-image validation.
+- No verified Echo/Sonata recognition catalog is integrated. Unknown identities stay unknown. Character is player-declared. The current contract does not capture verified weapon identity, Echo levels or main-stat amounts.
+- Official Solo scoring remains disabled. The standalone numeric core is not a full game-data/rotation engine. Per-character released-version stats, standardized S0/R1 rules, weapon/main-Echo/Sonata effects, energy/rotation assumptions and complete-build reference cases must be integrated before score issuance can be enabled honestly.
+- Hosting/database accounts and credentials were not provisioned; remote connectivity, HTTPS, backup/retention policies and deployed smoke checks remain external setup steps.
 
-No third-party optimizer source, data or assets were copied. No V2 changes or force pushes were made. Synthetic test players are confined to isolated test databases and are not shipped in the project.
+Browser install limitations from the earlier MVP pass have been resolved using Playwright 1.51.1 and Chromium Headless Shell 134. Test images, screenshots, private tokens, temporary databases and generated dependencies are excluded from the source delivery. No V2 changes, force pushes or copied GPL calculator implementation are included.

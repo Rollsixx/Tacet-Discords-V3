@@ -75,6 +75,8 @@ test("moderator authorization fails closed and request limits apply without Cont
     authorize(new Request("https://test/api/moderation", { headers: { Authorization: "Bearer " + process.env.MODERATOR_TOKEN } }));
     await assert.rejects(readJson(new Request("https://test/api/submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: "x".repeat(200) }) }), 100), e => e.status === 413);
     await assert.rejects(readJson(new Request("https://test/api/submissions", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://evil.invalid" }, body: "{}" })), e => e.status === 403);
+    const proxied = await readJson(new Request("http://localhost:3100/api/submissions", { method: "POST", headers: { "Content-Type": "application/json", Host: "127.0.0.1:3100", Origin: "http://127.0.0.1:3100" }, body: "{}" }));
+    assert.deepEqual(proxied, {});
   } finally { if (previous === undefined) delete process.env.MODERATOR_TOKEN; else process.env.MODERATOR_TOKEN = previous; }
 });
 

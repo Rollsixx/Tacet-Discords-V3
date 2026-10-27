@@ -717,3 +717,5 @@ input[type=checkbox] { accent-color: var(--accent); margin: 16px 8px 16px 0; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 @media(max-width:1000px) { .echo-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } }
 @media(max-width:600px) { .echo-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .build-card { padding: 14px; } .workspace-header { flex-wrap: wrap; } }
+
+@media(max-width:600px) { .hero-visual { display: none; } }

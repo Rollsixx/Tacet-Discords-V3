@@ -1,4 +1,5 @@
 ﻿import { createWorker, PSM } from "tesseract.js";
+import { hasEchoText } from "./slot-presence";
 
 export const CARD_WIDTH = 1920;
 export const CARD_HEIGHT = 1080;
@@ -18,6 +19,7 @@ export type RecognizedField = {
 
 export type RecognizedSlot = {
   slot: number;
+  presence?: "detected" | "empty";
   cost: RecognizedField;
   mainStat: RecognizedField;
   substats: RecognizedField[];
@@ -52,14 +54,14 @@ function regionsForSlot(index: number) {
       x: 215 + offset,
       y: 720,
       width: 173,
-      height: 40,
+      height: 28,
     },
     substats: [
-      { x: 64 + offset, y: 880, width: 320, height: 38 },
-      { x: 64 + offset, y: 918, width: 320, height: 38 },
-      { x: 64 + offset, y: 950, width: 320, height: 38 },
-      { x: 64 + offset, y: 984, width: 320, height: 38 },
-      { x: 64 + offset, y: 1019, width: 320, height: 38 },
+      { x: 64 + offset, y: 880, width: 320, height: 28 },
+      { x: 64 + offset, y: 918, width: 320, height: 28 },
+      { x: 64 + offset, y: 950, width: 320, height: 28 },
+      { x: 64 + offset, y: 984, width: 320, height: 28 },
+      { x: 64 + offset, y: 1019, width: 320, height: 28 },
     ],
   };
 }
@@ -165,7 +167,12 @@ export async function recognizeBuildCard(
   const total = SLOT_COUNT * 7;
   let completed = 0;
 
-  const worker = await createWorker("eng", 1);
+  const worker = await createWorker("eng", 1, {
+    workerPath: "/ocr/worker.min.js",
+    corePath: "/ocr/core",
+    langPath: "/ocr/lang",
+    workerBlobURL: false,
+  });
 
   try {
     await worker.setParameters({
@@ -236,8 +243,11 @@ export async function recognizeBuildCard(
         );
       }
 
+      const present = hasEchoText(cost.value, mainStat.value, substats.map(stat => stat.value));
+      if (!present) warnings.push(`Echo ${slotNumber}: no equipped Echo text detected. A complete five-Echo card is required for submission.`);
       slots.push({
         slot: slotNumber,
+        presence: present ? "detected" : "empty",
         cost,
         mainStat,
         substats,

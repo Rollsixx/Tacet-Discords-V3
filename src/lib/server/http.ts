@@ -11,7 +11,11 @@ export function failure(error: unknown) {
 export async function readJson(request: Request, limit = 2200000): Promise<unknown> {
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") || "")) throw new HttpError(415, "JSON required.");
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) throw new HttpError(403, "Cross-origin writes are not allowed.");
+  const url = new URL(request.url);
+  // Next's internal request URL may use localhost while the browser uses the
+  // public Host. APP_ORIGIN pins the canonical origin behind reverse proxies.
+  const expectedOrigin = process.env.APP_ORIGIN || (request.headers.get("host") ? url.protocol + "//" + request.headers.get("host") : url.origin);
+  if (origin && origin !== expectedOrigin) throw new HttpError(403, "Cross-origin writes are not allowed.");
   const length = request.headers.get("content-length");
   if (length && (!/^\d+$/.test(length) || Number(length) > limit)) throw new HttpError(413, "Request too large.");
   const reader = request.body?.getReader();
