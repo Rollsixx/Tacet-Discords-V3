@@ -333,13 +333,14 @@ export default function ImportPage() {
                   }}
                 >
                   <h3 className="panel-title">
-                    Echo {slot.slot}
+                    Echo {slot.slot} {slot.presence === "empty" ? "— No equipped Echo detected" : ""}
                   </h3>
                   <details><summary>Compare original OCR with your corrections</summary>
                     <p className="muted">Cost: {slot.cost.raw || "Unreadable"} {slot.cost.raw !== slot.cost.value ? "(corrected)" : ""}</p>
                     <p className="muted">Main stat: {slot.mainStat.raw || "Unreadable"} {slot.mainStat.raw !== slot.mainStat.value ? "(corrected)" : ""}</p>
                     {slot.substats.map((stat, index) => <p className="muted" key={index}>Substat {index + 1}: {stat.raw || "Unreadable"} {stat.raw !== stat.value ? "(corrected)" : ""}</p>)}
                   </details>
+                  <fieldset disabled={slot.presence === "empty"} style={{border: 0, padding: 0, minWidth: 0}}>
                   <div className="card-row">
                     <span>Cost (reviewed value)</span>
                     <input
@@ -409,6 +410,7 @@ export default function ImportPage() {
                     </div>
                   ))}
 
+                  </fieldset>
                   {validateEchoSlot(slot).length > 0 && (
                     <div className="workspace-note">
                       <span className="eyebrow">
@@ -444,8 +446,7 @@ export default function ImportPage() {
             <span className="eyebrow">Privacy and limitations</span>
             <p className="muted">
               Screenshot processing runs in your browser.
-              Tesseract.js may download OCR worker and language
-              resources from external hosts. Only after you submit, ten visual crops and reviewed statistics are stored for moderation. The original screenshot stays in your browser.
+              OCR worker and English language resources are served by this website. Only after you submit, ten visual crops and reviewed statistics are stored for moderation. The original screenshot stays in your browser.
               Recognition supports only the specified build-card layout.
             </p>
           </div>

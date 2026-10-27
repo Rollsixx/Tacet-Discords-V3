@@ -8,6 +8,10 @@ const eslintConfig = defineConfig([
   // Override default ignores of eslint-config-next.
   globalIgnores([
     "**/step*-backup/**",
+    "public/ocr/**",
+    "test-results*/**",
+    "playwright-report/**",
+    ".cache/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

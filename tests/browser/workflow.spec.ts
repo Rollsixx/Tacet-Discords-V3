@@ -1,0 +1,103 @@
+import { test, expect } from "@playwright/test";
+import { existsSync, writeFileSync } from "node:fs";
+const fixture = process.env.REFERENCE_CARD_PATH || ".cache/reference-four-slot.jpeg";
+test("four pages render without overflow or browser errors", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  for (const route of ["/", "/import", "/profiles", "/leaderboards"]) {
+    await page.goto(route);
+    await expect(page.locator("h1")).toBeVisible();
+    if (route !== "/import") await expect(page.locator(".build-card, .placeholder").first()).toBeVisible();
+    await expect(page.locator('nav[aria-label="Main navigation"] a')).toHaveCount(4);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(route.slice(1) || "home") + ".png", fullPage: true });
+  }
+  expect(errors).toEqual([]);
+});
+const occupiedFields = [
+  ["4", "Crit. DMG", "DEF 10%", "ATK 10.9%", "DEF 60", "Crit. DMG 15%", "Crit. Rate 6.3%"],
+  ["3", "Electro DMG Bonus", "HP 8.6%", "Crit. DMG 15%", "ATK 7.9%", "Crit. Rate 9.3%", "HP 320"],
+  ["1", "ATK", "Crit. Rate 6.3%", "Energy Regen 12.4%", "Crit. DMG 13.8%", "HP 470", "Heavy Attack DMG Bonus 7.9%"],
+  ["1", "ATK", "ATK 9.4%", "ATK 40", "Crit. DMG 15%", "HP 7.9%", "Crit. Rate 6.3%"],
+];
+test("real reference card produces four occupied slots and blocks invented fifth-slot submission", async ({ page }, testInfo) => {
+  test.skip(!existsSync(fixture), "Run npm run test:reference or set REFERENCE_CARD_PATH.");
+  const external: string[] = [];
+  page.on("pageerror", error => console.log("OCR browser error:", error.message));
+  page.on("response", response => { if (response.url().includes("/ocr/")) console.log("OCR resource", response.status(), response.url()); });
+  page.on("request", request => { if (!request.url().startsWith("http://127.0.0.1:3100") && !/^(blob:|data:)/.test(request.url())) external.push(request.url()); });
+  await page.goto("/import");
+  await page.getByLabel("Choose build screenshot").setInputFiles(fixture);
+  await expect(page.locator('img[alt^="Extracted Echo portrait"]')).toHaveCount(5);
+  await expect(page.locator('img[alt^="Extracted Sonata icon"]')).toHaveCount(5);
+  await page.getByRole("button", { name: "Recognize Echo stats" }).click();
+  await expect(page.getByRole("heading", { name: "5 Echo slots processed" })).toBeVisible({ timeout: 150000 });
+  await expect(page.getByRole("heading", { name: "Echo 5 — No equipped Echo detected" })).toBeVisible();
+  const costs = ["4", "3", "1", "1"];
+  for (let slot = 1; slot <= 4; slot++) await expect(page.getByRole("textbox", { name: `Echo ${slot} cost`, exact: true })).toHaveValue(costs[slot - 1]);
+  await expect(page.getByRole("textbox", { name: "Echo 5 cost", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Submit for moderation" })).toBeDisabled();
+  const values = await page.locator('input[aria-label^="Echo "]').evaluateAll(inputs => inputs.map(input => ({ label: input.getAttribute("aria-label"), value: (input as HTMLInputElement).value })));
+  expect(values.slice(0, 28).map(item => item.value)).toEqual(occupiedFields.flat());
+  writeFileSync(testInfo.outputPath("ocr-observation.json"), JSON.stringify(values, null, 2));
+  await testInfo.attach("actual-ocr-output", { body: JSON.stringify(values, null, 2), contentType: "application/json" });
+  await page.evaluate(() => new Promise<void>(resolve => { window.scrollTo(0, 0); requestAnimationFrame(() => requestAnimationFrame(() => resolve())); }));
+  await page.screenshot({ path: testInfo.outputPath("real-card-ocr.png"), fullPage: true });
+  expect(external).toEqual([]);
+});
+
+
+test("derived five-slot fixture completes OCR correction, pending save and moderator approval", async ({ page, request }, testInfo) => {
+  test.skip(!existsSync(fixture), "Real source fixture is required.");
+  await page.goto("/import");
+  await page.getByLabel("Choose build screenshot").setInputFiles(fixture);
+  await expect(page.locator('img[alt="Selected build screenshot"]')).toBeVisible();
+  // Duplicate slot 4 into slot 5 for workflow coverage only. This is a derived
+  // test image, never described as an authentic complete five-Echo game card.
+  const dataUrl = await page.locator('img[alt="Selected build screenshot"]').evaluate(image => {
+    const source = image as HTMLImageElement;
+    const canvas = document.createElement("canvas"); canvas.width = 1920; canvas.height = 1080;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(source, 0, 0);
+    context.drawImage(source, 1144, 650, 374, 430, 1518, 650, 374, 430);
+    return canvas.toDataURL("image/png");
+  });
+  await page.getByLabel("Choose build screenshot").setInputFiles({ name: "derived-five-slot.png", mimeType: "image/png", buffer: Buffer.from(dataUrl.split(",")[1], "base64") });
+  await page.getByRole("button", { name: "Recognize Echo stats" }).click();
+  await expect(page.getByRole("heading", { name: "5 Echo slots processed" })).toBeVisible({ timeout: 60000 });
+  const fields = [...occupiedFields, occupiedFields[3]];
+  for (let index = 0; index < 5; index++) {
+    const [cost, main, ...stats] = fields[index];
+    await page.getByRole("textbox", { name: `Echo ${index + 1} cost`, exact: true }).fill(cost);
+    await page.getByRole("textbox", { name: `Echo ${index + 1} main stat`, exact: true }).fill(main);
+    for (let stat = 0; stat < 5; stat++) await page.getByRole("textbox", { name: `Echo ${index + 1} substat ${stat + 1}`, exact: true }).fill(stats[stat]);
+  }
+  const uid = testInfo.project.name === "desktop" ? "812341441" : "812341442";
+  await page.getByLabel("Wuthering Waves UID", { exact: true }).fill(uid);
+  await page.getByLabel("In-game name", { exact: true }).fill("Browser Test Rover");
+  await page.getByLabel("Character name (player-declared, unverified)").fill("Hsin");
+  await page.getByRole("checkbox").check();
+  const save = page.waitForResponse(response => response.url().endsWith("/api/submissions") && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Submit for moderation" }).click();
+  const response = await save; expect(response.status()).toBe(201);
+  const saved = await response.json();
+  await expect(page.getByText("Build saved · Pending moderation")).toBeVisible();
+  expect((await (await request.get("/api/public/builds?search=" + uid)).json()).builds).toHaveLength(0);
+  await page.goto("/profiles");
+  await page.getByText("Moderator access", { exact: true }).click();
+  await page.getByLabel("Moderator token", { exact: true }).fill("browser-test-only-token-00000000000000000000");
+  await page.getByRole("button", { name: "Load pending submissions" }).click();
+  await expect(page.locator(".moderation-panel .echo-crop")).toHaveCount(5);
+  await expect.poll(() => page.locator(".moderation-panel .echo-crop").evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth === 192))).toBe(true);
+  await page.getByLabel("Reviewer name (audit trail)").fill("Browser QA");
+  await page.getByLabel("Review note", { exact: true }).fill("Inspected derived workflow fixture");
+  await page.getByRole("button", { name: "Approve Hsin", exact: true }).click();
+  await expect(page.getByText("No pending submissions.", { exact: true })).toBeVisible();
+  await page.getByLabel("Search UID or in-game name").fill(uid);
+  await expect(page.locator(".build-card").filter({ hasText: uid })).toBeVisible();
+  const approved = await (await request.get("/api/public/builds?id=" + saved.id)).json();
+  expect(approved.builds[0].status).toBe("approved"); expect(approved.builds[0].score).toBeNull();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => new Promise<void>(resolve => { window.scrollTo(0, 0); requestAnimationFrame(() => requestAnimationFrame(() => resolve())); }));
+  await page.screenshot({ path: testInfo.outputPath("approved-build.png"), fullPage: true });
+});

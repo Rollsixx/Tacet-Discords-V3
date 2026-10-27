@@ -100,3 +100,19 @@ test("flags suspicious crit values", () => {
 
   assert.ok(issues.some(issue => issue.code === "SUSPICIOUS_CRIT"));
 });
+
+test("flat ATK and ATK percentage are distinct substats on real cards", () => {
+  const stats = ["ATK 9.4%", "ATK 40", "Crit. DMG 15%", "HP 7.9%", "Crit. Rate 6.3%"];
+  assert.equal(validateEchoSlot(slot("1", "ATK", stats)).length, 0);
+});
+
+test("flat DEF and DEF percentage are distinct substats", () => {
+  const stats = ["DEF 10%", "ATK 10.9%", "DEF 60", "Crit. DMG 15%", "Crit. Rate 6.3%"];
+  assert.equal(validateEchoSlot(slot("4", "Crit. DMG", stats)).length, 0);
+});
+
+test("empty-slot flag remains a blocker even if text is entered", () => {
+  const input = slot("4", "Crit. DMG", valid);
+  input.presence = "empty";
+  assert.equal(validateEchoSlot(input)[0].code, "EMPTY_SLOT");
+});

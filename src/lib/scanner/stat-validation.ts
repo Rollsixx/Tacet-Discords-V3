@@ -66,6 +66,7 @@ export function validateEchoSlot(
   slot: RecognizedSlot,
 ): StatIssue[] {
   const issues: StatIssue[] = [];
+  if (slot.presence === "empty") return [{ code: "EMPTY_SLOT", message: "No equipped Echo detected. Upload a card with all five Echoes; missing data must not be invented." }];
   const cost = Number(slot.cost.value.trim());
 
   if (
@@ -142,7 +143,8 @@ export function validateEchoSlot(
       });
     }
 
-    if (seen.has(parsed.name)) {
+    const statKey = parsed.name + (parsed.percent ? ":percent" : ":flat");
+    if (seen.has(statKey)) {
       issues.push({
         code: "DUPLICATE_SUBSTAT",
         message:
@@ -150,7 +152,7 @@ export function validateEchoSlot(
       });
     }
 
-    seen.add(parsed.name);
+    seen.add(statKey);
 
     if (
       PERCENT_ONLY.has(parsed.name) &&

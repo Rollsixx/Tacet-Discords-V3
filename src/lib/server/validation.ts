@@ -35,6 +35,7 @@ export function validateSubmission(input: unknown) {
   }
   const slots = input.slots.map((item, index) => {
     if (!record(item) || item.slot !== index + 1 || !Array.isArray(item.substats) || item.substats.length !== 5) throw new HttpError(400, "Five ordered Echo slots with five substats are required.");
+    if (item.presence === "empty") throw new HttpError(400, "All five Echoes must be equipped. Missing slots cannot be submitted.");
     const stats: RecognizedSlot = {
       slot: index + 1, cost: field(item.cost), mainStat: field(item.mainStat), substats: item.substats.map(field),
     };
