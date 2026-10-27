@@ -24,3 +24,11 @@ The calculator integration reuses GPL reference code. Its source archive, SHA-25
 Original images are processed temporarily for scoring and discarded. Only cropped assets, reviewed/raw fields, evidence hash and versioned calculations persist. Images over 1.1 MB or uncertain OCR remain unscored. Source images and test screenshots are excluded from GitHub. General screenshot robustness, screenshot authenticity/anti-cheat assurance, every in-game mechanic and browsers other than tested Chromium are not established by these checks.
 
 Hosting and remote database credentials have not been provisioned; deployed HTTPS, resource/time limits, backups and remote smoke checks remain operator setup. This change does not deploy or merge automatically.
+
+## Fifth-cost bug fix and release follow-up
+
+The screenshot's first-pass cost miss now has a targeted image retry. Two distinct padded/inverted cost crops use single-character OCR; both must agree on 1/3/4 with confidence >=65. The first raw read is retained, automatic recovery is labeled and manual edits clear that label. Retries run only when other text establishes an occupied slot, so no empty slot is filled from a guessed cost.
+
+Regression coverage includes a browser-worker interception that blanks only the initial Hiyuki fifth-cost output; both retry reads run unchanged against the real image. The recovered value is 1, the original blank is visibly retained and no structural warning remains. Unit tests also reject disagreement, low-confidence reads, blank results, invalid digits and multiple digits. Home now features only supported scoring categories, and unsupported category URLs display an explicit unavailable option.
+
+Current unit/server result: 129/129 passed with private original evidence. Production build/TypeScript pass. Complete production browser suite: 21 passed, 1 intentionally skipped duplicate mobile scored-submission lifecycle. Both desktop and mobile recover the forced initial fifth-cost miss using real retry OCR; the four-Echo empty-slot guard still passes.

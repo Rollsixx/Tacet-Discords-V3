@@ -91,7 +91,7 @@ export default function ImportPage() {
           if (slot.slot !== slotNumber) return slot;
 
           if (field === "cost") {
-            return { ...slot, cost: { ...slot.cost, value } };
+            return { ...slot, cost: { ...slot.cost, value, autoRecovered: false } };
           }
 
           if (field === "mainStat") {
@@ -336,7 +336,7 @@ export default function ImportPage() {
                     Echo {slot.slot} {slot.presence === "empty" ? "— No equipped Echo detected" : ""}
                   </h3>
                   <details><summary>Compare original OCR with your corrections</summary>
-                    <p className="muted">Cost: {slot.cost.raw || "Unreadable"} {slot.cost.raw !== slot.cost.value ? "(corrected)" : ""}</p>
+                    <p className="muted">Cost: {slot.cost.raw || "Unreadable"} {slot.cost.autoRecovered ? `(recovered from image: ${slot.cost.value})` : slot.cost.raw !== slot.cost.value ? "(corrected)" : ""}</p>
                     <p className="muted">Main stat: {slot.mainStat.raw || "Unreadable"} {slot.mainStat.raw !== slot.mainStat.value ? "(corrected)" : ""}</p>
                     {slot.substats.map((stat, index) => <p className="muted" key={index}>Substat {index + 1}: {stat.raw || "Unreadable"} {stat.raw !== stat.value ? "(corrected)" : ""}</p>)}
                   </details>

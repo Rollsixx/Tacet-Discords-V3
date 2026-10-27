@@ -108,3 +108,7 @@ Desktop/mobile browser workflow checks now also cover the five original cards su
 To rerun the private-image checks, place the unchanged original files outside the source tree, set `USER_BUILD_CARDS_DIRECTORY` to that folder, then run `npm run test:browser`. The exact filenames and SHA-256 hashes are recorded in `tests/browser/user-card-expectations.json`. Without those originals, private-image tests skip explicitly. Only text expectations and hashes are committed; uploaded images and player identity are not included.
 
 Private source-scoring tests additionally require USER_BUILD_CARD_UID matching the private originals. Hosted deployment and broader image/mechanic coverage remain unverified; the three explicitly listed categories are implemented.
+
+## Small cost-digit recovery
+
+When an occupied Echo's first cost read is unreadable, the scanner retries two image crops using single-character numeric OCR, padding and inverted contrast. It accepts only agreeing 1/3/4 digits with confidence at least 65 from both reads, retains the original raw text and labels image recovery separately from manual edits. It never infers cost from the main stat, slot position or remaining budget. Empty slots do not use this fallback. The optional private browser regression forces only Hiyuki's initial fifth-cost result to blank, then uses real OCR for both retries and verifies automatic recovery to 1 at desktop/mobile widths.

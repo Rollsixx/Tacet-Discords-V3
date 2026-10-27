@@ -1,4 +1,5 @@
 ﻿import { createWorker, PSM } from "tesseract.js";
+import { recoverEchoCost } from "./cost-recovery";
 import { hasEchoText } from "./slot-presence";
 
 export const CARD_WIDTH = 1920;
@@ -15,6 +16,7 @@ type Rectangle = {
 export type RecognizedField = {
   raw: string;
   value: string;
+  autoRecovered?: boolean;
 };
 
 export type RecognizedSlot = {
@@ -210,7 +212,7 @@ export async function recognizeBuildCard(
       const regions = regionsForSlot(index);
       const slotNumber = index + 1;
 
-      const cost = await read(
+      let cost = await read(
         regions.cost,
         `Echo ${slotNumber}: cost`,
       );
@@ -229,6 +231,41 @@ export async function recognizeBuildCard(
             `Echo ${slotNumber}: substat ${line + 1}`,
           ),
         );
+      }
+
+      if (!/^[134]$/.test(cost.value) && hasEchoText("", mainStat.value, substats.map(stat => stat.value))) {
+        onProgress?.({ completed, total, label: `Echo ${slotNumber}: retrying cost from image` });
+        try {
+          await worker.setParameters({
+            tessedit_pageseg_mode: PSM.SINGLE_CHAR,
+            tessedit_char_whitelist: "134",
+            user_defined_dpi: "300",
+          });
+          cost = await recoverEchoCost(cost, async variant => {
+            const region = variant === 0
+              ? { x: regions.cost.x - 3, y: regions.cost.y - 3, width: 24, height: 30 }
+              : regions.cost;
+            const cropped = cropRegion(image, region);
+            // A white border and inverted foreground avoid treating the tiny
+            // digit as a complete line or clipping it against the crop edge.
+            const padded = document.createElement("canvas");
+            padded.width = cropped.width + 32;
+            padded.height = cropped.height + 32;
+            const context = padded.getContext("2d", { willReadFrequently: true });
+            if (!context) throw new Error("Unable to retry cost recognition.");
+            context.fillStyle = "white";
+            context.fillRect(0, 0, padded.width, padded.height);
+            context.filter = "invert(1)";
+            context.drawImage(cropped, 16, 16);
+            const output = await worker.recognize(padded);
+            return { text: output.data.text, confidence: output.data.confidence };
+          });
+        } finally {
+          await worker.setParameters({
+            tessedit_pageseg_mode: PSM.SINGLE_LINE,
+            tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ ",
+          });
+        }
       }
 
       if (!mainStat.value) {

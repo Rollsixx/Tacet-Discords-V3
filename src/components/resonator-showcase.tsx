@@ -9,34 +9,9 @@ export type ResonatorPreview = {
 };
 
 export const featuredResonators: ResonatorPreview[] = [
-  {
-    name: "Jinhsi",
-    element: "Spectro",
-    weapon: "Broadblade",
-    tone: "spectro",
-    monogram: "JH",
-  },
-  {
-    name: "Camellya",
-    element: "Havoc",
-    weapon: "Sword",
-    tone: "havoc",
-    monogram: "CM",
-  },
-  {
-    name: "Carlotta",
-    element: "Glacio",
-    weapon: "Pistols",
-    tone: "glacio",
-    monogram: "CL",
-  },
-  {
-    name: "Jiyan",
-    element: "Aero",
-    weapon: "Broadblade",
-    tone: "aero",
-    monogram: "JY",
-  },
+  { name: "Carlotta", element: "Glacio", weapon: "Pistols", tone: "glacio", monogram: "CL" },
+  { name: "Cartethyia", element: "Aero", weapon: "Sword", tone: "aero", monogram: "CT" },
+  { name: "Aemeath", element: "Fusion", weapon: "Sword", tone: "fusion", monogram: "AM" },
 ];
 
 export function ResonatorCard({
