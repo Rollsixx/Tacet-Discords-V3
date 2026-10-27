@@ -162,7 +162,7 @@ export default function ImportPage() {
       <div className="demo-banner">
         <span className="status-dot" />
         OCR BETA — Text recognition is functional but unverified.
-        Review all extracted fields. Submissions are stored for moderator review; Echo identities and Solo scores remain unverified.
+        Review all extracted fields. Submissions are stored for moderator review; Supported scores are validated on the server after submission.
       </div>
 
       <div className="workspace-grid">
@@ -446,7 +446,7 @@ export default function ImportPage() {
             <span className="eyebrow">Privacy and limitations</span>
             <p className="muted">
               Screenshot processing runs in your browser.
-              OCR worker and English language resources are served by this website. Only after you submit, ten visual crops and reviewed statistics are stored for moderation. The original screenshot stays in your browser.
+              OCR worker and English language resources are served by this website. Only after you submit, ten visual crops and reviewed statistics are stored for moderation. For scoring, the original is sent for server validation and discarded after processing; its evidence hash is retained.
               Recognition supports only the specified build-card layout.
             </p>
           </div>

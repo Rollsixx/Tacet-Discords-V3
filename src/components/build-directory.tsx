@@ -29,10 +29,13 @@ export function BuildCard({ build, token }: { build: Build; token?: string }) {
     <div className="workspace-header"><div>
       <h3>{build.character}</h3>
       <Link className="text-link" href={`/profiles?search=${encodeURIComponent(build.uid)}`}>{build.ign} · {build.uid}</Link>
-    </div><span className="tag">{build.status.toUpperCase()} / UNSCORED</span></div>
+    </div><span className="tag">{build.status.toUpperCase()} / {build.score !== null ? "SCORED" : "UNSCORED"}</span></div>
     <p className="muted">Identity: {build.identityVerified ? "manually verified" : "unverified"} · Submitted {new Date(build.createdAt).toLocaleDateString()}</p>
+    {build.score !== null && <p className="score-cell">Expected rotation damage: <strong>{build.score.toLocaleString(undefined,{maximumFractionDigits:2})}</strong></p>}
+    {build.data.assessment && <p className="muted">Scoring: {build.score !== null ? 'Source image and numeric inputs validated under the current scoring policy.' : build.data.assessment.reason}</p>}
+    {build.data.assessment?.calculation && <details><summary>Scoring policy and recognized data</summary><p>{build.data.assessment.calculation.conditions}</p><p>Rotation: {build.data.assessment.calculation.rotation} · Weapon: {build.data.assessment.calculation.weapon}</p><p>Policy: {build.data.assessment.calculation.policyId}</p><p className="muted">Engine: {build.data.assessment.calculation.engineVersion}<br />Data: {build.data.assessment.calculation.dataVersion}</p>{build.data.assessment.calculation.identities.map((identity,index)=><p key={index}>Echo {index+1}: {identity.echo} · {identity.set}{identity.echoMatch?.equivalentVariants && ' (equivalent cosmetic variants: '+identity.echoMatch.equivalentVariants.join(', ')+')'}</p>)}</details>}
     <details open={Boolean(token)}><summary>Inspect five Echo slots and statistics</summary>
-      <p className="muted">Character is player-declared. Echo and Sonata names are unverified. Approval records moderator review; it does not certify a damage score.</p>
+      <p className="muted">Source-validated builds use server-recognized identities for scoring. Other submissions retain player-declared character information and unverified identities. Scores require approval and manual player verification.</p>
       <div className="echo-grid">{build.data.slots.map(slot => <section key={slot.slot} className="echo-detail">
         <h4>Echo {slot.slot}</h4>
         <Crop id={build.id} slot={slot.slot} kind="portrait" token={token} />
@@ -51,7 +54,7 @@ export function BuildCard({ build, token }: { build: Build; token?: string }) {
 function DirectoryContent({ mode }: { mode: "profiles" | "leaderboards" | "recent" }) {
   const params = useSearchParams();
   const [search, setSearch] = useState(params.get("search") || "");
-  const [character, setCharacter] = useState(params.get("character") || "");
+  const [character, setCharacter] = useState(params.get("character") || (mode === "leaderboards" ? "Carlotta" : ""));
   const selected = params.get("build");
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<Results | null>(null);
@@ -63,19 +66,19 @@ function DirectoryContent({ mode }: { mode: "profiles" | "leaderboards" | "recen
       setLoading(true); setError("");
       const params = new URLSearchParams({ search, character, page: String(page) });
       if (selected) params.set("id", selected);
-      fetch("/api/public/builds?" + params, { signal: controller.signal, cache: "no-store" })
+      fetch((mode === "leaderboards" ? "/api/public/leaderboards?" : "/api/public/builds?") + params, { signal: controller.signal, cache: "no-store" })
         .then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); return data; })
         .then(setResult).catch(cause => { if (cause.name !== "AbortError") setError(cause.message); })
         .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [search, character, page, selected]);
+  }, [search, character, page, selected, mode]);
   return <section>
     {mode !== "recent" && <div className="leaderboard-controls">
       <label className="field"><span>Search UID or in-game name</span><input type="search" maxLength={64} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Player UID or IGN" /></label>
-      <label className="field"><span>Character (exact name, optional)</span><input maxLength={64} value={character} onChange={e => { setCharacter(e.target.value); setPage(1); }} placeholder="All characters" /></label>
+      <label className="field"><span>{mode === 'leaderboards' ? 'Scoring category' : 'Character (exact name, optional)'}</span>{mode === "leaderboards" ? <select value={character} onChange={e => {setCharacter(e.target.value);setPage(1);}}><option>Carlotta</option><option>Cartethyia</option><option>Aemeath</option></select> : <input maxLength={64} value={character} onChange={e => { setCharacter(e.target.value); setPage(1); }} placeholder="All characters" />}</label>
     </div>}
-    {mode === "leaderboards" && <div className="workspace-note"><h2>Official Solo rankings disabled</h2><p className="muted">A verified calculation engine and reference cases are required before ranking. The approved builds below are unscored and sorted by submission date.</p></div>}
+    {mode === "leaderboards" && <div className="workspace-note"><h2>Standardized Solo rotation rankings</h2><p className="muted">Expected rotation damage, not DPS. Level 90, talents 10, S0, signature weapon R1, permanent passives only, no team buffs; level 90 enemy with 10% resistance. One best build per verified player, sorted by score. Carlotta, Cartethyia and Aemeath are supported. Hiyuki and Chisa await validated rotations.</p></div>}
     {loading ? <p role="status">Loading approved builds…</p> : error ? <p role="alert" className="field-error">{error}</p> : <>
       {!result?.builds.length && <div className="placeholder"><h3>No approved builds found</h3><p className="muted">Try another search, or <Link className="text-link" href="/import">submit a build</Link> for moderation.</p></div>}
       {(mode === "recent" ? result?.builds.slice(0, 3) : result?.builds)?.map(build => <div key={build.id}>

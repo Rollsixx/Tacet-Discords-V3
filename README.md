@@ -31,7 +31,7 @@ npm run dev
 
 Open http://localhost:3000. Upload a supported build card, recognize stats, compare all five visual slots and correct OCR issues, enter UID/IGN/character, confirm the preview and submit. A successful save returns a real pending submission ID. On Profiles, expand Moderator access, enter the private token and inspect pending builds. Enter a reviewer name and approve or reject. Only approved builds become public.
 
-Do not interpret moderation as proof of screenshot authenticity, game legality or verified damage output. Character names are player-declared. The original screenshot is not uploaded; only the ten cropped PNGs and reviewed text are retained. Moderators see the crops and both raw and corrected statistics.
+Do not interpret moderation as proof of screenshot authenticity, game legality or verified damage output. Character names are player-declared. For scoring, originals up to 1.1 MB are temporarily processed on the server; the original is discarded and a SHA-256 evidence hash, calculation and ten cropped PNGs are retained. Larger files remain unscored. Moderators see the crops and both raw and corrected statistics.
 
 ## Database and migrations
 
@@ -69,11 +69,15 @@ The local HTTP smoke test in `scripts/http-smoke.mjs` inserts synthetic data. Ru
 
 See `VERIFICATION.md` for results and remaining manual checks.
 
-## Scoring and recognition boundaries
+## Official scoring
 
-Official Solo scoring is disabled on the server. There are no fabricated rankings, character coefficients, or imported third-party calculation code. `calculation_results` defines the future verified-result boundary; no public or moderator API writes scores. Before enabling rankings, independently implement versioned mechanics/data, verify reference cases and add server-only score issuance and approved-result queries.
+Versioned official leaderboard categories are enabled for **Carlotta, Cartethyia and Aemeath**. The score is expected standardized rotation damage, not DPS and not Kuro-certified damage. Every category uses the first rotation preset in the pinned reference, level 90, talents 10, S0, signature weapon level 90 R1, maximum-level five-star Echo main stats, permanent passives only, no team buffs, and a level-90 Calamity enemy with 10% resistance. Conditional effects are deliberately excluded; this benchmark does not claim optimal combat rotation damage. Weapon and talent settings are standardized, not inferred from the screenshot.
 
-Echo/Sonata visual extraction is available; automatic identity recognition has no verified reference catalog. Unknown identities stay unknown. Numeric checks identify malformed OCR; they do not establish game-build legality. Lost decimals (for example 105% instead of 10.5%) require checking image evidence and an explicit correction; the application never silently guesses.
+The server independently re-reads character, UID, Echo cost, main-stat label/amount and all substats from the original card, compares reviewed numbers, recognizes Echo/Sonata fingerprints, checks exact legal roll values and evaluates every rotation action. Unknown or ambiguous scoring-relevant identities, source mismatches and unsupported policies stay unscored. Cosmetic variants with identical effects can be treated as equivalent only outside the main slot. Approval and manual identity verification are both required for ranking. Clients and moderators cannot supply scores. Approval, calculation issuance and the audit record share one database transaction. Rankings select one best build per UID and character, use stable tie ordering and exclude stale engine/data/policy versions. Old submissions require resubmission with original evidence; they are not silently assigned scores.
+
+`src/lib/game-data/official-scoring.json` contains versioned numeric data for five characters, their signature weapons and attacks, 230 Echoes, 37 Sonata labels, main stats and legal substat rolls. The SHA-256 manifest and frozen rotation cases are adjacent. Visual fingerprints cover 220 Echo assets and 37 Sonata icons; absent identities fail closed. **Hiyuki and Chisa remain unscored because the pinned reference provides no rotation presets for them.** Character data alone does not establish a validated scoring category.
+
+The integration reuses GPL-3.0-or-later reference calculator modules with corresponding source, license and modification notes in `vendor/wuthering-tools`. Read `THIRD_PARTY_NOTICES.md` before redistribution. `npm ci` followed by `npm run build` verifies/extracts the source archive and builds the engine locally. `npm run data:export` regenerates numeric snapshots from that pinned engine. To regenerate visual fingerprints, obtain the asset repository at the commit recorded in fingerprints.json, set `SCORING_ASSETS_DIRECTORY`, and run `node scripts/generate-scoring-fingerprints.mjs`. Source artwork is not shipped.
 
 ## Reference-backed verification
 
@@ -97,10 +101,10 @@ $env:REFERENCE_FORMULAS_PATH = "C:\path\to\wuthering-waves-optimizer\packages\fo
 node scripts/compare-reference-formulas.mjs
 ```
 
-Numeric formula agreement does not verify a full character rotation or a damage score from a screenshot. The current submission contract still has no verified character/weapon identities, Echo/Sonata identities, Echo levels/main-stat amounts, complete S0/R1 character data, or validated Solo rotation. `scoringReadiness.missing` makes these gaps explicit. The numeric core is not connected to official score issuance; no client or moderator can insert an official score. Completing per-character scoring requires that full data/recognition integration and independent complete-build reference cases.
+The independent numeric core remains separately tested. Official score issuance uses the complete pinned GPL reference engine, covered by 18 upstream full-calculator attack cases and three frozen complete-rotation cases. These checks establish reproducibility against that reference, not independent certification of all in-game mechanics.
 
 Desktop/mobile browser workflow checks now also cover the five original cards supplied by the user: Hiyuki, Chisa, Aemeath, Carlotta and Cartethyia. All 175 scanned cost/main-label/substat fields match independently inspected values after canonical label parsing, at both viewport sizes. A genuine Hiyuki card completes submission and moderation without manual OCR corrections. The previously displayed fifth-cost miss did not reproduce with the supplied Hiyuki(3).jpg in this Chromium environment; this does not establish identical results on every browser/decoder.
 
 To rerun the private-image checks, place the unchanged original files outside the source tree, set `USER_BUILD_CARDS_DIRECTORY` to that folder, then run `npm run test:browser`. The exact filenames and SHA-256 hashes are recorded in `tests/browser/user-card-expectations.json`. Without those originals, private-image tests skip explicitly. Only text expectations and hashes are committed; uploaded images and player identity are not included.
 
-Broader real-image coverage, hosted deployment and official scoring remain release verification gates. This is an implemented and tested unscored MVP, not a finished official ranking system.
+Private source-scoring tests additionally require USER_BUILD_CARD_UID matching the private originals. Hosted deployment and broader image/mechanic coverage remain unverified; the three explicitly listed categories are implemented.

@@ -60,3 +60,41 @@ test('genuine Hiyuki card saves without manual OCR corrections and can be approv
   expect(publicBuild.builds[0].status).toBe('approved');
   expect(publicBuild.builds[0].score).toBeNull();
 });
+
+// Private originals and UID are supplied at runtime and are never committed.
+test('official Carlotta score appears only after approval and identity verification',async({page,request},info)=>{
+ test.skip(info.project.name!=='desktop','One lifecycle per original per isolated DB.');
+ test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Set private original directory and matching UID.');
+ const uid=process.env.USER_BUILD_CARD_UID!;
+ await page.goto('/import');
+ await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Carlotta(1).jpeg'));
+ await page.getByRole('button',{name:'Recognize Echo stats'}).click();
+ await expect(page.getByRole('heading',{name:'No structural warnings',exact:true})).toBeVisible({timeout:60000});
+ await page.getByLabel('Wuthering Waves UID',{exact:true}).fill(uid);
+ await page.getByLabel('In-game name',{exact:true}).fill('Scoring Browser QA');
+ await page.getByLabel('Character name (player-declared, unverified)').fill('Carlotta');
+ await page.getByRole('checkbox').check();
+ const save=page.waitForResponse(r=>r.url().endsWith('/api/submissions')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Submit for moderation'}).click();
+ expect((await save).status()).toBe(201);
+ expect((await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds).toHaveLength(0);
+ await page.goto('/profiles');
+ await page.getByText('Moderator access',{exact:true}).click();
+ await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
+ await page.getByRole('button',{name:'Load pending submissions'}).click();
+ await expect(page.getByText('Scoring: Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',{exact:true})).toBeVisible();
+ await page.getByLabel('Reviewer name (audit trail)').fill('Scoring Browser QA');
+ await page.getByLabel('I manually matched this UID/IGN to the member outside the website.').check();
+ await page.getByRole('button',{name:'Approve Carlotta',exact:true}).click();
+ await expect(page.getByText('No pending submissions.',{exact:true})).toBeVisible();
+ const ranked=await(await request.get('/api/public/leaderboards?character=Carlotta')).json();
+ expect(ranked.builds).toHaveLength(1);
+ expect(ranked.builds[0].score).toBeCloseTo(296418.56387210166,5);
+ await page.goto('/leaderboards');
+ await expect(page.locator('.build-card').filter({hasText:'Carlotta'})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:info.outputPath('official-leaderboard.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:info.outputPath('official-leaderboard-mobile.png'),fullPage:true});
+});

@@ -88,3 +88,9 @@ Thumbs.db
 /test-results-debug/
 
 /test-results-user/
+
+/vendor/wuthering-tools/src/
+/vendor/wuthering-tools/packages/
+/vendor/wuthering-tools/reference-cases/
+/vendor/wuthering-tools/dist/
+/vendor/wuthering-tools/entry.ts

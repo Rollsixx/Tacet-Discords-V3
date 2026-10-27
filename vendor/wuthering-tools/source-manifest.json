@@ -1,0 +1,6 @@
+{
+  "upstream": "https://github.com/ryanbenson/wuthering-waves-optimizer",
+  "commit": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
+  "license": "GPL-3.0-or-later",
+  "sha256": "9a89d5dbdeede2cc56980469cbfa507827042a85bc5bea4c3b23454fc5f796cb"
+}
