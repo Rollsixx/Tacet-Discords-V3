@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tacet V3 - Local Reference Calibration</title>
+<style>
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+}
+body {
+  margin: 0;
+  padding: 28px;
+  background: #0b1020;
+  color: #e8eefc;
+}
+main {
+  max-width: 1200px;
+  margin: auto;
+}
+h1 { margin-bottom: 8px; }
+p { color: #aab8d0; }
+.panel {
+  background: #151e32;
+  border: 1px solid #30405d;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 18px 0;
+}
+input {
+  padding: 12px;
+  background: #202c44;
+  border-radius: 8px;
+  max-width: 100%;
+}
+.status { font-weight: 600; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+  gap: 14px;
+}
+.slot {
+  padding: 14px;
+  border: 1px solid #30405d;
+  border-radius: 10px;
+}
+canvas {
+  max-width: 100%;
+  height: auto;
+  image-rendering: auto;
+  border: 1px solid #445574;
+  margin: 6px 0;
+}
+small {
+  display: block;
+  color: #aab8d0;
+  margin-bottom: 8px;
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Tacet Discords V3</h1>
+<p>Local Echo and Sonata calibration</p>
+
+<section class="panel">
+  <h2>Build-card screenshot</h2>
+  <input id="file" type="file" accept="image/*">
+  <p id="status" class="status">Select a 1920 x 1080 screenshot.</p>
+  <small>Images are processed in this browser session. No upload is performed by this page.</small>
+</section>
+
+<section class="panel">
+  <h2>Five-slot crop inspection</h2>
+  <div id="results" class="grid"></div>
+</section>
+</main>
+
+<script>
+"use strict";
+
+const input = document.getElementById("file");
+const status = document.getElementById("status");
+const results = document.getElementById("results");
+
+function crop(image, x, y, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas unavailable");
+
+  context.drawImage(
+    image,
+    x, y, width, height,
+    0, 0, width, height
+  );
+
+  return canvas;
+}
+
+function preprocess(source, width, height, background) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas unavailable");
+
+  context.fillStyle = background;
+  context.fillRect(0, 0, width, height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(source, 0, 0, width, height);
+
+  return canvas;
+}
+
+function addCanvas(parent, label, canvas) {
+  const caption = document.createElement("small");
+  caption.textContent = label;
+  parent.append(caption, canvas);
+}
+
+input.addEventListener("change", async () => {
+  results.replaceChildren();
+
+  const file = input.files?.[0];
+  if (!file) return;
+
+  let bitmap;
+
+  try {
+    bitmap = await createImageBitmap(file);
+
+    if (bitmap.width !== 1920 || bitmap.height !== 1080) {
+      throw new Error(
+        `Expected 1920 x 1080; received ${bitmap.width} x ${bitmap.height}`
+      );
+    }
+
+    for (let index = 0; index < 5; index++) {
+      const offset = index * 374;
+
+      const portrait = crop(
+        bitmap, 22 + offset, 650, 192, 182
+      );
+
+      const sonata = crop(
+        bitmap, 264 + offset, 660, 56, 56
+      );
+
+      const echoProcessed = preprocess(
+        portrait, 80, 80, "rgb(0,0,0)"
+      );
+
+      const sonataProcessed = preprocess(
+        sonata, 32, 32, "rgb(40,40,40)"
+      );
+
+      const panel = document.createElement("div");
+      panel.className = "slot";
+
+      const heading = document.createElement("h3");
+      heading.textContent = `Slot ${index + 1}`;
+      panel.append(heading);
+
+      addCanvas(panel, "Echo crop 192 x 182", portrait);
+      addCanvas(panel, "Echo processed 80 x 80", echoProcessed);
+      addCanvas(panel, "Sonata crop 56 x 56", sonata);
+      addCanvas(panel, "Sonata processed 32 x 32", sonataProcessed);
+
+      results.append(panel);
+    }
+
+    status.textContent = "PASS: Five Echo and five Sonata crops processed.";
+  } catch (error) {
+    status.textContent = `FAILED: ${error.message}`;
+  } finally {
+    bitmap?.close();
+  }
+});
+</script>
+</body>
+</html>

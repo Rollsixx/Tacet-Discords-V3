@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tacet V3 | Canvas Pixel Diagnostic</title>
+<style>
+body{background:#0b1020;color:#e5e7eb;font:15px system-ui;margin:0;padding:32px}
+main{max-width:850px;margin:auto}
+h1{font-size:25px}
+p{color:#aab4c7}
+section{background:#151d30;border:1px solid #34405a;border-radius:12px;padding:20px;margin:18px 0}
+canvas{border:1px solid #64748b;image-rendering:pixelated;margin:8px}
+.pass{color:#75e2a5}.fail{color:#ff8585}
+button{background:#536dfe;color:white;border:0;border-radius:8px;padding:12px 18px;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+<h1>Scanner Canvas Pixel Diagnostic</h1>
+<p>Development-only synthetic image tests. No game artwork or uploads.</p>
+<button id="run">Run pixel tests</button>
+<section>
+<h2>Results</h2>
+<div id="results">Waiting to run.</div>
+</section>
+<section>
+<h2>Rendered outputs</h2>
+<div id="preview"></div>
+</section>
+</main>
+<script>
+"use strict";
+
+const results = document.getElementById("results");
+const preview = document.getElementById("preview");
+
+function canvas(width,height) {
+  const c=document.createElement("canvas");
+  c.width=width;
+  c.height=height;
+  return c;
+}
+
+function preprocess(source,width,height,background) {
+  const output=canvas(width,height);
+  const ctx=output.getContext("2d",{willReadFrequently:true});
+  ctx.fillStyle=`rgb(${background.join(",")})`;
+  ctx.fillRect(0,0,width,height);
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality="high";
+  ctx.drawImage(source,0,0,source.width,source.height,0,0,width,height);
+  return output;
+}
+
+function pixel(c,x,y) {
+  return [...c.getContext("2d").getImageData(x,y,1,1).data];
+}
+
+function same(actual,expected) {
+  return actual.length===expected.length &&
+    actual.every((v,i)=>
+      i===3 ? v===expected[i] :
+      Math.abs(v-expected[i])<=2
+    );
+}
+
+function maxRgbDifference(actual,expected) {
+  return Math.max(
+    ...actual.slice(0,3).map(
+      (value,i)=>Math.abs(value-expected[i])
+    )
+  );
+}
+
+function run() {
+  results.replaceChildren();
+  preview.replaceChildren();
+
+  let passed=0;
+  let failed=0;
+
+  function check(name,condition,detail="") {
+    const item=document.createElement("p");
+    item.className=condition?"pass":"fail";
+    item.textContent=(condition?"PASS: ":"FAIL: ")+name+
+      (detail?" — "+detail:"");
+    results.appendChild(item);
+    if(condition) passed++; else failed++;
+  }
+
+  try {
+    const solid=canvas(56,56);
+    const sctx=solid.getContext("2d");
+    sctx.fillStyle="rgb(255,0,0)";
+    sctx.fillRect(0,0,56,56);
+
+    const sonata=preprocess(solid,32,32,[40,40,40]);
+    check("Sonata dimensions",sonata.width===32 && sonata.height===32);
+    check("Sonata center pixel",same(pixel(sonata,16,16),[255,0,0,255]),"actual="+pixel(sonata,16,16).join(",")+" expected=255,0,0,255");
+    check("Sonata corner pixel",same(pixel(sonata,0,0),[255,0,0,255]),"actual="+pixel(sonata,0,0).join(",")+" expected=255,0,0,255");
+
+    const echo=preprocess(solid,80,80,[0,0,0]);
+    check("Echo dimensions",echo.width===80 && echo.height===80);
+    check("Echo center pixel",same(pixel(echo,40,40),[255,0,0,255]),"actual="+pixel(echo,40,40).join(",")+" expected=255,0,0,255");
+
+    const transparent=canvas(56,56);
+    const transparentSonata=preprocess(transparent,32,32,[40,40,40]);
+    check("Transparent Sonata background",
+      same(pixel(transparentSonata,16,16),[40,40,40,255]),"actual="+pixel(transparentSonata,16,16).join(",")+" expected=40,40,40,255");
+
+    const transparentEcho=preprocess(transparent,80,80,[0,0,0]);
+    check("Transparent Echo background",
+      same(pixel(transparentEcho,40,40),[0,0,0,255]));
+
+    const half=canvas(32,32);
+    const hctx=half.getContext("2d");
+    hctx.fillStyle="rgba(255,0,0,0.5)";
+    hctx.fillRect(0,0,32,32);
+    const blended=preprocess(half,32,32,[40,40,40]);
+    const p=pixel(blended,16,16);
+    check("Alpha compositing",
+      p[0]>=146 && p[0]<=149 &&
+      p[1]>=19 && p[1]<=21 &&
+      p[2]>=19 && p[2]<=21 &&
+      p[3]===255,
+      p.join(","));
+
+    for(const [name,c] of [
+      ["Sonata 32x32",sonata],
+      ["Echo 80x80",echo],
+      ["Transparent Sonata",transparentSonata],
+      ["Transparent Echo",transparentEcho],
+      ["Alpha blend",blended]
+    ]) {
+      const holder=document.createElement("div");
+      const label=document.createElement("span");
+      label.textContent=name+": ";
+      holder.append(label,c);
+      preview.appendChild(holder);
+    }
+  } catch(error) {
+    check("Browser execution",false,String(error));
+  }
+
+  const summary=document.createElement("h2");
+  summary.textContent=`${passed} passed / ${failed} failed (RGB tolerance: ±2; alpha exact)`;
+  results.prepend(summary);
+}
+
+document.getElementById("run").addEventListener("click",run);
+run();
+</script>
+</body>
+</html>

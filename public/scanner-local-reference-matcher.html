@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tacet V3 | Local Reference Matcher</title>
+<style>
+:root { color-scheme:dark; font-family:system-ui,sans-serif }
+body { background:#0b1020; color:#e8eefc; margin:0; padding:28px }
+main { max-width:1150px; margin:auto }
+p,small { color:#aab8d0 }
+.panel { background:#151e32; border:1px solid #30405d;
+  border-radius:12px; padding:20px; margin:18px 0 }
+.controls { display:flex; flex-wrap:wrap; gap:18px }
+label { display:grid; gap:8px }
+input,select,button { padding:10px; border-radius:7px }
+.grid { display:grid; grid-template-columns:
+  repeat(auto-fit,minmax(180px,1fr)); gap:12px }
+.slot { padding:12px; border:1px solid #30405d; border-radius:9px }
+canvas { border:1px solid #445574; max-width:100% }
+strong { display:block; margin:8px 0 }
+</style>
+</head>
+<body>
+<main>
+<h1>Tacet V3 — Local Reference Matcher</h1>
+<p>Development-only pixel comparison. No uploads or automatic identification.</p>
+<section class="panel">
+<div class="controls">
+<label>1920 × 1080 build card
+<input id="card" type="file" accept="image/*"></label>
+<label>Local reference image
+<input id="reference" type="file" accept="image/*"></label>
+<label>Reference type
+<select id="kind">
+<option value="echo">Echo portrait</option>
+<option value="sonata">Sonata icon</option>
+</select></label>
+</div>
+<p id="status">Select both images to compare.</p>
+</section>
+<section class="panel">
+<h2>Reference comparison</h2>
+<p id="summary">Difference scores will appear here. Lower is closer.</p>
+<div id="results" class="grid"></div>
+</section>
+</main>
+<script>
+"use strict";
+
+const cardInput = document.querySelector("#card");
+const refInput = document.querySelector("#reference");
+const kindInput = document.querySelector("#kind");
+const status = document.querySelector("#status");
+const summary = document.querySelector("#summary");
+const results = document.querySelector("#results");
+
+function makeCanvas(width,height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function prepare(image,region,kind) {
+  const width = kind === "echo" ? 80 : 32;
+  const height = width;
+  const canvas = makeCanvas(width,height);
+  const ctx = canvas.getContext("2d",{willReadFrequently:true});
+  if (!ctx) throw Error("Canvas unavailable");
+
+  ctx.fillStyle = kind === "echo" ? "rgb(0,0,0)" : "rgb(40,40,40)";
+  ctx.fillRect(0,0,width,height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  if (region) {
+    ctx.drawImage(image,region.x,region.y,region.w,region.h,
+      0,0,width,height);
+  } else {
+    ctx.drawImage(image,0,0,width,height);
+  }
+  return canvas;
+}
+
+function pixels(canvas) {
+  return canvas.getContext("2d",{willReadFrequently:true})
+    .getImageData(0,0,canvas.width,canvas.height).data;
+}
+
+function luminance(data,i) {
+  return (data[i]*0.2126+data[i+1]*0.7152+
+    data[i+2]*0.0722)/255;
+}
+
+function difference(a,b,width,height) {
+  let color=0,edges=0,samples=0;
+  const count=width*height;
+  for(let y=0;y<height;y++) {
+    for(let x=0;x<width;x++) {
+      const i=(y*width+x)*4;
+      for(let c=0;c<4;c++) {
+        const d=(a[i+c]-b[i+c])/255;
+        color+=d*d;
+      }
+      if(x>0) {
+        const p=i-4;
+        edges+=Math.abs(
+          (luminance(a,i)-luminance(a,p))-
+          (luminance(b,i)-luminance(b,p)));
+        samples++;
+      }
+      if(y>0) {
+        const p=i-width*4;
+        edges+=Math.abs(
+          (luminance(a,i)-luminance(a,p))-
+          (luminance(b,i)-luminance(b,p)));
+        samples++;
+      }
+    }
+  }
+  return 0.5*color/(count*4)+
+    0.5*(samples ? edges/samples : 0);
+}
+
+async function compare() {
+  results.replaceChildren();
+  summary.textContent = "Difference scores will appear here.";
+
+  const cardFile = cardInput.files?.[0];
+  const refFile = refInput.files?.[0];
+  if(!cardFile || !refFile) {
+    status.textContent = "Select both images to compare.";
+    return;
+  }
+
+  let card,reference;
+  try {
+    card = await createImageBitmap(cardFile);
+    reference = await createImageBitmap(refFile);
+    if(card.width!==1920 || card.height!==1080) {
+      throw Error("Build card must be 1920 × 1080.");
+    }
+
+    const kind=kindInput.value;
+    const referenceCanvas=prepare(reference,null,kind);
+    const referencePixels=pixels(referenceCanvas);
+    const width=referenceCanvas.width;
+    const scores=[];
+
+    for(let index=0;index<5;index++) {
+      const offset=374*index;
+      const region=kind==="echo"
+        ? {x:22+offset,y:650,w:192,h:182}
+        : {x:264+offset,y:660,w:56,h:56};
+
+      const canvas=prepare(card,region,kind);
+      const score=difference(
+        pixels(canvas),referencePixels,width,width);
+
+      scores.push({slot:index+1,score});
+
+      const panel=document.createElement("div");
+      panel.className="slot";
+      const heading=document.createElement("strong");
+      heading.textContent=`Slot ${index+1}`;
+      const scoreText=document.createElement("p");
+      scoreText.textContent=`Difference: ${score.toFixed(6)}`;
+      panel.append(heading,canvas,scoreText);
+      results.append(panel);
+    }
+
+    scores.sort((a,b)=>a.score-b.score || a.slot-b.slot);
+    summary.textContent=
+      `Closest: Slot ${scores[0].slot} (${scores[0].score.toFixed(6)}). `+
+      `Margin to second: ${(scores[1].score-scores[0].score).toFixed(6)}. `+
+      "No match threshold has been calibrated.";
+    status.textContent="PASS: Five local comparisons completed.";
+  } catch(error) {
+    status.textContent=`FAILED: ${error.message}`;
+  } finally {
+    card?.close();
+    reference?.close();
+  }
+}
+
+for(const control of [cardInput,refInput,kindInput]) {
+  control.addEventListener("change",compare);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tacet V3 | Self-Reference Calibration</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}
+body{margin:0;padding:28px;background:#0b1020;color:#e8eefc}
+main{max-width:1200px;margin:auto}
+p,small{color:#aab8d0}
+section{background:#151e32;border:1px solid #30405d;
+border-radius:12px;padding:20px;margin:18px 0}
+.controls{display:flex;gap:20px;flex-wrap:wrap}
+label{display:grid;gap:8px}
+input,select{padding:10px}
+.grid{display:grid;grid-template-columns:
+repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.slot{border:1px solid #30405d;border-radius:9px;padding:12px}
+canvas{max-width:100%;border:1px solid #445574}
+strong{display:block;margin:8px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Tacet V3 — Self-Reference Calibration</h1>
+<p>Compare one extracted slot against all five slots.</p>
+<section>
+<div class="controls">
+<label>Build-card screenshot
+<input id="file" type="file" accept="image/*"></label>
+<label>Image type
+<select id="kind">
+<option value="echo">Echo portrait</option>
+<option value="sonata">Sonata icon</option>
+</select></label>
+<label>Reference slot
+<select id="referenceSlot">
+<option value="0">Slot 1</option>
+<option value="1">Slot 2</option>
+<option value="2">Slot 3</option>
+<option value="3">Slot 4</option>
+<option value="4">Slot 5</option>
+</select></label>
+</div>
+<p id="status">Select a 1920 × 1080 build card.</p>
+</section>
+<section>
+<h2>Comparison results</h2>
+<p id="summary">No comparisons yet.</p>
+<div id="results" class="grid"></div>
+</section>
+</main>
+<script>
+"use strict";
+
+const fileInput=document.querySelector("#file");
+const kindInput=document.querySelector("#kind");
+const slotInput=document.querySelector("#referenceSlot");
+const status=document.querySelector("#status");
+const summary=document.querySelector("#summary");
+const results=document.querySelector("#results");
+
+function extract(image,index,kind){
+  const echo=kind==="echo";
+  const size=echo?80:32;
+  const canvas=document.createElement("canvas");
+  canvas.width=size;
+  canvas.height=size;
+  const ctx=canvas.getContext("2d",{willReadFrequently:true});
+  if(!ctx)throw Error("Canvas unavailable");
+  ctx.fillStyle=echo?"rgb(0,0,0)":"rgb(40,40,40)";
+  ctx.fillRect(0,0,size,size);
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality="high";
+  ctx.drawImage(
+    image,
+    (echo?22:264)+index*374,
+    echo?650:660,
+    echo?192:56,
+    echo?182:56,
+    0,0,size,size
+  );
+  return canvas;
+}
+
+function pixelData(canvas){
+  return canvas.getContext("2d",{willReadFrequently:true})
+    .getImageData(0,0,canvas.width,canvas.height).data;
+}
+
+function lum(a,i){
+  return (a[i]*0.2126+a[i+1]*0.7152+
+    a[i+2]*0.0722)/255;
+}
+
+function difference(a,b,width,height){
+  let color=0,edges=0,samples=0;
+  const count=width*height;
+  for(let y=0;y<height;y++){
+    for(let x=0;x<width;x++){
+      const i=(y*width+x)*4;
+      for(let c=0;c<4;c++){
+        const d=(a[i+c]-b[i+c])/255;
+        color+=d*d;
+      }
+      if(x>0){
+        const p=i-4;
+        edges+=Math.abs(
+          (lum(a,i)-lum(a,p))-
+          (lum(b,i)-lum(b,p)));
+        samples++;
+      }
+      if(y>0){
+        const p=i-width*4;
+        edges+=Math.abs(
+          (lum(a,i)-lum(a,p))-
+          (lum(b,i)-lum(b,p)));
+        samples++;
+      }
+    }
+  }
+  return 0.5*color/(count*4)+
+    0.5*(samples?edges/samples:0);
+}
+
+async function run(){
+  results.replaceChildren();
+  const file=fileInput.files?.[0];
+  if(!file){
+    status.textContent="Select a build card.";
+    return;
+  }
+
+  let image;
+  try{
+    image=await createImageBitmap(file);
+    if(image.width!==1920||image.height!==1080){
+      throw Error("Expected 1920 × 1080 screenshot.");
+    }
+
+    const kind=kindInput.value;
+    const referenceIndex=Number(slotInput.value);
+    const canvases=Array.from(
+      {length:5},(_,i)=>extract(image,i,kind));
+    const arrays=canvases.map(pixelData);
+    const width=canvases[0].width;
+
+    const scores=arrays.map(data=>
+      difference(arrays[referenceIndex],data,width,width));
+
+    if(scores[referenceIndex]!==0){
+      throw Error("Self-comparison is not zero.");
+    }
+
+    scores.forEach((score,index)=>{
+      const panel=document.createElement("div");
+      panel.className="slot";
+      const heading=document.createElement("strong");
+      heading.textContent=`Slot ${index+1}`;
+      const scoreText=document.createElement("p");
+      scoreText.textContent=`Difference: ${score.toFixed(6)}`;
+      if(index===referenceIndex){
+        scoreText.textContent+=" (reference)";
+      }
+      panel.append(heading,canvases[index],scoreText);
+      results.append(panel);
+    });
+
+    const others=scores
+      .map((score,index)=>({score,index}))
+      .filter(item=>item.index!==referenceIndex)
+      .sort((a,b)=>a.score-b.score||a.index-b.index);
+
+    summary.textContent=
+      `Reference: Slot ${referenceIndex+1}. `+
+      `Self-difference: ${scores[referenceIndex].toFixed(6)}. `+
+      `Closest other: Slot ${others[0].index+1} `+
+      `(${others[0].score.toFixed(6)}).`;
+
+    status.textContent="PASS: Five comparisons completed.";
+  }catch(error){
+    status.textContent=`FAILED: ${error.message}`;
+  }finally{
+    image?.close();
+  }
+}
+
+for(const control of [fileInput,kindInput,slotInput]){
+  control.addEventListener("change",run);
+}
+</script>
+</body>
+</html>
