@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+.env*
+*.db*
+.cache
+test-results*
+playwright-report
+backups
+upload

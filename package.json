@@ -14,7 +14,12 @@
     "test:browser": "npm run build && playwright test",
     "test:reference": "node scripts/fetch-reference-fixture.mjs && npm run test:browser",
     "pretest": "node scripts/build-scoring-engine.mjs",
-    "data:export": "node scripts/export-scoring-data.mjs"
+    "data:export": "node scripts/export-scoring-data.mjs",
+    "setup": "node scripts/setup-local.mjs",
+    "start:production": "node scripts/start-production.mjs",
+    "db:rescore": "node --env-file-if-exists=.env.local scripts/rescore.mts",
+    "verify": "npm test && npm run lint && npm run build",
+    "db:backup": "node --env-file-if-exists=.env.local scripts/backup.mts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

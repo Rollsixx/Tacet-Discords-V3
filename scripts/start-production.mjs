@@ -1,0 +1,16 @@
+import {existsSync} from 'node:fs';
+import {spawn} from 'node:child_process';
+if(existsSync('.env.local'))process.loadEnvFile('.env.local');
+process.env.NODE_ENV='production';
+if(!process.env.TURSO_DATABASE_URL)throw Error('Set TURSO_DATABASE_URL to a durable database.');
+if((process.env.MODERATOR_TOKEN||'').length<32)throw Error('Set a private MODERATOR_TOKEN of at least 32 characters.');
+const {database,migrate}=await import('../src/lib/server/database.ts');
+const {rescoreStoredBuilds}=await import('../src/lib/server/rescore.mjs');
+await migrate();const upgraded=await rescoreStoredBuilds(database());database().close();
+if(upgraded.failed)throw Error('Stored-build rescore failed; resolve before starting: '+upgraded.failed);
+console.log('Database ready; updated calculations:',upgraded.updated);
+const port=process.env.PORT||'3000';
+if(!/^\d+$/.test(port)||Number(port)<1||Number(port)>65535)throw Error('Invalid PORT.');
+const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-p',port,'--hostname','0.0.0.0'],{stdio:'inherit',env:process.env});
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>child.kill(signal));
+child.on('exit',code=>process.exit(code||0));

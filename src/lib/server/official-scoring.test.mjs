@@ -76,3 +76,20 @@ test('a source card with a different UID cannot obtain scoring evidence',{skip:!
  const result=await assessSource({...inputFor(card),uid:'00000000',sourceImage:await readFile(originals+'/'+card.file)});
  assert.equal(result.eligible,false);assert.match(result.reason,/UID/);
 });
+
+test('Tacet windows agree with the independent hit core and explicit level-10 kit coefficients',async()=>{
+ const {evaluateHit}=await import('./damage-core.ts');
+ // Transcribed from the pinned level-10 kit tables, not derived from the adapter.
+ const windows={Hiyuki:[[.4927,'lib',1],[.8004,'lib',1],[1.6772,'lib',1],[1.4965,'lib',1],[1.2164,'lib',1],[2.6404,'skill',1],[4.7306,'lib',3],[6.1633,'lib',1],[9.9405,'lib',1]],Chisa:[[9.5429,'lib',1],[1.396,'skill',1],[.8512,'lib',1],[1.2784,'lib',1],[2.5767,'lib',1]]};
+ for(const [name,hits]of Object.entries(windows)){
+  const card=cards.find(c=>c.file.startsWith(name)),golden=cases.cases.find(c=>c.character===name);
+  const result=await calculateStandard(name,inputFor(card).slots,golden.echoes),f=result.finalStats;
+  let total=0;
+  for(const [i,[coefficient,type,count]]of hits.entries()){
+   const independent=evaluateHit({characterLevel:90,enemyLevel:90,attack:f.totalAtk,coefficient,damageBonus:(f.dmgBonus+(name==='Hiyuki'?f.glacio:f.havoc)+(type==='lib'?f.resonanceLiberationDMGBonus:f.resonanceSkillDMGBonus))/100,amplify:f.totalDeepenEffect/100,specialMultiplier:0,totalDamageBonus:0,endgameDamageBonus:0,defenseIgnore:f.DefIgnore/100,defenseReduction:0,enemyResistance:.1,resistanceReduction:f.resistReduction/100,resistanceIgnore:0,critRate:Math.min(1,f.totalCritRate),critDamage:f.totalCritDMG});
+   assert.ok(Math.abs(independent.expected*count-result.actions[i].damage.expected)<1e-6,name+' action '+i);total+=independent.expected*count;
+  }
+  assert.ok(Math.abs(total-result.score)<1e-6,name+' total');
+  assert.match(result.rotationOrigin,/Tacet-authored/);assert.ok(result.startState.length>80);
+ }
+});

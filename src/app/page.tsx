@@ -20,7 +20,7 @@ export default function Home() {
             The art of <span className="gradient-text">building better.</span>
           </h1>
           <p>
-            Discover Resonator builds, explore player profiles, and share screenshot builds for moderator review. Compare supported characters using a fixed S0/signature-R1 rotation benchmark.
+            Discover Resonator builds, explore player profiles, and share screenshot builds for moderator review. Compare supported characters using a fixed S0/signature-R1 damage benchmark.
           </p>
           <div className="hero-actions">
             <Link className="action" href="/leaderboards">
@@ -102,7 +102,7 @@ export default function Home() {
             <span className="eyebrow">Competitive standard</span>
             <h3>Built for fair comparison.</h3>
             <p className="muted">
-              The Solo standard is Resonance Chain S0 and weapon Syntonization R1, without team buffs. Current rankings use a permanent-passive rotation benchmark for supported characters.
+              The Solo standard is Resonance Chain S0 and weapon Syntonization R1, without team buffs. Current rankings use a permanent-passive damage benchmark for supported characters.
             </p>
             <div className="standard-tags">
               <span>S0 RESONANCE</span>

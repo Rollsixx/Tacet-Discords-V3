@@ -33,6 +33,8 @@ export async function submit(input: SubmissionInput, db: Client = database()) {
     hash.update(JSON.stringify([slot.cost.value, slot.mainStat.value, slot.substats.map(x => x.value)]));
     hash.update(slot.portrait).update(slot.sonata);
   }
+  // A new scoring policy/evidence can be resubmitted; duplicates within it cannot.
+  hash.update(assessment.eligible ? POLICY_VERSION : "unscored");
   const fingerprint = hash.digest("hex");
   const id = randomUUID();
   const createdAt = new Date().toISOString();
@@ -41,7 +43,7 @@ export async function submit(input: SubmissionInput, db: Client = database()) {
     const duplicate = await tx.execute({ sql: "SELECT id FROM submissions WHERE fingerprint=?", args: [fingerprint] });
     if (duplicate.rows.length) throw new HttpError(409, "This build has already been submitted.");
     const recent = await tx.execute({ sql: "SELECT COUNT(*) AS count FROM submissions WHERE uid=? AND created_at>?", args: [input.uid, new Date(Date.now() - 60000).toISOString()] });
-    if (Number(recent.rows[0].count) >= 2) throw new HttpError(429, "Please wait before submitting another build for this UID.");
+    if (Number(recent.rows[0].count) >= 10) throw new HttpError(429, "Please wait before submitting another build for this UID.");
     await tx.execute({ sql: "INSERT INTO players(uid,created_at) VALUES (?,?) ON CONFLICT(uid) DO NOTHING", args: [input.uid, createdAt] });
     await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at) VALUES (?,?,?,?,?,?,?)", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt] });
     for (const slot of input.slots) {
@@ -73,11 +75,11 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
 }
 export const scoringReadiness = {
   enabled: true,
-  reason: "Versioned permanent-passive S0/signature-R1 rotation benchmark. Only approved, identity-verified builds with source-validated inputs are ranked.",
+  reason: "Versioned permanent-passive S0/signature-R1 damage benchmark. Only approved, identity-verified builds with source-validated inputs are ranked.",
   engineVersion: ENGINE_VERSION, numericCoreVersion: DAMAGE_CORE_VERSION,
   dataVersion: DATA_VERSION, policyId: POLICY_VERSION, supportedCharacters: SUPPORTED,
-  metric: "Expected standardized rotation damage (not DPS)",
-  missing: ["Hiyuki and Chisa have no supplied reference rotation; other characters remain outside this release's validated coverage."],
+  metric: "Expected standardized benchmark damage (not DPS)",
+  missing: [],
 };
 export async function listBuilds(options: { search?: string; character?: string; id?: string; page?: number; pending?: boolean } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
@@ -101,7 +103,7 @@ function publicBuild(row: Row) { return {
       id: String(row.id), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
       status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
       identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
-      data: JSON.parse(String(row.data)) as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+      data: JSON.parse(String(row.data)) as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
     }; }
 
 export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
@@ -117,4 +119,18 @@ export async function listLeaderboard(options: {character?: string;search?: stri
   ) SELECT * FROM candidates WHERE player_best=1 AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
     ORDER BY verified_score DESC,id ASC LIMIT 21 OFFSET ?`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,search,search,search,(page-1)*20]});
   return {builds:result.rows.slice(0,20).map(publicBuild),page,hasMore:result.rows.length>20,scoring:scoringReadiness};
+}
+
+export async function setPlayerVerification(id: string, verified: boolean, reviewer: string, note: string, db: Client = database()) {
+ const tx = await db.transaction("write");
+ try {
+  const selected=await tx.execute({sql:"SELECT uid FROM submissions WHERE id=? AND status='approved'",args:[id]});
+  if(!selected.rows.length)throw new HttpError(404,"Approved build not found.");
+  const builds=await tx.execute({sql:"SELECT id FROM submissions WHERE uid=? AND status='approved' AND identity_verified!=?",args:[String(selected.rows[0].uid),verified?1:0]});
+  for(const build of builds.rows){
+   await tx.execute({sql:'UPDATE submissions SET identity_verified=? WHERE id=?',args:[verified?1:0,String(build.id)]});
+   await tx.execute({sql:'INSERT INTO build_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),String(build.id),verified?'identity_verified':'identity_unverified',reviewer,note,new Date().toISOString()]});
+  }
+  await tx.commit();return {updated:builds.rows.length};
+ }finally{tx.close();}
 }

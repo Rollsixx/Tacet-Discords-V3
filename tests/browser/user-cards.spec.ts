@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { parseSubstat } from '../../src/lib/scanner/stat-validation';
 import expectations from './user-card-expectations.json';
+import scoringCases from '../../src/lib/game-data/scoring-cases.json';
 const directory = process.env.USER_BUILD_CARDS_DIRECTORY;
 for (const card of expectations) test('original uploaded card: '+card.file, async ({ page }, info) => {
   test.skip(!directory, 'Set USER_BUILD_CARDS_DIRECTORY to local private originals.');
@@ -62,22 +63,25 @@ test('genuine Hiyuki card saves without manual OCR corrections and can be approv
 });
 
 // Private originals and UID are supplied at runtime and are never committed.
-test('official Carlotta score appears only after approval and identity verification',async({page,request},info)=>{
+test('all five official categories score only after approval and identity verification',async({page,request},info)=>{
  test.skip(info.project.name!=='desktop','One lifecycle per original per isolated DB.');
  test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Set private original directory and matching UID.');
  const uid=process.env.USER_BUILD_CARD_UID!;
+ for(const golden of scoringCases.cases){
+ const character=golden.character;
+ const card=expectations.find(c=>c.file.startsWith(character))!;
  await page.goto('/import');
- await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Carlotta(1).jpeg'));
+ await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,card.file));
  await page.getByRole('button',{name:'Recognize Echo stats'}).click();
  await expect(page.getByRole('heading',{name:'No structural warnings',exact:true})).toBeVisible({timeout:60000});
  await page.getByLabel('Wuthering Waves UID',{exact:true}).fill(uid);
  await page.getByLabel('In-game name',{exact:true}).fill('Scoring Browser QA');
- await page.getByLabel('Character name (player-declared, unverified)').fill('Carlotta');
+ await page.getByLabel('Character name (player-declared, unverified)').fill(character);
  await page.getByRole('checkbox').check();
  const save=page.waitForResponse(r=>r.url().endsWith('/api/submissions')&&r.request().method()==='POST');
  await page.getByRole('button',{name:'Submit for moderation'}).click();
  expect((await save).status()).toBe(201);
- expect((await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds).toHaveLength(0);
+ expect((await(await request.get('/api/public/leaderboards?character='+character)).json()).builds).toHaveLength(0);
  await page.goto('/profiles');
  await page.getByText('Moderator access',{exact:true}).click();
  await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
@@ -85,18 +89,20 @@ test('official Carlotta score appears only after approval and identity verificat
  await expect(page.getByText('Scoring: Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',{exact:true})).toBeVisible();
  await page.getByLabel('Reviewer name (audit trail)').fill('Scoring Browser QA');
  await page.getByLabel('I manually matched this UID/IGN to the member outside the website.').check();
- await page.getByRole('button',{name:'Approve Carlotta',exact:true}).click();
+ await page.getByRole('button',{name:'Approve '+character,exact:true}).click();
  await expect(page.getByText('No pending submissions.',{exact:true})).toBeVisible();
- const ranked=await(await request.get('/api/public/leaderboards?character=Carlotta')).json();
+ const ranked=await(await request.get('/api/public/leaderboards?character='+character)).json();
  expect(ranked.builds).toHaveLength(1);
- expect(ranked.builds[0].score).toBeCloseTo(296418.56387210166,5);
- await page.goto('/leaderboards');
- await expect(page.locator('.build-card').filter({hasText:'Carlotta'})).toBeVisible();
+ expect(ranked.builds[0].score).toBeCloseTo(golden.score,5);
+ await page.goto('/leaderboards?character='+character);
+ await expect(page.locator('.build-card').filter({hasText:character})).toBeVisible();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.screenshot({path:info.outputPath('official-leaderboard.png'),fullPage:true});
+ await page.screenshot({path:info.outputPath(character+'-official-leaderboard.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.screenshot({path:info.outputPath('official-leaderboard-mobile.png'),fullPage:true});
+ await page.screenshot({path:info.outputPath(character+'-official-leaderboard-mobile.png'),fullPage:true});
+ await page.setViewportSize({width:1440,height:1000});
+ }
 });
 
 test('unreadable initial fifth cost is recovered from real image OCR without editing',async({page},info)=>{
@@ -131,4 +137,24 @@ test('unreadable initial fifth cost is recovered from real image OCR without edi
  await fifth.locator('summary').click();
  await fifth.screenshot({path:info.outputPath('recovered-fifth-cost.png')});
  await expect(page.getByRole('heading',{name:'No structural warnings',exact:true})).toBeVisible();
+});
+
+
+test('moderator can verify and revoke an approved player after initial review',async({page,request},info)=>{
+ test.skip(info.project.name!=='desktop','One identity lifecycle per isolated DB.');
+ test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Private source evidence required.');
+ const uid=process.env.USER_BUILD_CARD_UID!;
+ await page.goto('/profiles');await page.getByText('Moderator access',{exact:true}).click();
+ await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
+ await page.getByLabel('Review queue',{exact:true}).selectOption('approved');
+ await page.getByLabel('Find approved UID or IGN',{exact:true}).fill(uid);
+ await page.getByRole('button',{name:'Load approved players',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toHaveCount(5);
+ await page.getByLabel('Reviewer name (audit trail)').fill('Verification Browser QA');
+ await page.getByRole('button',{name:'Unverify '+uid,exact:true}).first().click();
+ await expect(page.getByRole('button',{name:'Verify '+uid,exact:true})).toHaveCount(5);
+ for(const golden of scoringCases.cases)expect((await(await request.get('/api/public/leaderboards?character='+golden.character)).json()).builds).toHaveLength(0);
+ await page.getByRole('button',{name:'Verify '+uid,exact:true}).first().click();
+ await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toHaveCount(5);
+ for(const golden of scoringCases.cases)expect((await(await request.get('/api/public/leaderboards?character='+golden.character)).json()).builds).toHaveLength(1);
 });

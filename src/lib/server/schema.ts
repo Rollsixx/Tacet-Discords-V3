@@ -49,4 +49,12 @@ export const migrations = [
     "ALTER TABLE calculation_results ADD COLUMN details TEXT NOT NULL DEFAULT '{}'",
     "CREATE INDEX calculation_policy_score ON calculation_results(policy_id, engine_version, data_version, score DESC)",
   ] },
+  { version: 3, statements: [
+    `CREATE TABLE build_events (
+      id TEXT PRIMARY KEY, submission_id TEXT NOT NULL REFERENCES submissions(id),
+      action TEXT NOT NULL CHECK(action IN ('identity_verified','identity_unverified','rescore')),
+      reviewer TEXT NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX build_events_submission ON build_events(submission_id, created_at)",
+  ] },
 ];
