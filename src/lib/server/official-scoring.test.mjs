@@ -76,7 +76,7 @@ test('client-supplied score and assessment cannot issue a calculation',async()=>
  const db=createClient({url:'file::memory:'});
  try{await migrate(db);const body=fixture();body.character='Carlotta';body.score=999999;body.assessment={eligible:true,calculation:{score:999999}};
  const saved=await submit(validateSubmission(body),db);
- await moderate(saved.id,'approved','QA','',true,db);
+ await moderate(saved.id,'approved','QA','Explicitly approve forged-evidence fixture as unranked',true,db,true);
  assert.equal((await listBuilds({id:saved.id},db)).builds[0].score,null);
  assert.equal((await listLeaderboard({},db)).builds.length,0);
  }finally{db.close();}

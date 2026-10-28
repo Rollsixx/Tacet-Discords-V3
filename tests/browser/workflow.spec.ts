@@ -109,8 +109,11 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   await expect(page.locator(".moderation-panel .echo-crop")).toHaveCount(5);
   await expect.poll(() => page.locator(".moderation-panel .echo-crop").evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth === 192))).toBe(true);
   await page.getByLabel("Reviewer name (audit trail)").clear();
-  await expect(page.getByRole('button',{name:'Approve Hsin',exact:true})).toBeEnabled();
-  await page.getByRole('button',{name:'Approve Hsin',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Approve as unranked Hsin',exact:true})).toBeDisabled();
+  await page.getByLabel('I understand this build cannot rank.',{exact:false}).check();
+  await page.getByLabel('Review note',{exact:true}).fill('Publish this unsupported fixture as unranked.');
+  await expect(page.getByRole('button',{name:'Approve as unranked Hsin',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'Approve as unranked Hsin',exact:true}).click();
   await expect(page.locator('.bs-error')).toContainText('Enter a reviewer name');
   await page.getByLabel("Reviewer name (audit trail)").fill("Browser QA");
   await page.evaluate(()=>new Promise<void>(resolve=>{document.documentElement.style.scrollBehavior="auto";window.scrollTo(0,0);requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()));}));
@@ -123,7 +126,8 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   const resubmitted = await request.post('/api/submissions',{data:submittedBody});
   expect(resubmitted.status()).toBe(201); saved = await resubmitted.json();
   await page.getByRole("button", { name: "Apply filters" }).click();
-  await page.getByRole("button", { name: /^Approve / }).click();
+  await page.getByLabel('I understand this build cannot rank.',{exact:false}).check();await page.getByLabel('Review note',{exact:true}).fill('Explicit unranked workflow publication.');
+  await page.getByRole("button", { name: /^Approve as unranked / }).click();
   await expect(page.getByText("No pending submissions.", { exact: true })).toBeVisible();
   await page.goto("/profiles");
   await expect(page.getByText("Moderator access", {exact:true})).toHaveCount(0);

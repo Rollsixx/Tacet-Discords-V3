@@ -1,5 +1,8 @@
 "use client";
 
+import {ScoringReadinessCard} from "@/components/scoring-readiness";
+import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
+import {extractEchoVisuals} from "@/lib/scanner/portrait-regions";
 import { ResonatorPortrait } from "@/components/resonator-portrait";
 import { useEffect, useRef, useState } from "react";
 import { PageHeading, Panel, LockIcon } from "@/components/ui";
@@ -17,6 +20,8 @@ export default function ImportPage() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<RecognitionProgress | null>(null);
   const [result, setResult] = useState<RecognitionResult | null>(null);
+  const [readiness,setReadiness]=useState<ScoringReadiness|null>(null);
+  const [identityChecking,setIdentityChecking]=useState(false);
   const [submitted, setSubmitted] = useState(false);
   const previewUrl = useRef("");
   useEffect(() => () => { if (previewUrl.current) URL.revokeObjectURL(previewUrl.current); }, []);
@@ -24,10 +29,17 @@ export default function ImportPage() {
   async function scan(candidate: File) {
     if (scanning.current) return;
     scanning.current = true;
-    setSubmitted(false); setRunning(true); setResult(null); setProgress(null); setError("");
-    try { setResult(await recognizeBuildCard(candidate, setProgress)); }
+    setSubmitted(false); setRunning(true); setResult(null); setProgress(null); setError("");setReadiness(null);
+    try {
+      const recognized=await recognizeBuildCard(candidate,setProgress);setResult(recognized);
+      if(!recognized.slots.flatMap(validateEchoSlot).length){
+       setIdentityChecking(true);const bitmap=await createImageBitmap(candidate);let crops;
+       try{crops=extractEchoVisuals(bitmap,bitmap.width,bitmap.height).map((c,i)=>({slot:i+1,cost:Number(recognized.slots[i].cost.value),portrait:c.portrait.toDataURL('image/png'),sonata:c.sonata.toDataURL('image/png')}));}finally{bitmap.close();}
+       try{const response=await fetch('/api/scan/identities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slots:crops})});if(response.ok)setReadiness((await response.json()).readiness);}catch{/* Upload verification remains authoritative if the preview is unavailable. */}
+      }
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Screenshot scan failed. Please retry."); }
-    finally { scanning.current = false; setRunning(false); }
+    finally { setIdentityChecking(false);scanning.current = false; setRunning(false); }
   }
   function choose(candidate?: File) {
     if (!candidate || scanning.current) return;
@@ -43,7 +55,7 @@ export default function ImportPage() {
     if (scanning.current) return;
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
     previewUrl.current = "";
-    setFile(null); setPreview(""); setResult(null); setProgress(null); setError("");
+    setFile(null); setPreview(""); setResult(null); setProgress(null); setError("");setReadiness(null);
     if (input.current) input.current.value = "";
   }
   const identity = result?.identity || progress?.identity;
@@ -52,7 +64,7 @@ export default function ImportPage() {
   const stages = [
     { label: "Character", done: Boolean(identity), pass: Boolean(identity?.character) },
     { label: "Player details", done: Boolean(identity), pass: Boolean(identity?.uid && identity?.ign) },
-    ...Array.from({ length: 5 }, (_, i) => ({ label: `Echo ${i + 1}`, done: Boolean(slots[i]), pass: Boolean(slots[i] && !validateEchoSlot(slots[i]).length) })),
+    ...Array.from({ length: 5 }, (_, i) => ({ label: `Echo ${i + 1} stats`, done: Boolean(slots[i]), pass: Boolean(slots[i] && !validateEchoSlot(slots[i]).length) })),
   ];
   return <>
     <PageHeading eyebrow="Build workspace / 01" title="Import your build." description="Drop a 1920 × 1080 build card. Scanning starts automatically; review the results before uploading." />
@@ -70,7 +82,8 @@ export default function ImportPage() {
           })}</div>
           <div role="status" className="scan-status">{running ? progress?.label || "Preparing scanner…" : error ? "Scan could not finish." : result ? issues.length ? `${issues.length} stat issue(s) require review` : "All Echo stat checks passed. Your Echo stats are locked to this scan." : "Waiting for screenshot"}</div>
           {running && <progress aria-label="Screenshot scan" value={progress?.completed || 0} max={progress?.total || 38} />}
-          <p className="muted scan-footnote">Passed means the extracted fields are readable and structurally valid. Every stat is checked against the screenshot when you submit.</p>
+          {result&&<ScoringReadinessCard value={readiness} checking={identityChecking} preliminary/>}
+          <p className="muted scan-footnote">A stat pass does not establish Echo identity or leaderboard eligibility. Passed means the extracted fields are readable and structurally valid. Every stat is checked against the screenshot when you submit.</p>
         </Panel>
         {identity && <Panel className="import-character"><ResonatorPortrait key={identity.character} name={identity.character||""} className="import-character-portrait"/><div><span className="eyebrow">Character</span><h2>{identity.character || "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
         {preview && <details className="source-preview"><summary>Compare original screenshot</summary>
@@ -86,11 +99,11 @@ export default function ImportPage() {
               <label>Cost<input aria-label={`Echo ${slot.slot} cost`} value={slot.cost.value} readOnly aria-readonly="true" /></label>
               <label>Main stat<input aria-label={`Echo ${slot.slot} main stat`} value={slot.mainStat.value} readOnly aria-readonly="true" /></label>
               {slot.substats.map((stat, i) => <label key={i}>Substat {i + 1}<textarea aria-label={`Echo ${slot.slot} substat ${i + 1}`} value={stat.value} readOnly aria-readonly="true" rows={2} /></label>)}
-            </fieldset><span className={`scan-chip ${warnings.length ? "needs-review" : "passed"}`}>{warnings.length ? "Needs review" : "Passed"}</span>
+            </fieldset><span className={`scan-chip ${warnings.length ? "needs-review" : "passed"}`}>{warnings.length ? "Needs review" : "Stats passed"}</span>
               {warnings.map(issue => <p key={issue.code} className="field-error">{issue.message}</p>)}
               <details><summary>Original OCR</summary><p className="muted">Cost: {slot.cost.raw || "Unreadable"}{slot.cost.autoRecovered ? ` (recovered from image: ${slot.cost.value})` : ""}</p><p className="muted">{slot.mainStat.raw}</p>{slot.substats.map((stat, i) => <p className="muted" key={i}>{stat.raw || "Unreadable"}</p>)}</details></>;
           }} />
-          <SubmitBuild key={file.name + file.lastModified} file={file} result={result} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />
+          <SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />
         </>}
       </>}
       {error && <div className="workspace-note"><p role="alert" className="field-error">{error}</p>{file && !running && <button className="outline-button" onClick={() => scan(file)}>Retry scan</button>}</div>}

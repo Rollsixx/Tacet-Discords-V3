@@ -6,7 +6,12 @@ import { createClient } from "@libsql/client";
 import { migrate } from "../src/lib/server/database.ts";
 const directory = await mkdtemp(join(tmpdir(), "tacet-browser-"));
 const url = "file:" + join(directory, "test.db");
-const db = createClient({ url }); await migrate(db); db.close();
+const db = createClient({ url }); await migrate(db);
+if(process.env.IDENTITY_RECOVERY_BROWSER_FIXTURE==='true'){
+ const {seedIdentityFixture}=await import('../tests/fixtures/identity-recovery.mjs');
+ await seedIdentityFixture(db,'822222222',false);await seedIdentityFixture(db,'822222223',true);
+}
+db.close();
 const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", "3100", "--hostname", "127.0.0.1"], {
   stdio: "inherit",
   env: { ...process.env, TURSO_DATABASE_URL: url, TURSO_AUTH_TOKEN: "", ALLOW_LOCAL_DATABASE: "true", MODERATOR_TOKEN: "browser-test-only-token-00000000000000000000" },

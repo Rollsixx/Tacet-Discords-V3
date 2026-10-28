@@ -195,7 +195,7 @@ test('verified UID inherits review status and admin groups every build under one
  expect((await request.get('/api/moderation?view=players')).status()).toBe(401);
  expect((await request.get('/api/moderation?view=player&uid='+uid)).status()).toBe(401);
  await page.goto('/BlackShores',{waitUntil:'networkidle'});await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
- await expect(page.locator('.bs-inherited')).toContainText('Only build approval');
+ await expect(page.locator('.bs-inherited')).toContainText('Build approval and scoring readiness');
  await expect(page.getByLabel('I manually matched this UID/IGN to the member outside the website.')).toHaveCount(0);
  await page.getByRole('button',{name:'Players & builds',exact:true}).click();
  await expect(page.getByRole('button',{name:'Open player Scoring Browser QA UID '+uid,exact:true})).toHaveCount(1);

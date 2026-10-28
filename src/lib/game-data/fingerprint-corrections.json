@@ -1,5 +1,5 @@
 {
-  "version": "visual-reference-corrections/1",
+  "version": "visual-reference-corrections/2",
   "echoes": [
     {
       "key": "CuddleWuddle",
@@ -42,6 +42,51 @@
       "source": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_32030_UI.webp",
       "note": "Pinned asset checkout CuddleWuddle.webp contains a different Echo. Use the matching MonsterHead portrait, also identified by the pinned optimizer scanner manifest.",
       "referencePngSha256": "0ab915c750d38cffb826abcf94e31ea090efe94d5d174336b4668fa4ccc373bb"
+    },
+    {
+      "key": "LottieLost",
+      "cost": 1,
+      "sets": [
+        "TidebreakingCourage",
+        "FrostyResolve"
+      ],
+      "name": "Lottie Lost",
+      "fingerprint": {
+        "hash": "9633170f0b0b961f",
+        "hist": [
+          0.3333333333333333,
+          0.06944444444444445,
+          0.05555555555555555,
+          0.1111111111111111,
+          0.1388888888888889,
+          0.18055555555555555,
+          0.1111111111111111,
+          0,
+          0.3888888888888889,
+          0.027777777777777776,
+          0.041666666666666664,
+          0.19444444444444445,
+          0.2361111111111111,
+          0.09722222222222222,
+          0.013888888888888888,
+          0,
+          0.3055555555555556,
+          0.09722222222222222,
+          0.041666666666666664,
+          0.1527777777777778,
+          0.25,
+          0.1527777777777778,
+          0,
+          0
+        ]
+      },
+      "correction": "lottie-lost-portrait/1",
+      "source": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_31046_UI.webp",
+      "mappingSource": "https://github.com/Arikatsu/WutheringWaves_Data/blob/3.7/BinData/monster_Info/monsterinfo.json",
+      "mappingBlob": "d114617fa6f3fe723003f5a8481ac87ac5a79b31",
+      "monsterId": 310000460,
+      "note": "English MonsterInfo_310000460_Name maps Lottie Lost to T_IconMonsterHead_31046_UI. The pinned asset checkout LottieLost.webp depicts a different Echo. Fingerprint generated from the mapped game portrait; no matching threshold is relaxed.",
+      "referencePngSha256": "24835dfb75e5b89a2f0655ca33a148268934f61c7fee1994d8d345a9fd9ca70b"
     }
   ]
 }

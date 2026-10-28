@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import {IdentityReview} from "./identity-review";
+import {ScoringReadinessCard} from "./scoring-readiness";
+import {assessmentReadiness} from "@/lib/scanner/scoring-readiness";
 import {RotationEditor} from "./rotation-editor";
 import { BuildCard } from "./build-directory";
 import type { listAdminPlayers, adminPlayerBuilds, listBuilds, adminOverview, listAdminAudit } from "@/lib/server/store";
@@ -30,6 +33,7 @@ export function ModerationPanel() {
  const [selected,setSelected]=useState<Build|null>(null);
  const [page,setPage]=useState(1);
  const [note,setNote]=useState("");
+ const [allowUnranked,setAllowUnranked]=useState(false);
  const [verified,setVerified]=useState(false);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
@@ -47,7 +51,7 @@ export function ModerationPanel() {
   if(!response.ok){if(response.status===401)lock();throw new Error(data.error||`Request failed (${response.status}).`);}
   return data;
  }
- function select(build:Build|null){setSelected(build);setNote("");setVerified(false);setConfirmation(null);}
+ function select(build:Build|null){setAllowUnranked(false);setSelected(build);setNote("");setVerified(false);setConfirmation(null);}
  async function load(target=1,status=queue,query=search,filter=character){
   setBusy(true);setError("");
   try{
@@ -87,7 +91,7 @@ export function ModerationPanel() {
   const target=selected;const targetUid=target?.uid||playerDetail!.player.uid;setBusy(true);setError("");setMessage("");
   try{
    const method=kind==='deleted'?'DELETE':kind==='verified'?'PATCH':'POST';
-   await request('/api/moderation',{method,body:JSON.stringify({id:target?.id,uid:kind==='verified'?targetUid:undefined,action:kind,confirm:kind==='deleted',reviewer:reviewer.trim(),note,identityVerified:kind==='verified'?value:verified})});
+   await request('/api/moderation',{method,body:JSON.stringify({id:target?.id,uid:kind==='verified'?targetUid:undefined,action:kind,allowUnranked,confirm:kind==='deleted',reviewer:reviewer.trim(),note,identityVerified:kind==='verified'?value:verified})});
    setConfirmation(null);setNote("");setVerified(false);
    const label=kind==='approved'?`Approved ${target?.character}. The build is now public.${target?.data.assessment?.eligible?'':' It remains unranked because scoring validation did not pass.'}`:kind==='rejected'?`Rejected and deleted ${target?.character}.` :kind==='deleted'?`Deleted ${target?.character} and its stored evidence.`:value?'Player verified. Eligible approved builds can now rank.':'Player verification revoked. Their builds no longer rank.';
    // The mutation succeeded even if a subsequent refresh fails: report it clearly.
@@ -97,6 +101,12 @@ export function ModerationPanel() {
    if(!data.builds.length&&page>1){await load(page-1);}else{setResult(data);select(data.builds.find(b=>b.id===target?.id)||data.builds[0]||null);}
   }catch(cause){setError(cause instanceof Error?cause.message:'Action failed. Refresh before trying again.');}
   finally{setBusy(false);}
+ }
+ async function refreshRecovered(){
+  const target=selected;if(!target)return;
+  if(view==='players')await fetchPlayer(target.uid,playerDetail?.page||1,target.id);
+  else{const data:Results=await request('/api/moderation?'+new URLSearchParams({page:String(page),status:queue,search,character}));setResult(data);select(data.builds.find(b=>b.id===target.id)||null);}
+  setMessage('Equipment identities recovered. Stats, UID, approval and verification were preserved. Scores now use the active policy.');
  }
  const overview=result?.overview;
  const active=result?.builds||[];
@@ -133,16 +143,19 @@ export function ModerationPanel() {
       {!playerDetail.builds.length&&<p className="bs-empty">No stored builds. This UID’s verification is remembered.</p>}
       {(playerDetail.hasMore||playerDetail.page>1)&&<div className="pagination"><button className="outline-button" disabled={busy||playerDetail.page<=1} onClick={()=>openPlayer(playerDetail.player.uid,playerDetail.page-1)}>Previous builds</button><span>Builds page {playerDetail.page}</span><button className="outline-button" disabled={busy||!playerDetail.hasMore} onClick={()=>openPlayer(playerDetail.player.uid,playerDetail.page+1)}>Next builds</button></div>}
      </div>}
-     {selected?<>
+     {selected?<div className="bs-selected-build" key={selected.id}>
       <div className="bs-panel-heading"><div><span className="eyebrow">Selected submission</span><h2>{selected.character} · {selected.ign}</h2></div><span className="bs-pill">Stats locked</span></div>
       {!selected.data.assessment?.eligible&&<p className="bs-action-help" role="status"><strong>Scoring blocked:</strong> {selected.data.assessment?.reason||'No validated scoring evidence.'} Approval makes this build visible in Profiles, but approval and UID verification cannot resolve this scoring issue.</p>}
-      <div className="bs-review-fields"><label className="field"><span>Reviewer name (audit trail)</span><input ref={reviewerInput} value={reviewer} maxLength={64} onChange={e=>changeReviewer(e.target.value)} /></label><label className="field"><span>Review note</span><textarea value={note} maxLength={500} onChange={e=>setNote(e.target.value)} placeholder="Optional context for the audit history" /></label></div>
-      {selected.status==='pending'&&selected.identityVerified&&<p className="bs-inherited">✓ Verified UID · Automatically inherited. Only build approval is needed.</p>}
+      <ScoringReadinessCard value={assessmentReadiness(selected.data.assessment)}/>
+      {!selected.data.assessment?.eligible&&<IdentityReview key={selected.id} id={selected.id} token={token.trim()} reviewer={reviewer} onUpdated={refreshRecovered} onWorking={setBusy}/>}
+      <div className="bs-review-fields"><label className="field"><span>Reviewer name (audit trail)</span><input ref={reviewerInput} value={reviewer} maxLength={64} onChange={e=>changeReviewer(e.target.value)} /></label><label className="field"><span>Review note</span><textarea aria-label="Review note" value={note} maxLength={500} onChange={e=>setNote(e.target.value)} placeholder="Optional context for the audit history" /></label></div>
+      {selected.status==='pending'&&selected.identityVerified&&<p className="bs-inherited">✓ Verified UID · Automatically inherited. Build approval and scoring readiness are still required.</p>}
       {selected.status==='pending'&&!selected.identityVerified&&<label className="publish-consent"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)} /><span>I manually matched this UID/IGN to the member outside the website.</span></label>}
       <p className="bs-action-help">{selected.status==='pending'?'Approval publishes this build. Verified UIDs inherit verification automatically; ranking also requires eligible scoring evidence.':'Verification changes apply to all builds and future imports for this UID. Deletion removes only the selected build.'}</p>
-      <div className="bs-review-actions">{selected.status==='pending'?<><button className="action" disabled={busy} onClick={()=>action('approved')}>Approve {selected.character}</button><button className="outline-button admin-danger" disabled={busy} onClick={()=>setConfirmation('rejected')}>Reject &amp; delete {selected.character}</button></>:<>{view!=='players'&&<button className="action" disabled={busy} onClick={()=>action('verified',!selected.identityVerified)}>{selected.identityVerified?'Unverify':'Verify'} {selected.uid}</button>}<button className="outline-button admin-danger" disabled={busy} onClick={()=>setConfirmation('deleted')}>Delete {selected.character}</button></>}</div>
+      {selected.status==='pending'&&!selected.data.assessment?.eligible&&<label className="publish-consent unranked-consent"><input type="checkbox" checked={allowUnranked} onChange={e=>setAllowUnranked(e.target.checked)}/><span>I understand this build cannot rank. Publish it as unranked and record my reason in the review note.</span></label>}
+      <div className="bs-review-actions">{selected.status==='pending'?<><button className="action" disabled={busy||(!selected.data.assessment?.eligible&&(!allowUnranked||note.trim().length<10))} onClick={()=>action('approved')}>{selected.data.assessment?.eligible?"Approve ":"Approve as unranked "}{selected.character}</button><button className="outline-button admin-danger" disabled={busy} onClick={()=>setConfirmation('rejected')}>Reject &amp; delete {selected.character}</button></>:<>{view!=='players'&&<button className="action" disabled={busy} onClick={()=>action('verified',!selected.identityVerified)}>{selected.identityVerified?'Unverify':'Verify'} {selected.uid}</button>}<button className="outline-button admin-danger" disabled={busy} onClick={()=>setConfirmation('deleted')}>Delete {selected.character}</button></>}</div>
       <BuildCard key={selected.id} build={selected} token={token.trim()} />
-     </>:<div className="bs-empty"><h2>Nothing selected</h2><p>Select a submission from the queue to review its Echoes and available actions.</p></div>}</section></div>
+     </div>:<div className="bs-empty"><h2>Nothing selected</h2><p>Select a submission from the queue to review its Echoes and available actions.</p></div>}</section></div>
      {view==='dashboard'&&<section className="bs-panel bs-recent"><div className="bs-panel-heading"><h2>Recent moderation activity</h2><button className="text-link" disabled={busy} onClick={()=>navigate('audit')}>View history →</button></div><Activity events={result?.activity||[]} /></section>}
     </>}
     {view==='audit'&&<section className="bs-panel"><form className="bs-audit-search" onSubmit={e=>{e.preventDefault();void loadAudit(1);}}><label className="field"><span>Search audit history</span><input value={search} maxLength={64} onChange={e=>setSearch(e.target.value)} placeholder="Submission ID, reviewer or action" /></label><button className="action" disabled={busy}>Search history</button></form><Activity events={audit?.events||[]} /><div className="pagination"><button className="outline-button" disabled={busy||(audit?.page||1)<=1} onClick={()=>loadAudit((audit?.page||1)-1)}>Previous</button><span>Page {audit?.page||1}</span><button className="outline-button" disabled={busy||!audit?.hasMore} onClick={()=>loadAudit((audit?.page||1)+1)}>Next</button></div></section>}

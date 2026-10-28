@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       typeof input.note !== "string" || input.note.length > 500 || typeof input.identityVerified !== "boolean") {
       throw new HttpError(400, "Valid review action, reviewer and note required.");
     }
-    await moderate(input.id, input.action as "approved" | "rejected", input.reviewer.trim(), input.note, input.identityVerified);
+    await moderate(input.id, input.action as "approved" | "rejected", input.reviewer.trim(), input.note, input.identityVerified, undefined, input.allowUnranked===true);
     return json({ ok: true });
   } catch (error) { return failure(error); }
 }

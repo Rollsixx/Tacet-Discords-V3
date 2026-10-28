@@ -4,13 +4,13 @@ import sharp from 'sharp';
 import {createWorker,PSM} from 'tesseract.js';
 import {parseSubstat} from '../scanner/stat-validation.ts';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
-import {SUPPORTED,identifySlots,calculateStandard} from './scoring.mjs';
+import {SUPPORTED,diagnoseSlots,identitiesFromReport,calculateStandard} from './scoring.mjs';
 const languagePath=resolve(process.cwd(),'node_modules/@tesseract.js-data/eng/4.0.0');
 let active=false;
 export async function assessSource(input){
  if(!input.sourceImage)return {eligible:false,reason:'Original screenshot evidence is required for scoring.'};
  if(active)return {eligible:false,reason:'Scoring worker busy; resubmit later for scoring.'};
- active=true;let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;
+ active=true;let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;
  try{
   const image=input.sourceImage;
   const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
@@ -57,11 +57,12 @@ export async function assessSource(input){
   statsVerified=true;sourceSlots=slots;
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
-  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,sourceSlots,reason:'No validated rotation policy is available for this character.'};
-  if(levelIssue)return {eligible:false,sourceUid,statsVerified,sourceSlots,reason:levelIssue};
-  const identities=await identifySlots(image,slots.map(x=>Number(x.cost.value)));
+  visualReport=await diagnoseSlots(image,slots.map(x=>Number(x.cost.value)));
+  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
+  if(levelIssue)return {eligible:false,sourceUid,statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:levelIssue};
+  const identities=identitiesFromReport(visualReport);
   const calculation=await calculateStandard(input.character,slots,identities);
-  return {eligible:true,sourceUid,statsVerified,sourceSlots,maxMainStatsVerified,reason:'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash,calculation};
- }catch(error){return {eligible:false,sourceUid,statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,reason:error instanceof Error?error.message:'Scoring validation failed.'};}
+  return {eligible:true,sourceUid,statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash,calculation};
+ }catch(error){return {eligible:false,sourceUid,statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:error instanceof Error?error.message:'Scoring validation failed.'};}
  finally{await worker?.terminate();active=false;}
 }

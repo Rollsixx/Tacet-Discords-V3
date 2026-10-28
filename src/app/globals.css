@@ -1052,3 +1052,11 @@ input[readonly] { opacity: .75; cursor: default; }
 .rotation-manager textarea {width:100%;box-sizing:border-box;resize:vertical}
 .rotation-actions li {flex-wrap:wrap}
 .rotation-effects {flex-basis:100%}
+
+.scoring-readiness {padding:18px;border:1px solid #334657;border-radius:12px;background:#101b25;margin:16px 0;min-width:0}
+.readiness-heading {display:flex;justify-content:space-between;align-items:start;gap:14px;flex-wrap:wrap}
+.readiness-heading h3 {margin:0 0 8px}.scoring-readiness dl {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.scoring-readiness dl div {padding:10px;border:1px solid #293c4b;border-radius:8px}.scoring-readiness dt {font-size:12px;color:#a7b8c7}.scoring-readiness dd {margin:5px 0 0;font-size:13px;font-weight:600}
+.scoring-readiness p,.scoring-readiness small {font-size:12px;line-height:1.7;overflow-wrap:anywhere}.identity-review {padding:18px;border:1px solid #9a845349;border-radius:12px;background:#c39f4610;margin:18px 0;min-width:0}
+.identity-review p,.identity-review small {font-size:12px;line-height:1.7;overflow-wrap:anywhere}.identity-slots {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,225px),1fr));gap:12px;margin:18px 0}.identity-slots article {padding:14px;background:#0b1520;border:1px solid #30465a;border-radius:10px;min-width:0}.identity-slots h4 {margin:0 0 10px}.identity-crops {display:flex;align-items:end;gap:8px;margin:14px 0}.identity-crops img:first-child {width:calc(100% - 48px);max-width:192px;aspect-ratio:192/182;object-fit:contain;border-radius:7px}.identity-crops img:last-child {width:40px;height:40px}.identity-reference {display:block;width:144px;max-width:100%;object-fit:contain}.identity-review textarea {width:100%;box-sizing:border-box;resize:vertical}.identity-review .field {display:grid;gap:7px;margin:12px 0}.identity-review select {width:100%;min-width:0}.identity-review details {margin:12px 0}.identity-review summary {cursor:pointer;font-size:12px}.unranked-consent {padding:14px;border:1px solid #a3854c;background:#ac8c3a12;border-radius:10px}
+@media(max-width:600px){.scoring-readiness dl{grid-template-columns:1fr}.identity-review,.scoring-readiness{padding:13px}}

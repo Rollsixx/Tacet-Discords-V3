@@ -38,22 +38,30 @@ export async function identifyCrops(crops){
  for(const crop of crops)features.push({cost:crop.cost,portrait:await fingerprint(crop.portrait),sonata:await fingerprint(crop.sonata)});
  return identifyFingerprints(features);
 }
-export function identifyFingerprints(features){
- const result=[];
- for(const [i,{cost,portrait:ef,sonata:sf}] of features.entries()){
+export function diagnoseFingerprints(features){
+ return features.map(({cost,portrait:ef,sonata:sf},i)=>{
   let set=matchVisual(sf,catalog.sets,.20,.015);
   let echo=set?matchVisual(ef,echoReferences.filter(e=>e.cost===cost&&e.sets.includes(set.key)),.18,.025,i>0):null;
-  if(!echo){
-   echo=matchVisual(ef,echoReferences.filter(e=>e.cost===cost),.18,.025,i>0);
-   if(!echo)throw Error('Echo '+(i+1)+' is unknown or ambiguous.');
-   const possible=engine.mainEchoesData[echo.key].sets;
-   set=matchVisual(sf,catalog.sets.filter(s=>possible.includes(s.key)),.20,.015);
-  }
-  if(!set)throw Error('Sonata '+(i+1)+' is unknown or ambiguous.');
-  result.push({echo:echo.key,set:set.key,echoMatch:echo,setMatch:set});
- }
- return result;
+  if(!echo){echo=matchVisual(ef,echoReferences.filter(e=>e.cost===cost),.18,.025,i>0);if(echo)set=matchVisual(sf,catalog.sets.filter(s=>engine.mainEchoesData[echo.key].sets.includes(s.key)),.20,.015);}
+  const candidates=rankFingerprint(ef,echoReferences.filter(e=>e.cost===cost&&(!set||e.sets.includes(set.key)))).slice(0,5).map(e=>({key:e.key,name:engine.getEchoData(e.key)?.name||e.key,difference:e.difference}));
+  const sonatas=rankFingerprint(sf,catalog.sets.filter(s=>!echo||engine.mainEchoesData[echo.key].sets.includes(s.key))).slice(0,3).map(s=>({key:s.key,name:engine.echoSetLabelMap[s.key]||s.key,difference:s.difference}));
+  return {slot:i+1,cost,echo:echo?.key||null,set:set?.key||null,echoMatch:echo,setMatch:set,echoCandidates:candidates,sonataCandidates:sonatas,problem:!echo?'Echo '+(i+1)+' is unknown or ambiguous.':!set?'Sonata '+(i+1)+' is unknown or ambiguous.':null};
+ });
 }
+export function identitiesFromReport(report){
+ for(const slot of report)if(slot.problem)throw Error(slot.problem);
+ return report.map(s=>({echo:s.echo,set:s.set,echoMatch:s.echoMatch,setMatch:s.setMatch}));
+}
+export function identifyFingerprints(features){return identitiesFromReport(diagnoseFingerprints(features));}
+export async function diagnoseCrops(crops){
+ if(crops.length!==5)throw Error('Five retained Echo crops are required.');
+ const features=[];for(const crop of crops)features.push({cost:crop.cost,portrait:await fingerprint(crop.portrait),sonata:await fingerprint(crop.sonata)});
+ return diagnoseFingerprints(features);
+}
+export async function diagnoseSlots(image,costs){
+ const features=[];for(let i=0;i<5;i++)features.push({cost:costs[i],portrait:await fingerprint(image,{left:22+i*374,top:650,width:192,height:182}),sonata:await fingerprint(image,{left:264+i*374,top:660,width:56,height:56})});return diagnoseFingerprints(features);
+}
+
 export async function calculateStandard(character,slots,identities,managed=null){
  if(!SUPPORTED.includes(character))throw Error('No reference-backed rotation policy is available for '+character+'.');
  const chosen=await engine.getCharByName(character);

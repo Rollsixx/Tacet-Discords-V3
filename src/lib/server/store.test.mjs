@@ -6,9 +6,12 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "./database.ts";
 import { validateSubmission } from "./validation.ts";
-import { findPlayers, listBuilds, submit, moderate, rateLimit, scoringReadiness } from "./store.ts";
+import { findPlayers, listBuilds, submit, moderate as moderateBuild, rateLimit, scoringReadiness } from "./store.ts";
 import { authorize, readJson } from "./http.ts";
 import { fixture } from "./fixtures.mjs";
+
+// These storage fixtures intentionally have no source scoring evidence.
+const moderate=(id,action,reviewer,note,verified,db)=>moderateBuild(id,action,reviewer,note.length>=10?note:'Explicit unranked test fixture: '+note,verified,db,true);
 
 test("transactional pending → approved journey, durable storage and private rejection", async () => {
   const dir = await mkdtemp(join(tmpdir(), "tacet-db-"));
