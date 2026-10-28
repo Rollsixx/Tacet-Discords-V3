@@ -22,3 +22,11 @@ Sources: https://github.com/Arikatsu/WutheringWaves_Data/tree/3.7 (English multi
 The affected retained Carlotta build also contains `DEF 11.9%`, which is absent from the pinned optimizer's DEF roll table. Its original screenshot is no longer retained, so the system must not guess a replacement value. Recognition recovery now records the corrected Echo identities and reports the exact illegal slot/value while preserving every numeric stat, approval and verification flag. It remains unranked until a clearer original is reimported successfully.
 
 The browser and submission validation share `substat-rolls.json`, derived directly from the pinned optimizer. Unknown rolls are blocked before upload, and original-image verification independently checks the extracted fields. Readiness separates readable text from allowed rolls. Identity correction cannot override numeric legality. Failed numeric recovery is audited and idempotent; no score is inserted.
+
+## Browser/server verification agreement
+
+Large screenshots are prepared once before browser recognition. The exact prepared File is used for portraits, OCR and upload; the submit handler never recompresses an already-scanned image. This prevents a successful scan being checked against different JPEG pixels after upload. Images already within the evidence limit remain byte-for-byte unchanged.
+
+The server independently checks the source. Unreadable cost digits use the same padded/inverted two-read recovery as the browser. Unreadable or illegal main/substat OCR can retry two server image variants, with a total retry budget. Both extra reads must agree on a legal interpretation and agree with the browser. A different legal primary result remains a conflict; there is no closest-value substitution or client-directed override. Stats and UID remain locked.
+
+Errors distinguish an unreadable character, UID mismatch, Echo/field mismatch and verifier service failure. The response identifies the failed Echo and field without exposing infrastructure paths. Operational warnings contain only a diagnostic code and field position, never uploaded images, OCR text, UID or IGN. Cleanup always releases the worker lock. Scoring failures after successful source verification retain their original diagnostic for identity recovery and numeric validation.

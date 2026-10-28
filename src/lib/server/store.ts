@@ -28,6 +28,8 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
   const sourceAssessment = await assessSource(input);
   const assessment = {...sourceAssessment, ...(sourceAssessment.statsVerified && input.sourceImage ? {cropEvidenceVersion:'source-crops/1'} : {})};
   if (requireSourceUid && assessment.reason.startsWith("Scoring worker busy")) throw new HttpError(429, "Scanner is busy. Please try again in a moment.");
+  if (requireSourceUid && assessment.failure?.code==='OCR_SERVICE_UNAVAILABLE')throw new HttpError(503,assessment.failure.message);
+  if (requireSourceUid && !assessment.statsVerified&&assessment.failure)throw new HttpError(400,assessment.failure.message);
   if (requireSourceUid && assessment.sourceUid !== input.uid) throw new HttpError(400, "Screenshot UID could not be confirmed. Upload a clear original card; UID cannot be changed.");
   if (requireSourceUid && !assessment.statsVerified) throw new HttpError(400, "Echo stats could not be verified against the screenshot. Values cannot be edited; upload a clear original card and scan again.");
   // Retain server-derived visual evidence. Client crops never establish scoring identity.

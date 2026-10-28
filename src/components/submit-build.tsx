@@ -1,4 +1,5 @@
 "use client";
+import {verificationImageData} from "@/lib/scanner/verification-image";
 import {ScoringReadinessCard} from "./scoring-readiness";
 import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
 import { LockIcon } from "./ui";
@@ -6,7 +7,7 @@ import { useState } from "react";
 import type { RecognitionResult } from "@/lib/scanner/build-card-ocr";
 import { validateEchoSlot } from "@/lib/scanner/stat-validation";
 import { extractEchoVisuals } from "@/lib/scanner/portrait-regions";
-export function SubmitBuild({ file, result, readiness, checking=false, onSubmitted, onReset }: { file: File; result: RecognitionResult; readiness?:ScoringReadiness|null; checking?:boolean; onSubmitted?: () => void; onReset?: () => void }) {
+export function SubmitBuild({ file, result, readiness, checking=false, onSubmitted, onReset, onRetryScan }: { file: File; result: RecognitionResult; readiness?:ScoringReadiness|null; checking?:boolean; onSubmitted?: () => void; onReset?: () => void; onRetryScan?:()=>void }) {
   const uid = result.identity.uid;
   const [ign, setIgn] = useState(result.identity.ign);
   const character = result.identity.character;
@@ -29,25 +30,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
           portrait: slot.portrait.toDataURL("image/png"), sonata: slot.sonata.toDataURL("image/png"),
         }));
       } finally { bitmap.close(); }
-      let sourceImage: string;
-      if (file.size <= 1100000) {
-        sourceImage = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Unable to read screenshot evidence.")); reader.readAsDataURL(file);
-        });
-      } else {
-        const source = await createImageBitmap(file);
-        try {
-          const canvas = document.createElement("canvas"); canvas.width = source.width; canvas.height = source.height;
-          const context = canvas.getContext("2d"); if (!context) throw new Error("Unable to prepare screenshot evidence.");
-          context.drawImage(source, 0, 0);
-          sourceImage = canvas.toDataURL("image/jpeg", .92);
-          for (const quality of [.8, .65, .5, .35]) {
-            if (sourceImage.length <= 1466700) break;
-            sourceImage = canvas.toDataURL("image/jpeg", quality);
-          }
-          if (sourceImage.length > 1466700) throw new Error("Screenshot is too detailed to upload. Export a smaller JPEG and scan again.");
-        } finally { source.close(); }
-      }
+      const sourceImage=await verificationImageData(file);
       const response = await fetch("/api/submissions", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uid, ign, character, confirmed, sourceImage, slots: result.slots.map((slot, index) => ({ ...slot, ...visuals[index] })) }),
@@ -90,6 +73,6 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
       <label className="publish-consent"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>I checked all five Echoes against my screenshot and agree to publish this build after moderator approval.</span></label>
       <div className="import-submit-bar"><p>{busy ? "Verifying your screenshot and saving the build…" : "Your build stays private until a moderator approves it."}</p><button className="action" disabled={busy || checking || !confirmed || !ready}>{busy ? "Verifying screenshot…" : "Submit for moderation"}</button></div>
     </fieldset></form>
-    {error && <p className="field-error import-submit-error" role="alert">{error}</p>}
+    {error && <div className="import-submit-error"><p className="field-error" role="alert">{error}</p>{onRetryScan&&<button type="button" className="outline-button" disabled={busy||checking} onClick={onRetryScan}>Rescan same screenshot</button>}</div>}
   </section>;
 }

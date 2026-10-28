@@ -1,5 +1,6 @@
 "use client";
 
+import {prepareVerificationImage} from "@/lib/scanner/verification-image";
 import {ScoringReadinessCard} from "@/components/scoring-readiness";
 import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
 import {extractEchoVisuals} from "@/lib/scanner/portrait-regions";
@@ -31,9 +32,10 @@ export default function ImportPage() {
     scanning.current = true;
     setSubmitted(false); setRunning(true); setResult(null); setProgress(null); setError("");setReadiness(null);
     try {
-      const recognized=await recognizeBuildCard(candidate,setProgress);setResult(recognized);
+      const evidence=await prepareVerificationImage(candidate);setFile(evidence);
+      const recognized=await recognizeBuildCard(evidence,setProgress);setResult(recognized);
       if(!recognized.slots.flatMap(validateEchoSlot).length){
-       setIdentityChecking(true);const bitmap=await createImageBitmap(candidate);let crops;
+       setIdentityChecking(true);const bitmap=await createImageBitmap(evidence);let crops;
        try{crops=extractEchoVisuals(bitmap,bitmap.width,bitmap.height).map((c,i)=>({slot:i+1,cost:Number(recognized.slots[i].cost.value),portrait:c.portrait.toDataURL('image/png'),sonata:c.sonata.toDataURL('image/png')}));}finally{bitmap.close();}
        try{const response=await fetch('/api/scan/identities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slots:crops})});if(response.ok)setReadiness({...((await response.json()).readiness),rolls:true});}catch{/* Upload verification remains authoritative if the preview is unavailable. */}
       }
@@ -103,11 +105,11 @@ export default function ImportPage() {
               {warnings.map(issue => <p key={issue.code} className="field-error">{issue.message}</p>)}
               <details><summary>Original OCR</summary><p className="muted">Cost: {slot.cost.raw || "Unreadable"}{slot.cost.autoRecovered ? ` (recovered from image: ${slot.cost.value})` : ""}</p><p className="muted">{slot.mainStat.raw}</p>{slot.substats.map((stat, i) => <p className="muted" key={i}>{stat.raw || "Unreadable"}</p>)}</details></>;
           }} />
-          <SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />
+          <SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onRetryScan={()=>void scan(file)} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />
         </>}
       </>}
       {error && <div className="workspace-note"><p role="alert" className="field-error">{error}</p>{file && !running && <button className="outline-button" onClick={() => scan(file)}>Retry scan</button>}</div>}
-      <p className="muted import-privacy">Only your character and Echo cards are used here. After you submit, the server checks your screenshot UID, Echo stats and scoring evidence, then discards the original. Approved builds show your UID and IGN publicly.</p>
+      <p className="muted import-privacy">Large screenshots are prepared once before scanning; the same image is used for upload verification. Only your character and Echo cards are used here. After you submit, the server checks your screenshot UID, Echo stats and scoring evidence, then discards the original. Approved builds show your UID and IGN publicly.</p>
     </div>
   </>;
 }
