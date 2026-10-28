@@ -84,7 +84,9 @@ test('all five official categories score only after approval and identity verifi
  await page.getByRole('button',{name:'Unlock review desk'}).click();
  await expect(page.getByText('Scoring: Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',{exact:true})).toBeVisible();
  await page.getByLabel('Reviewer name (audit trail)').fill('Scoring Browser QA');
- await page.getByLabel('I manually matched this UID/IGN to the member outside the website.').check();
+ const manualVerification=page.getByLabel('I manually matched this UID/IGN to the member outside the website.');
+ if(await manualVerification.count())await manualVerification.check();
+ else await expect(page.locator('.bs-inherited')).toContainText('Automatically inherited');
  await page.getByRole('button',{name:'Approve '+character,exact:true}).click();
  await expect(page.getByText('No pending submissions.',{exact:true})).toBeVisible();
  const ranked=await(await request.get('/api/public/leaderboards?character='+character)).json();
@@ -170,4 +172,46 @@ test('moderator can verify and revoke an approved player after initial review',a
  await page.getByRole('button',{name:'Verify '+uid,exact:true}).first().click();
  await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toHaveCount(1);
  for(const golden of scoringCases.cases)expect((await(await request.get('/api/public/leaderboards?character='+golden.character)).json()).builds).toHaveLength(1);
+});
+
+
+test('verified UID inherits review status and admin groups every build under one player',async({page,request},info)=>{
+ test.skip(info.project.name!=='desktop','One verified UID lifecycle per isolated DB.');
+ test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Private originals required locally.');
+ const uid=process.env.USER_BUILD_CARD_UID!;
+ const headers={Authorization:'Bearer browser-test-only-token-00000000000000000000'};
+ const publicBuilds=(await(await request.get('/api/public/builds?search='+uid)).json()).builds;
+ expect(publicBuilds).toHaveLength(5);
+ const hiyuki=publicBuilds.find((build:{character:string})=>build.character==='Hiyuki');
+ expect((await request.delete('/api/moderation',{headers,data:{id:hiyuki.id,confirm:true,reviewer:'Grouped QA',note:'Create a local pending import for a verified UID'}})).status()).toBe(200);
+ await page.goto('/import',{waitUntil:'networkidle'});
+ await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Hiyuki(3).jpg'));
+ await expect(page.getByText('No structural warnings',{exact:true})).toBeVisible({timeout:60000});
+ await page.getByLabel('In-game name',{exact:true}).fill('Scoring Browser QA');await page.getByRole('checkbox').check();
+ const response=page.waitForResponse(r=>r.url().endsWith('/api/submissions')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Submit for moderation',exact:true}).click();expect((await response).status()).toBe(201);
+ const pending=(await(await request.get('/api/moderation?status=pending&search='+uid,{headers})).json()).builds;
+ expect(pending).toHaveLength(1);expect(pending[0].identityVerified).toBe(true);
+ expect((await request.get('/api/moderation?view=players')).status()).toBe(401);
+ expect((await request.get('/api/moderation?view=player&uid='+uid)).status()).toBe(401);
+ await page.goto('/BlackShores',{waitUntil:'networkidle'});await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
+ await expect(page.locator('.bs-inherited')).toContainText('Only build approval');
+ await expect(page.getByLabel('I manually matched this UID/IGN to the member outside the website.')).toHaveCount(0);
+ await page.getByRole('button',{name:'Players & builds',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Open player Scoring Browser QA UID '+uid,exact:true})).toHaveCount(1);
+ await page.getByRole('button',{name:'Open player Scoring Browser QA UID '+uid,exact:true}).click();
+ await expect(page.getByLabel('All imported builds').getByRole('button')).toHaveCount(5);
+ await expect(page.getByLabel('Player build collection')).toContainText('4 approved · 1 pending');
+ await page.getByRole('button',{name:'Review Hiyuki by Scoring Browser QA',exact:true}).click();
+ await expect(page.locator('.bs-inherited')).toBeVisible();
+ await page.getByRole('button',{name:'Approve Hiyuki',exact:true}).click();
+ await expect(page.getByLabel('Player build collection')).toContainText('5 approved · 0 pending');
+ expect((await(await request.get('/api/public/leaderboards?character=Hiyuki')).json()).builds).toHaveLength(1);
+ await page.getByRole('button',{name:'Unverify '+uid,exact:true}).click();
+ await expect(page.getByRole('button',{name:'Verify '+uid,exact:true})).toBeVisible();
+ const revoked=(await(await request.get('/api/moderation?view=player&uid='+uid,{headers})).json()).builds;
+ expect(revoked).toHaveLength(5);expect(revoked.every((build:{identityVerified:boolean})=>!build.identityVerified)).toBe(true);
+ await page.getByRole('button',{name:'Verify '+uid,exact:true}).click();await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toBeVisible();
+ await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});await page.screenshot({path:info.outputPath('grouped-admin-player.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('grouped-admin-player-mobile.png'),fullPage:true});
 });

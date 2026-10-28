@@ -197,10 +197,10 @@ test('admin dashboard, ID search, audited approved deletion and rollback are rea
   assert.equal((await db.execute({sql:'SELECT COUNT(*) n FROM assets WHERE submission_id=?',args:[first.id]})).rows[0].n,0);
   assert.equal((await listBuilds({pending:true},db)).builds[0].id,second.id);
   const events=await listAdminAudit(1,first.id,db);
-  assert.deepEqual(events.events.map(e=>e.action).sort(),['approved','deleted']);
+  assert.deepEqual(events.events.map(e=>e.action).sort(),['approved','deleted','identity_verified']);
   await assert.rejects(deleteBuild(first.id,'Owner label','',db),e=>e.status===404);
   await deleteBuild(second.id,'Owner label','',db);
-  assert.equal((await adminOverview(db)).players,0);
+  assert.equal((await adminOverview(db)).players,1); // Verified UID survives its last deleted build.
  }finally{db.close();}
 });
 
@@ -245,5 +245,72 @@ test('Home returns only Top 5 current verified players for the latest supported 
   assert.equal(home.boards[2].players.length,0);
   assert.deepEqual(Object.keys(board.players[0]).sort(),['id','ign','rank','score','uid']);
   assert.ok(board.players.every(p=>p.uid!=='887766556'&&p.uid!=='887766557'));
+ }finally{db.close();}
+});
+
+test('verified UID is inherited, approval cannot revoke it, and explicit revocation covers pending and future imports',async()=>{
+ const {setUidVerification,deleteBuild,adminPlayerBuilds,listAdminPlayers}=await import('./store.ts');
+ const db=createClient({url:'file::memory:'});
+ try{
+  await migrate(db);const first=await submit(validateSubmission(fixture()),db);
+  await moderate(first.id,'approved','QA','First external identity match',true,db);
+  const body=fixture();body.character='Hiyuki';const second=await submit(validateSubmission(body),db);
+  assert.equal((await listBuilds({pending:true,id:second.id},db)).builds[0].identityVerified,true);
+  assert.equal((await listBuilds({id:second.id},db)).builds.length,0);
+  await moderate(second.id,'approved','QA','Only approval required',false,db);
+  assert.equal((await listBuilds({id:second.id},db)).builds[0].identityVerified,true);
+  const pendingInput=fixture();pendingInput.character='Chisa';const pending=await submit(validateSubmission(pendingInput),db);
+  await setUidVerification('812345678',false,'QA','Revoked the UID',db);
+  const all=await adminPlayerBuilds('812345678',1,db);
+  assert.equal(all.builds.length,3);assert.ok(all.builds.every(b=>!b.identityVerified));
+  assert.equal(all.player.identityVerified,false);
+  await moderate(pending.id,'approved','QA','No inherited verification after revoke',false,db);
+  assert.equal((await listBuilds({id:pending.id},db)).builds[0].identityVerified,false);
+  const nextInput=fixture();nextInput.character='Aemeath';const next=await submit(validateSubmission(nextInput),db);
+  assert.equal((await listBuilds({pending:true,id:next.id},db)).builds[0].identityVerified,false);
+  await setUidVerification('812345678',true,'QA','UID matched again',db);
+  assert.ok((await adminPlayerBuilds('812345678',1,db)).builds.every(b=>b.identityVerified));
+  for(const build of (await adminPlayerBuilds('812345678',1,db)).builds)await deleteBuild(build.id,'QA','Remove build only',db);
+  assert.equal((await listAdminPlayers({},db)).players[0].identityVerified,true);
+  assert.equal((await adminPlayerBuilds('812345678',1,db)).builds.length,0);
+  const afterDelete=await submit(validateSubmission(fixture()),db);
+  assert.equal((await listBuilds({pending:true,id:afterDelete.id},db)).builds[0].identityVerified,true);
+  await assert.rejects(setUidVerification('899999999',true,'QA','',db),e=>e.status===404);
+ }finally{db.close();}
+});
+
+test('private player list groups builds by exact UID and exposes every page of their collection',async()=>{
+ const {listAdminPlayers,adminPlayerBuilds}=await import('./store.ts');
+ const db=createClient({url:'file::memory:'});
+ try{
+  await migrate(db);const first=await submit(validateSubmission(fixture()),db);
+  for(let i=0;i<22;i++)await db.execute({sql:"INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at) SELECT ?,uid,ign,?, ?,data,created_at FROM submissions WHERE id=?",args:['grouped-'+i,i%2?'Chisa':'Hiyuki','grouped-hash-'+i,first.id]});
+  const other=await submit(validateSubmission(fixture('899999999')),db);
+  const list=await listAdminPlayers({},db);assert.equal(list.players.length,2);
+  const grouped=list.players.find(p=>p.uid==='812345678');assert.equal(grouped.builds,23);assert.equal(grouped.pending,23);assert.equal(grouped.characters,3);
+  assert.equal((await listAdminPlayers({search:'grouped-21'},db)).players[0].uid,'812345678');
+  assert.equal((await listAdminPlayers({character:'Chisa'},db)).players.length,1);
+  const firstPage=await adminPlayerBuilds('812345678',1,db),secondPage=await adminPlayerBuilds('812345678',2,db);
+  assert.equal(firstPage.builds.length,20);assert.equal(firstPage.hasMore,true);assert.equal(secondPage.builds.length,3);assert.equal(secondPage.hasMore,false);
+  const ids=new Set([...firstPage.builds,...secondPage.builds].map(b=>b.id));assert.equal(ids.size,23);assert.ok(!ids.has(other.id));
+  assert.equal((await listBuilds({},db)).builds.length,0); // Pending collections stay private.
+ }finally{db.close();}
+});
+
+test('migration backfills only previously verified approved UIDs and is repeatable',async()=>{
+ const {migrations}=await import('./schema.ts');const db=createClient({url:'file::memory:'});
+ try{
+  await db.execute('CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,applied_at TEXT NOT NULL)');
+  for(const migration of migrations.filter(m=>m.version<6)){
+   for(const sql of migration.statements)await db.execute(sql);
+   await db.execute({sql:'INSERT INTO schema_migrations VALUES (?,?)',args:[migration.version,new Date().toISOString()]});
+  }
+  for(const uid of ['812345678','899999999'])await db.execute({sql:'INSERT INTO players VALUES (?,?)',args:[uid,new Date().toISOString()]});
+  for(const [id,uid,status,verified] of [['legacy-a','812345678','approved',1],['legacy-b','812345678','approved',0],['legacy-c','812345678','pending',0],['legacy-d','899999999','pending',1]]){
+   await db.execute({sql:'INSERT INTO submissions(id,uid,ign,character,fingerprint,data,status,created_at,reviewed_at,identity_verified) VALUES (?,?,?,?,?,?,?,?,?,?)',args:[id,uid,'Legacy player','Hiyuki',id,'{}',status,new Date().toISOString(),status==='approved'?new Date().toISOString():null,verified]});
+  }
+  await migrate(db);await migrate(db);
+  const rows=await db.execute('SELECT uid,identity_verified FROM players ORDER BY uid');assert.deepEqual(rows.rows.map(r=>Number(r.identity_verified)),[1,0]);
+  const builds=await db.execute('SELECT identity_verified FROM submissions ORDER BY id');assert.deepEqual(builds.rows.map(r=>Number(r.identity_verified)),[1,1,1,0]);
  }finally{db.close();}
 });

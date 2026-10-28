@@ -15,6 +15,14 @@ npm run start:production
 
 Open http://localhost:3000. Setup creates a private .env.local without overwriting an existing one. The production launcher applies migrations and upgrades previously validated calculations before serving. Find your moderator token only in your local .env.local. The public navigation has four pages. Moderation is at `/BlackShores`, requires the moderator token, and is excluded from search indexing.
 
+## UID verification and the admin player collection
+
+Verification is stored once per UID in `players`. Migration 6 carries forward existing verified approved UIDs and synchronizes their current submissions. A new source-checked submission inherits the UID flag but remains pending until approved. Approving with an unchecked verification box does not revoke an established UID. Explicit verify/unverify updates all current builds, including pending ones, and controls future imports. These changes are transactional and audited.
+
+`/BlackShores` → Players & builds groups accounts by UID. Open a player to browse every pending and approved build, with separate 20-row pagination for players and for that player's builds. Deleting/rejecting one build affects only that build. A verified UID is retained even after its last build is removed, so the moderator does not have to verify the returning UID again; it remains private when it has no approved builds.
+
+The authenticated moderation API exposes `view=players` and `view=player&uid=...` for the collection. Public endpoints cannot request pending builds. No moderator token is stored in browser storage.
+
 ## Beta Home and resonator artwork
 
 Home shows a compact player search, three latest **supported** resonators by original release order (not reruns), and up to five real ranked players each. `/api/public/home` reuses the current leaderboard policy, returns only summary fields, and does not expose full Echo records. Fewer than five eligible players means fewer rows; no sample competitors are shown.

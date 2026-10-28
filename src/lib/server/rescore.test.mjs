@@ -24,6 +24,6 @@ test('retained server evidence upgrades atomically and rescore is idempotent',as
   const calculation=(await db.execute('SELECT engine_version,policy_id FROM calculation_results')).rows[0];
   assert.equal(calculation.engine_version,ENGINE_VERSION);assert.equal(calculation.policy_id,POLICY_VERSION);
   assert.deepEqual(await rescoreStoredBuilds(db),{updated:0,skipped:1,failed:0});
-  assert.equal(Number((await db.execute('SELECT COUNT(*) AS n FROM build_events')).rows[0].n),1);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM build_events WHERE action='rescore'")).rows[0].n),1);
  }finally{db.close();}
 });

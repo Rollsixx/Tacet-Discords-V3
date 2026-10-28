@@ -72,4 +72,11 @@ export const migrations = [
     )`,
     "CREATE INDEX admin_audit_created ON admin_audit_events(created_at DESC)",
   ] },
+  { version: 6, statements: [
+    "ALTER TABLE players ADD COLUMN identity_verified INTEGER NOT NULL DEFAULT 0 CHECK(identity_verified IN (0,1))",
+    "ALTER TABLE players ADD COLUMN verified_at TEXT",
+    // Existing moderator-verified approved builds establish the UID's verified state.
+    "UPDATE players SET identity_verified=1,verified_at=(SELECT MAX(reviewed_at) FROM submissions s WHERE s.uid=players.uid AND s.status='approved' AND s.identity_verified=1) WHERE EXISTS (SELECT 1 FROM submissions s WHERE s.uid=players.uid AND s.status='approved' AND s.identity_verified=1)",
+    "UPDATE submissions SET identity_verified=COALESCE((SELECT identity_verified FROM players p WHERE p.uid=submissions.uid),0)",
+  ] },
 ];

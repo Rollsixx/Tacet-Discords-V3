@@ -49,7 +49,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     const recent = await tx.execute({ sql: "SELECT COUNT(*) AS count FROM submissions WHERE uid=? AND created_at>?", args: [input.uid, new Date(Date.now() - 60000).toISOString()] });
     if (Number(recent.rows[0].count) >= 10) throw new HttpError(429, "Please wait before submitting another build for this UID.");
     await tx.execute({ sql: "INSERT INTO players(uid,created_at) VALUES (?,?) ON CONFLICT(uid) DO NOTHING", args: [input.uid, createdAt] });
-    await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at) VALUES (?,?,?,?,?,?,?)", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt] });
+    await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at,identity_verified) VALUES (?,?,?,?,?,?,?,(SELECT identity_verified FROM players WHERE uid=?))", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt, input.uid] });
     for (const slot of input.slots) {
       for (const kind of ["portrait", "sonata"] as const) {
         await tx.execute({ sql: "INSERT INTO assets(id,submission_id,slot,kind,png) VALUES (?,?,?,?,?)", args: [`${id}-${slot.slot}-${kind}`, id, slot.slot, kind, slot[kind]] });
@@ -71,11 +71,16 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
         await tx.execute({ sql: `DELETE FROM ${table} WHERE submission_id=?`, args: [id] });
       }
       await tx.execute({ sql: "DELETE FROM submissions WHERE id=?", args: [id] });
-      await tx.execute({ sql: "DELETE FROM players WHERE uid=? AND NOT EXISTS (SELECT 1 FROM submissions WHERE uid=?)", args: [String(saved.rows[0].uid), String(saved.rows[0].uid)] });
+      await tx.execute({ sql: "DELETE FROM players WHERE uid=? AND identity_verified=0 AND NOT EXISTS (SELECT 1 FROM submissions WHERE uid=?)", args: [String(saved.rows[0].uid), String(saved.rows[0].uid)] });
       await tx.commit();
       return;
     }
-    const updated = await tx.execute({ sql: "UPDATE submissions SET status=?,reviewed_at=?,identity_verified=? WHERE id=? AND status='pending'", args: [action, now, identityVerified ? 1 : 0, id] });
+    const pending=await tx.execute({sql:"SELECT uid FROM submissions WHERE id=? AND status='pending'",args:[id]});
+    if(!pending.rows.length)throw new HttpError(409,"Submission is missing or has already been reviewed.");
+    const uid=String(pending.rows[0].uid);
+    if(identityVerified)await applyUidVerification(tx,uid,true,reviewer,note,now);
+    // A review checkbox cannot revoke a previously verified UID. Revocation is explicit.
+    const updated = await tx.execute({ sql: "UPDATE submissions SET status=?,reviewed_at=?,identity_verified=(SELECT identity_verified FROM players WHERE uid=?) WHERE id=? AND status='pending'", args: [action, now, uid, id] });
     if (updated.rowsAffected !== 1) throw new HttpError(409, "Submission is missing or has already been reviewed.");
     if (action === "approved") {
       const saved = await tx.execute({sql: "SELECT data FROM submissions WHERE id=?", args: [id]});
@@ -97,17 +102,17 @@ export const scoringReadiness = {
   metric: "Expected standardized benchmark damage (not DPS)",
   missing: [],
 };
-export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; page?: number; pending?: boolean } = {}, db: Client = database()) {
+export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
   const character = (options.character || "").slice(0, 64).trim();
   const result = await db.execute({
     sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,
       CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id='${POLICY_VERSION}' THEN c.score ELSE NULL END AS verified_score
-      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE status=? AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
+      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE (status=? OR (?=1 AND status IN ('pending','approved'))) AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
       AND (?='' OR character=?) AND (?='' OR s.id=?) AND (?='' OR uid=?)
       ORDER BY created_at DESC,s.id DESC LIMIT 21 OFFSET ?`,
-    args: [options.pending ? "pending" : "approved", query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", (page - 1) * 20],
+    args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", (page - 1) * 20],
   });
   return {
     builds: result.rows.slice(0, 20).map(publicBuild),
@@ -139,18 +144,30 @@ export async function listLeaderboard(options: {character?: string;search?: stri
   return {builds:result.rows.slice(0,20).map(publicBuild),page,hasMore:result.rows.length>20,scoring:scoringReadiness};
 }
 
-export async function setPlayerVerification(id: string, verified: boolean, reviewer: string, note: string, db: Client = database()) {
- const tx = await db.transaction("write");
- try {
+async function applyUidVerification(tx: Awaited<ReturnType<Client['transaction']>>, uid:string, verified:boolean, reviewer:string, note:string, now:string) {
+ const player=await tx.execute({sql:'SELECT identity_verified FROM players WHERE uid=?',args:[uid]});
+ if(!player.rows.length)throw new HttpError(404,'Player UID not found.');
+ const builds=await tx.execute({sql:'SELECT id FROM submissions WHERE uid=? AND identity_verified!=?',args:[uid,verified?1:0]});
+ await tx.execute({sql:'UPDATE players SET identity_verified=?,verified_at=? WHERE uid=?',args:[verified?1:0,verified?now:null,uid]});
+ for(const build of builds.rows){
+  await tx.execute({sql:'UPDATE submissions SET identity_verified=? WHERE id=?',args:[verified?1:0,String(build.id)]});
+  await tx.execute({sql:'INSERT INTO build_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),String(build.id),verified?'identity_verified':'identity_unverified',reviewer,note,now]});
+ }
+ if(Boolean(player.rows[0].identity_verified)!==verified||builds.rows.length)await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),uid,verified?'player_verified':'player_unverified',reviewer,note,now]});
+ return {updated:builds.rows.length};
+}
+export async function setPlayerVerification(id:string, verified:boolean, reviewer:string, note:string, db:Client=database()){
+ const tx=await db.transaction('write');
+ try{
   const selected=await tx.execute({sql:"SELECT uid FROM submissions WHERE id=? AND status='approved'",args:[id]});
-  if(!selected.rows.length)throw new HttpError(404,"Approved build not found.");
-  const builds=await tx.execute({sql:"SELECT id FROM submissions WHERE uid=? AND status='approved' AND identity_verified!=?",args:[String(selected.rows[0].uid),verified?1:0]});
-  for(const build of builds.rows){
-   await tx.execute({sql:'UPDATE submissions SET identity_verified=? WHERE id=?',args:[verified?1:0,String(build.id)]});
-   await tx.execute({sql:'INSERT INTO build_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),String(build.id),verified?'identity_verified':'identity_unverified',reviewer,note,new Date().toISOString()]});
-  }
-  await tx.commit();return {updated:builds.rows.length};
+  if(!selected.rows.length)throw new HttpError(404,'Approved build not found.');
+  const result=await applyUidVerification(tx,String(selected.rows[0].uid),verified,reviewer,note,new Date().toISOString());
+  await tx.commit();return result;
  }finally{tx.close();}
+}
+export async function setUidVerification(uid:string,verified:boolean,reviewer:string,note:string,db:Client=database()){
+ const tx=await db.transaction('write');
+ try{const result=await applyUidVerification(tx,uid,verified,reviewer,note,new Date().toISOString());await tx.commit();return result;}finally{tx.close();}
 }
 
 export async function adminOverview(db: Client = database()) {
@@ -186,7 +203,7 @@ export async function deleteBuild(id: string, reviewer: string, note: string, db
     for(const table of ['assets','calculation_results','build_events','moderation_events']) await tx.execute({sql:`DELETE FROM ${table} WHERE submission_id=?`,args:[id]});
     await tx.execute({sql:'DELETE FROM submissions WHERE id=?',args:[id]});
     const uid=String(saved.rows[0].uid);
-    await tx.execute({sql:'DELETE FROM players WHERE uid=? AND NOT EXISTS (SELECT 1 FROM submissions WHERE uid=?)',args:[uid,uid]});
+    await tx.execute({sql:'DELETE FROM players WHERE uid=? AND identity_verified=0 AND NOT EXISTS (SELECT 1 FROM submissions WHERE uid=?)',args:[uid,uid]});
     await tx.commit();
     return {deleted:id};
   }finally{tx.close();}
@@ -209,4 +226,30 @@ export async function homeRankings(db: Client = database()) {
   return {character:character.name,players:result.builds.slice(0,5).map(build=>({id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}))};
  }));
  return {boards};
+}
+
+export async function listAdminPlayers(options:{search?:string;character?:string;page?:number}={},db:Client=database()){
+ const page=Math.min(10000,Math.max(1,Number.isFinite(options.page)?Math.floor(options.page||1):1));
+ const query=(options.search||'').trim().slice(0,64),character=(options.character||'').trim().slice(0,64);
+ const result=await db.execute({sql:`SELECT p.uid,p.identity_verified,p.verified_at,
+ COALESCE((SELECT ign FROM submissions n WHERE n.uid=p.uid ORDER BY created_at DESC,id DESC LIMIT 1),p.uid) AS ign,
+ COALESCE(MAX(s.created_at),p.created_at) AS updated_at,COUNT(s.id) AS builds,
+ SUM(CASE WHEN s.status='approved' THEN 1 ELSE 0 END) AS approved,
+ SUM(CASE WHEN s.status='pending' THEN 1 ELSE 0 END) AS pending,
+ COUNT(DISTINCT s.character) AS characters
+ FROM players p LEFT JOIN submissions s ON s.uid=p.uid AND s.status IN ('pending','approved')
+ WHERE (?='' OR instr(p.uid,?)>0 OR EXISTS (SELECT 1 FROM submissions n WHERE n.uid=p.uid AND (instr(lower(n.ign),lower(?))>0 OR instr(lower(n.id),lower(?))>0)))
+ AND (?='' OR EXISTS (SELECT 1 FROM submissions n WHERE n.uid=p.uid AND n.character=?))
+ GROUP BY p.uid ORDER BY updated_at DESC,p.uid ASC LIMIT 21 OFFSET ?`,args:[query,query,query,query,character,character,(page-1)*20]});
+ return {players:result.rows.slice(0,20).map(row=>({uid:String(row.uid),ign:String(row.ign),identityVerified:Boolean(row.identity_verified),verifiedAt:row.verified_at,builds:Number(row.builds),approved:Number(row.approved),pending:Number(row.pending),characters:Number(row.characters),updatedAt:String(row.updated_at)})),page,hasMore:result.rows.length>20};
+}
+export async function adminPlayerBuilds(uid:string,page=1,db:Client=database()){
+ const player=await db.execute({sql:`SELECT uid,identity_verified,verified_at,
+ COALESCE((SELECT ign FROM submissions s WHERE s.uid=p.uid ORDER BY created_at DESC,id DESC LIMIT 1),uid) AS ign,
+ (SELECT COUNT(*) FROM submissions s WHERE s.uid=p.uid AND status='pending') AS pending,
+ (SELECT COUNT(*) FROM submissions s WHERE s.uid=p.uid AND status='approved') AS approved
+ FROM players p WHERE uid=?`,args:[uid]});
+ if(!player.rows.length)throw new HttpError(404,'Player UID not found.');
+ const row=player.rows[0];
+ return {...await listBuilds({uid,page,includePending:true},db),player:{uid:String(row.uid),ign:String(row.ign),identityVerified:Boolean(row.identity_verified),verifiedAt:row.verified_at,pending:Number(row.pending),approved:Number(row.approved)}};
 }
