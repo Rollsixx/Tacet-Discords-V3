@@ -28,6 +28,5 @@ export function EchoDetails({build,profile=false}:{build:Build;profile?:boolean}
    </article>;
   })}</div>
   {!profile&&statsPanel}
-  {calculation&&<details className="lb-calculation"><summary>Scoring details</summary><p>{calculation?.conditions}</p><p>{calculation?.rotationOrigin}</p><p>Rotation: {calculation?.rotation?readableName(calculation.rotation):'Unavailable'} · Weapon: {calculation?.weapon?readableName(calculation.weapon):'Unavailable'}</p>{calculation?.startState&&<p>Starting conditions: {calculation.startState}</p>}<p className="muted">Policy: {calculation?.policyId} · Engine: {calculation?.engineVersion} · Data: {calculation?.dataVersion}</p></details>}
  </section>;
 }
