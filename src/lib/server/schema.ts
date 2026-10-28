@@ -65,4 +65,11 @@ export const migrations = [
     )`,
     "CREATE INDEX rejection_events_submission ON rejection_events(submission_id)",
   ] },
+  { version: 5, statements: [
+    `CREATE TABLE admin_audit_events (
+      id TEXT PRIMARY KEY, submission_id TEXT NOT NULL, action TEXT NOT NULL,
+      reviewer TEXT NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX admin_audit_created ON admin_audit_events(created_at DESC)",
+  ] },
 ];

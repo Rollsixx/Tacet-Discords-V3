@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { PageHeading } from "@/components/ui";
 import { ModerationPanel } from "@/components/moderation-panel";
 
 export const metadata: Metadata = {
@@ -8,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function BlackShoresPage() {
-  return <div className="admin-workspace"><PageHeading eyebrow="Black Shores / Administration" title="Review desk." description="Private moderation workspace for Tacet Discords." /><ModerationPanel /></div>;
+  return <div className="blackshores-root"><ModerationPanel /></div>;
 }

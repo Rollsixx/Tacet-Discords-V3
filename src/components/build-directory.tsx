@@ -8,6 +8,8 @@ type Build = Results["builds"][number];
 
 function Crop({ id, slot, kind, token }: { id: string; slot: number; kind: "portrait" | "sonata"; token?: string }) {
   const [url, setUrl] = useState("");
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!token) return;
     let active = true;
@@ -15,10 +17,11 @@ function Crop({ id, slot, kind, token }: { id: string; slot: number; kind: "port
     fetch(`/api/assets/${id}-${slot}-${kind}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(response => { if (!response.ok) throw new Error("Crop unavailable"); return response.blob(); })
       .then(blob => { objectUrl = URL.createObjectURL(blob); if (active) setUrl(objectUrl); else URL.revokeObjectURL(objectUrl); })
-      .catch(() => {});
+      .catch(() => { if(active) setError(true); });
     return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [id, slot, kind, token]);
+  }, [id, slot, kind, token, attempt]);
   const src = token ? url : `/api/assets/${id}-${slot}-${kind}`;
+  if(error) return <span className="crop-error">Image unavailable. <button type="button" className="text-link" onClick={()=>{setError(false);setAttempt(value=>value+1);}}>Retry image</button></span>;
   if (!src) return <span>Loading crop…</span>;
   // eslint-disable-next-line @next/next/no-img-element
   return <img className={kind === "portrait" ? "echo-crop" : "sonata-crop"} src={src} alt={`Echo ${slot} ${kind} crop; identity unverified`} />;

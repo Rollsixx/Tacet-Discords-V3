@@ -1,10 +1,18 @@
 import { authorize, failure, json, readJson } from "@/lib/server/http";
 import { HttpError, record } from "@/lib/server/validation";
-import { listBuilds, moderate, setPlayerVerification } from "@/lib/server/store";
+import { listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild } from "@/lib/server/store";
 export async function GET(request: Request) {
   try {
     authorize(request);
-    return json(await listBuilds({ pending: new URL(request.url).searchParams.get("status") !== "approved", search: new URL(request.url).searchParams.get("search") || "", page: Number(new URL(request.url).searchParams.get("page")) || 1 }));
+    const params=new URL(request.url).searchParams;
+    const page=Number(params.get("page"))||1;
+    const search=params.get("search")||"";
+    if(params.get("view")==="audit")return json(await listAdminAudit(page,search));
+    const [builds,overview,activity]=await Promise.all([
+      listBuilds({ pending:params.get("status")!=="approved",search,page,character:params.get("character")||"" }),
+      adminOverview(),listAdminAudit(1)
+    ]);
+    return json({...builds,overview,activity:activity.events.slice(0,6)});
   } catch (error) { return failure(error); }
 }
 export async function POST(request: Request) {
@@ -27,5 +35,13 @@ export async function PATCH(request: Request) {
   authorize(request);const input=await readJson(request,4096);
   if(!record(input)||typeof input.id!=="string"||!/^[a-f0-9-]{36}$/.test(input.id)||typeof input.identityVerified!=="boolean"||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Valid player verification, reviewer and note required.");
   return json({ok:true,...await setPlayerVerification(input.id,input.identityVerified,input.reviewer.trim(),input.note)});
+ }catch(error){return failure(error);}
+}
+
+export async function DELETE(request: Request) {
+ try {
+  authorize(request);const input=await readJson(request,4096);
+  if(!record(input)||typeof input.id!=="string"||!/^[a-f0-9-]{36}$/.test(input.id)||input.confirm!==true||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Confirm deletion and provide a reviewer name and note.");
+  return json({ok:true,...await deleteBuild(input.id,input.reviewer.trim(),input.note)});
  }catch(error){return failure(error);}
 }

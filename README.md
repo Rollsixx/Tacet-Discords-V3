@@ -129,3 +129,10 @@ Private source-scoring tests additionally require USER_BUILD_CARD_UID matching t
 ## Small cost-digit recovery
 
 When an occupied Echo's first cost read is unreadable, the scanner retries two image crops using single-character numeric OCR, padding and inverted contrast. It accepts only agreeing 1/3/4 digits with confidence at least 65 from both reads, retains the original raw text and labels image recovery separately from manual edits. It never infers cost from the main stat, slot position or remaining budget. Empty slots do not use this fallback. The optional private browser regression forces only Hiyuki's initial fifth-cost result to blank, then uses real OCR for both retries and verifies automatic recovery to 1 at desktop/mobile widths.
+
+
+### Black Shores operations
+
+`/BlackShores` is a token-authenticated administration console. Its dashboard counts, queues, filters (UID, IGN, submission ID and exact character), verification controls, audit history and health panel use the live database. Select one build at a time to inspect its five portrait/sonata crops. The reviewer label defaults to “Moderator” and can be changed before a decision; a missing label produces a visible error rather than silently disabling actions. The shared token authenticates access, while the reviewer label is a self-declared audit label, not a separate user account.
+
+Approve publishes a pending build; identity verification remains separate. Reject permanently removes a pending build. Approved builds also have an explicit authenticated DELETE action with confirmation. Deletion atomically removes crops, score and submission, preserves prior decisions in an independent audit ledger, and removes a player only when no submissions remain. Other builds for the same UID are preserved. Reload or Lock review desk clears token access. There are no demo records, fake roles, or nonfunctional platform switches.

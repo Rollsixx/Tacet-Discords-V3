@@ -103,10 +103,10 @@ export async function listBuilds(options: { search?: string; character?: string;
   const result = await db.execute({
     sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,
       CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id='${POLICY_VERSION}' THEN c.score ELSE NULL END AS verified_score
-      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE status=? AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
+      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE status=? AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
       AND (?='' OR character=?) AND (?='' OR s.id=?)
       ORDER BY created_at DESC,s.id DESC LIMIT 21 OFFSET ?`,
-    args: [options.pending ? "pending" : "approved", query, query, query, character, character, options.id || "", options.id || "", (page - 1) * 20],
+    args: [options.pending ? "pending" : "approved", query, query, query, query, character, character, options.id || "", options.id || "", (page - 1) * 20],
   });
   return {
     builds: result.rows.slice(0, 20).map(publicBuild),
@@ -148,4 +148,43 @@ export async function setPlayerVerification(id: string, verified: boolean, revie
   }
   await tx.commit();return {updated:builds.rows.length};
  }finally{tx.close();}
+}
+
+export async function adminOverview(db: Client = database()) {
+  const result = await db.execute(`SELECT
+    (SELECT COUNT(*) FROM submissions WHERE status='pending') AS pending,
+    (SELECT COUNT(*) FROM submissions WHERE status='approved') AS approved,
+    (SELECT COUNT(DISTINCT uid) FROM submissions WHERE status='approved' AND identity_verified=0) AS unverified,
+    (SELECT COUNT(*) FROM players) AS players`);
+  return Object.fromEntries(Object.entries(result.rows[0]).map(([key,value])=>[key,Number(value)])) as {pending:number;approved:number;unverified:number;players:number};
+}
+
+export async function listAdminAudit(page = 1, search = "", db: Client = database()) {
+  page = Math.min(10000,Math.max(1,Number.isFinite(page)?Math.floor(page):1));
+  const query=search.trim().slice(0,64).toLowerCase();
+  const result=await db.execute({sql:`WITH events AS (
+    SELECT id,submission_id,action,reviewer,note,created_at FROM moderation_events
+    UNION ALL SELECT id,submission_id,action,reviewer,note,created_at FROM build_events
+    UNION ALL SELECT id,submission_id,'rejected' AS action,reviewer,note,created_at FROM rejection_events
+    UNION ALL SELECT id,submission_id,action,reviewer,note,created_at FROM admin_audit_events
+  ) SELECT * FROM events WHERE (?='' OR instr(lower(submission_id||' '||reviewer||' '||action),?)>0)
+    ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?`,args:[query,query,(page-1)*20]});
+  return {events:result.rows.slice(0,20).map(row=>({id:String(row.id),submissionId:String(row.submission_id),action:String(row.action),reviewer:String(row.reviewer),note:String(row.note),createdAt:String(row.created_at)})),page,hasMore:result.rows.length>20};
+}
+
+export async function deleteBuild(id: string, reviewer: string, note: string, db: Client = database()) {
+  const tx=await db.transaction('write');
+  try {
+    const saved=await tx.execute({sql:'SELECT uid FROM submissions WHERE id=?',args:[id]});
+    if(!saved.rows.length)throw new HttpError(404,'Submission not found. It may have already been deleted.');
+    // Preserve decisions in a ledger without foreign keys before removing evidence.
+    for(const table of ['moderation_events','build_events']) await tx.execute({sql:`INSERT INTO admin_audit_events SELECT id,submission_id,action,reviewer,note,created_at FROM ${table} WHERE submission_id=?`,args:[id]});
+    await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'deleted',reviewer,note,new Date().toISOString()]});
+    for(const table of ['assets','calculation_results','build_events','moderation_events']) await tx.execute({sql:`DELETE FROM ${table} WHERE submission_id=?`,args:[id]});
+    await tx.execute({sql:'DELETE FROM submissions WHERE id=?',args:[id]});
+    const uid=String(saved.rows[0].uid);
+    await tx.execute({sql:'DELETE FROM players WHERE uid=? AND NOT EXISTS (SELECT 1 FROM submissions WHERE uid=?)',args:[uid,uid]});
+    await tx.commit();
+    return {deleted:id};
+  }finally{tx.close();}
 }

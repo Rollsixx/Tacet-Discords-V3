@@ -165,3 +165,36 @@ test("failed rejection audit rolls back deletion, and web submissions require so
   await assert.rejects(submit(validateSubmission(fixture('899999997')),db,true),e=>e.status===400);
  }finally{db.close();}
 });
+
+test('admin dashboard, ID search, audited approved deletion and rollback are real database operations',async()=>{
+ const {adminOverview,listAdminAudit,deleteBuild,listLeaderboard}=await import('./store.ts');
+ const db=createClient({url:'file::memory:'});
+ try{
+  await migrate(db);
+  const firstInput=fixture();firstInput.character='Carlotta';
+  const first=await submit(validateSubmission(firstInput),db);
+  const input=fixture();input.character='Hiyuki';
+  const second=await submit(validateSubmission(input),db);
+  assert.deepEqual(await adminOverview(db),{pending:2,approved:0,unverified:0,players:1});
+  assert.equal((await listBuilds({pending:true,search:first.id},db)).builds.length,1);
+  await moderate(first.id,'approved','Owner label','Reviewed crops',true,db);
+  await db.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[first.id,100,scoringReadiness.engineVersion,scoringReadiness.dataVersion,'test-reference',new Date().toISOString(),scoringReadiness.policyId,'{}']});
+  assert.equal((await listLeaderboard({character:'Carlotta'},db)).builds.length,1);
+  assert.deepEqual(await adminOverview(db),{pending:1,approved:1,unverified:0,players:1});
+  await db.execute("CREATE TRIGGER fail_delete BEFORE INSERT ON admin_audit_events WHEN NEW.action='deleted' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
+  await assert.rejects(deleteBuild(first.id,'Owner label','Test rollback',db));
+  assert.equal((await listBuilds({id:first.id},db)).builds.length,1);
+  assert.equal((await db.execute({sql:'SELECT COUNT(*) n FROM assets WHERE submission_id=?',args:[first.id]})).rows[0].n,10);
+  await db.execute('DROP TRIGGER fail_delete');
+  await deleteBuild(first.id,'Owner label','Removed approved build',db);
+  assert.equal((await listLeaderboard({character:'Carlotta'},db)).builds.length,0);
+  assert.equal((await listBuilds({id:first.id},db)).builds.length,0);
+  assert.equal((await db.execute({sql:'SELECT COUNT(*) n FROM assets WHERE submission_id=?',args:[first.id]})).rows[0].n,0);
+  assert.equal((await listBuilds({pending:true},db)).builds[0].id,second.id);
+  const events=await listAdminAudit(1,first.id,db);
+  assert.deepEqual(events.events.map(e=>e.action).sort(),['approved','deleted']);
+  await assert.rejects(deleteBuild(first.id,'Owner label','',db),e=>e.status===404);
+  await deleteBuild(second.id,'Owner label','',db);
+  assert.equal((await adminOverview(db)).players,0);
+ }finally{db.close();}
+});

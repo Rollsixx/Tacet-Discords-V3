@@ -1,6 +1,6 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import "./globals.css";
-import { Navigation } from "@/components/ui";
+import { SiteFrame } from "@/components/site-frame";
 
 export const metadata: Metadata = {
   title: "Tacet Discords | Wuthering Waves Builds",
@@ -13,11 +13,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Navigation />
-        <main className="container">{children}</main>
-        <footer className="site-footer">
-          TACET DISCORDS V3 — Independent Wuthering Waves community project
-        </footer>
+        <SiteFrame>{children}</SiteFrame>
       </body>
     </html>
   );

@@ -144,13 +144,13 @@ test('moderator can verify and revoke an approved player after initial review',a
  await page.getByRole('button',{name:'Unlock review desk'}).click();
  await page.getByLabel('Review queue',{exact:true}).selectOption('approved');
  await page.getByLabel('Find UID or IGN',{exact:true}).fill(uid);
- await page.getByRole('button',{name:'Load approved players',exact:true}).click();
- await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toHaveCount(5);
+ await page.getByRole('button',{name:'Apply filters',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toHaveCount(1);
  await page.getByLabel('Reviewer name (audit trail)').fill('Verification Browser QA');
  await page.getByRole('button',{name:'Unverify '+uid,exact:true}).first().click();
- await expect(page.getByRole('button',{name:'Verify '+uid,exact:true})).toHaveCount(5);
+ await expect(page.getByRole('button',{name:'Verify '+uid,exact:true})).toHaveCount(1);
  for(const golden of scoringCases.cases)expect((await(await request.get('/api/public/leaderboards?character='+golden.character)).json()).builds).toHaveLength(0);
  await page.getByRole('button',{name:'Verify '+uid,exact:true}).first().click();
- await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toHaveCount(5);
+ await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toHaveCount(1);
  for(const golden of scoringCases.cases)expect((await(await request.get('/api/public/leaderboards?character='+golden.character)).json()).builds).toHaveLength(1);
 });

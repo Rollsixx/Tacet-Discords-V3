@@ -1,78 +1,115 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { BuildCard } from "./build-directory";
-import type { listBuilds } from "@/lib/server/store";
-type Results = Awaited<ReturnType<typeof listBuilds>>;
+import type { listBuilds, adminOverview, listAdminAudit } from "@/lib/server/store";
+type Audit = Awaited<ReturnType<typeof listAdminAudit>>;
+type Results = Awaited<ReturnType<typeof listBuilds>> & { overview: Awaited<ReturnType<typeof adminOverview>>; activity: Audit["events"] };
+type Build = Results["builds"][number];
+type View = "dashboard" | "submissions" | "players" | "audit" | "system";
+const names: Record<View,string> = {dashboard:"Command overview",submissions:"Submission management",players:"Approved builds & verification",audit:"Audit history",system:"System status"};
+function date(value:string){ return new Date(value).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"}); }
+function Activity({events}:{events:Audit["events"]}){return events.length?<div className="bs-activity">{events.map(event=><div key={event.id}><span className="bs-activity-dot"/><div><strong>{event.action.replaceAll('_',' ')}</strong><p>{event.reviewer} · {date(event.createdAt)}</p><code>{event.submissionId}</code>{event.note&&<p>{event.note}</p>}</div></div>)}</div>:<p className="bs-empty">No moderation activity yet.</p>;}
 export function ModerationPanel() {
-  const [view,setView]=useState("pending");
-  const [search,setSearch]=useState("");
-  const [token, setToken] = useState("");
-  const [reviewer, setReviewer] = useState("");
-  const [note, setNote] = useState("");
-  const [verified, setVerified] = useState(false);
-  const [result, setResult] = useState<Results | null>(null);
-  const [page, setPage] = useState(1);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [confirmReject, setConfirmReject] = useState<string | null>(null);
-  async function load(target = page) {
-    setBusy(true); setError("");
-    try {
-      const response = await fetch("/api/moderation?" + new URLSearchParams({page:String(target),status:view,search}), { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      setResult(data); setPage(target); setAuthenticated(true);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Request failed."); setResult(null); setAuthenticated(false); }
-    finally { setBusy(false); }
-  }
-  async function review(id: string, action: "approved" | "rejected") {
-    setBusy(true); setError("");
-    try {
-      const response = await fetch("/api/moderation", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ id, action, reviewer, note, identityVerified: verified }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      setNote(""); setVerified(false); setConfirmReject(null); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Review failed."); }
-    finally { setBusy(false); }
-  }
-  async function verify(id:string,value:boolean){
-    setBusy(true);setError("");
-    try{
-      const response=await fetch("/api/moderation",{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({id,identityVerified:value,reviewer,note})});
-      const data=await response.json();if(!response.ok)throw new Error(data.error);
-      setNote("");await load();
-    }catch(cause){setError(cause instanceof Error?cause.message:"Verification failed.");}finally{setBusy(false);}
-  }
-  function logout() { setToken(""); setResult(null); setAuthenticated(false); setNote(""); setReviewer(""); setVerified(false); setError(""); setConfirmReject(null); }
-  return <section className={`moderation-panel ${authenticated ? "" : "admin-lock"}`} aria-label="Moderator workspace">
-    {!authenticated ? <>
-      <span className="eyebrow">Restricted access</span><h2>Moderator token</h2>
-      <p className="muted">Enter your private token to open the review queue. The token stays in memory and is never saved in browser storage. Reload or lock the desk to clear access.</p>
-      <form onSubmit={e => { e.preventDefault(); void load(1); }}>
-        <label className="field"><span>Moderator token</span><input type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required minLength={32} /></label>
-        <button className="action" disabled={busy}>{busy ? "Checking access…" : "Unlock review desk"}</button>
-      </form>
-    </> : <>
-      <div className="admin-toolbar"><div><span className="eyebrow">Authenticated workspace</span><h2>Submissions & players</h2></div><button type="button" className="outline-button" disabled={busy} onClick={logout}>Lock review desk</button></div>
-      <p className="muted">Inspect all five crops and reviewed stats. Approval publishes the build. Reject & delete permanently removes this submission and its crops; other builds from this UID stay intact. A player with no remaining submissions is removed automatically.</p>
-      <form onSubmit={e => { e.preventDefault(); void load(1); }}>
-        <label className="field"><span>Review queue</span><select aria-label="Review queue" value={view} onChange={e => {setView(e.target.value);setResult(null);setPage(1);setConfirmReject(null);}}><option value="pending">Pending submissions</option><option value="approved">Approved players</option></select></label>
-        <label className="field"><span>Find UID or IGN</span><input value={search} maxLength={64} onChange={e => setSearch(e.target.value)} /></label>
-        <button className="action" disabled={busy}>{busy ? "Loading…" : view === "pending" ? "Load pending submissions" : "Load approved players"}</button>
-      </form>
+ const [token,setToken]=useState("");
+ const [reviewer,setReviewer]=useState("Moderator");
+ const [authenticated,setAuthenticated]=useState(false);
+ const [view,setView]=useState<View>("dashboard");
+ const [queue,setQueue]=useState("pending");
+ const [search,setSearch]=useState("");
+ const [character,setCharacter]=useState("");
+ const [result,setResult]=useState<Results|null>(null);
+ const [audit,setAudit]=useState<Audit|null>(null);
+ const [selected,setSelected]=useState<Build|null>(null);
+ const [page,setPage]=useState(1);
+ const [note,setNote]=useState("");
+ const [verified,setVerified]=useState(false);
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+ const [message,setMessage]=useState("");
+ const [confirmation,setConfirmation]=useState<"rejected"|"deleted"|null>(null);
+ const [health,setHealth]=useState<null|{ok:boolean;scoring:{supportedCharacters:string[];metric:string}}>(null);
+ const dialog=useRef<HTMLDialogElement>(null);
+ const reviewerInput=useRef<HTMLInputElement>(null);
+ useEffect(()=>{ if(confirmation)dialog.current?.showModal();else dialog.current?.close(); },[confirmation]);
+ function changeReviewer(value:string){setReviewer(value);if(value.trim().length>=2&&error.startsWith("Enter a reviewer name"))setError("");}
+ function lock(){setToken("");setAuthenticated(false);setResult(null);setAudit(null);setSelected(null);setConfirmation(null);setNote("");setVerified(false);setError("");setMessage("");setView("dashboard");setSearch("");setCharacter("");setQueue("pending");setPage(1);setHealth(null);}
+ async function request(path:string,options:RequestInit={}){
+  const response=await fetch(path,{...options,cache:"no-store",headers:{Authorization:"Bearer "+token.trim(),...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
+  const data=await response.json();
+  if(!response.ok){if(response.status===401)lock();throw new Error(data.error||`Request failed (${response.status}).`);}
+  return data;
+ }
+ function select(build:Build|null){setSelected(build);setNote("");setVerified(false);setConfirmation(null);}
+ async function load(target=1,status=queue,query=search,filter=character){
+  setBusy(true);setError("");
+  try{
+   const data:Results=await request('/api/moderation?'+new URLSearchParams({page:String(target),status,search:query,character:filter}));
+   setResult(data);setPage(target);setQueue(status);setAuthenticated(true);
+   select(data.builds[0]||null);
+   return data;
+  }catch(cause){setError(cause instanceof Error?cause.message:"Could not load submissions. Try Refresh.");}
+  finally{setBusy(false);}
+ }
+ async function loadAudit(target=1){setBusy(true);setError("");try{setAudit(await request('/api/moderation?'+new URLSearchParams({view:'audit',page:String(target),search})));}catch(cause){setError(cause instanceof Error?cause.message:'Could not load audit history.');}finally{setBusy(false);}}
+ async function navigate(next:View){setView(next);setMessage("");setError("");setSearch("");setCharacter("");setConfirmation(null);
+  if(next==='audit'){setBusy(true);try{setAudit(await request('/api/moderation?view=audit'));}catch(cause){setError(cause instanceof Error?cause.message:'Could not load history.');}finally{setBusy(false);}}
+  else if(next==='system'){setBusy(true);try{setHealth(await request('/api/health'));}catch(cause){setError(cause instanceof Error?cause.message:'Could not check system health.');}finally{setBusy(false);}}
+  else await load(1,next==='players'?'approved':'pending','', '');
+ }
+ async function action(kind:"approved"|"rejected"|"deleted"|"verified",value=false){
+  if(!selected||busy)return;
+  if(reviewer.trim().length<2){setError('Enter a reviewer name (at least 2 characters) before taking an action.');setConfirmation(null);reviewerInput.current?.focus();return;}
+  const target=selected;setBusy(true);setError("");setMessage("");
+  try{
+   const method=kind==='deleted'?'DELETE':kind==='verified'?'PATCH':'POST';
+   await request('/api/moderation',{method,body:JSON.stringify({id:target.id,action:kind,confirm:kind==='deleted',reviewer:reviewer.trim(),note,identityVerified:kind==='verified'?value:verified})});
+   setConfirmation(null);setNote("");setVerified(false);
+   const label=kind==='approved'?`Approved ${target.character}. The build is now public.`:kind==='rejected'?`Rejected and deleted ${target.character}.` :kind==='deleted'?`Deleted ${target.character} and its stored evidence.`:value?'Player verified. Eligible approved builds can now rank.':'Player verification revoked. Their builds no longer rank.';
+   // The mutation succeeded even if a subsequent refresh fails: report it clearly.
+   setMessage(label);
+   const data:Results=await request('/api/moderation?'+new URLSearchParams({page:String(page),status:queue,search,character}));
+   if(!data.builds.length&&page>1){await load(page-1);}else{setResult(data);select(data.builds.find(b=>b.id===target.id)||data.builds[0]||null);}
+  }catch(cause){setError(cause instanceof Error?cause.message:'Action failed. Refresh before trying again.');}
+  finally{setBusy(false);}
+ }
+ const overview=result?.overview;
+ const active=result?.builds||[];
+ return <section className={`moderation-panel bs-console ${authenticated?'bs-unlocked':'bs-locked'}`} aria-label="Moderator workspace">
+ {!authenticated?<div className="bs-login"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMINISTRATION</small></div></Link><span className="eyebrow">Restricted access</span><h1>Open the review desk.</h1><p>Manage submissions and player verification with your private moderator token.</p>
+  <form onSubmit={e=>{e.preventDefault();void load(1,'pending','','');}}>
+   <label className="field"><span>Moderator token</span><input type="password" autoComplete="off" required minLength={32} value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your moderator token" /></label>
+   <label className="field"><span>Reviewer name (audit trail)</span><input required minLength={2} maxLength={64} value={reviewer} onChange={e=>changeReviewer(e.target.value)} /><small>This label is recorded with every decision.</small></label>
+   <button className="action" disabled={busy}>{busy?'Checking access…':'Unlock review desk'}</button>
+  </form><small>Token access only. Your token stays in memory and is cleared on reload or when you lock the desk.</small><Link className="text-link" href="/">← Return to website</Link>
+ </div>:<div className="bs-shell">
+  <aside className="bs-sidebar"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMIN</small></div></Link><nav aria-label="Administration">{([['dashboard','◫','Dashboard'],['submissions','▣','Submissions'],['players','◈','Players & builds'],['audit','◷','Audit history'],['system','⚙','System status']] as const).map(([key,icon,label])=><button key={key} className={view===key?'active':''} aria-current={view===key?'page':undefined} disabled={busy} onClick={()=>navigate(key)}><span aria-hidden="true">{icon}</span>{label}{key==='submissions'&&Boolean(overview?.pending)&&<small>{overview?.pending}</small>}</button>)}</nav><div className="bs-sidebar-footer"><strong>{reviewer || 'Moderator'}</strong><span>Shared-token access</span><Link href="/profiles">View public website ↗</Link><button className="outline-button" disabled={busy} onClick={lock}>Lock review desk</button></div></aside>
+  <div className="bs-main"><header className="bs-top"><span><i className="status-dot"/> Connected to live data</span><button className="outline-button" disabled={busy} onClick={()=>view==='audit'?loadAudit(audit?.page||1):view==='system'?navigate('system'):load(page)}>{busy?'Working…':'Refresh'}</button></header>
+   <div className="bs-content"><div className="bs-heading"><div><span className="eyebrow">Tacet Discords / Black Shores</span><h1>{names[view]}</h1><p>{view==='dashboard'?'Review submissions, verify players, and track every moderation decision.':view==='audit'?'Server-recorded decisions, including deleted submissions.':view==='system'?'Current database connectivity and scoring availability.':'Select a build to inspect its five Echoes and take action.'}</p></div><span className="bs-pill">Authenticated workspace</span></div>
+    <div aria-live="polite">{message&&<p className="bs-success" role="status">✓ {message}</p>}{error&&!confirmation&&<p className="field-error bs-error" role="alert">{error}</p>}</div>
+    {view==='dashboard'&&overview&&<div className="bs-metrics">{[[overview.pending,'Pending submissions','Awaiting a decision'],[overview.unverified,'Unverified players','Approved players needing identity checks'],[overview.approved,'Approved builds','Visible in public Profiles'],[overview.players,'Players','UIDs with stored builds']].map(([value,label,detail])=><div key={String(label)}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>)}</div>}
+    {['dashboard','submissions','players'].includes(view)&&<>
+     <div className="bs-panel bs-controls"><form onSubmit={e=>{e.preventDefault();void load(1);}}><label><span>Find UID or IGN</span><input aria-label="Find UID or IGN" placeholder="UID, IGN, or submission ID…" value={search} maxLength={64} onChange={e=>setSearch(e.target.value)} /></label><label><span>Review queue</span><select aria-label="Review queue" value={queue} disabled={busy} onChange={e=>{setQueue(e.target.value);void load(1,e.target.value);}}><option value="pending">Pending submissions</option><option value="approved">Approved builds</option></select></label><label><span>Character</span><input aria-label="Filter character" placeholder="All characters" value={character} maxLength={64} onChange={e=>setCharacter(e.target.value)} /></label><button className="action" disabled={busy}>Apply filters</button></form></div>
+     <div className="bs-workspace"><section className="bs-panel bs-queue"><div className="bs-panel-heading"><h2>{queue==='pending'?'Pending submissions':'Approved builds'}</h2><span className="bs-pill">Page {page}</span></div>
+      {!active.length?<p className="bs-empty">{queue==='pending'?'No pending submissions.':'No approved builds found.'}</p>:<div className="bs-rows">{active.map(build=><button key={build.id} className={`bs-row ${selected?.id===build.id?'selected':''}`} disabled={busy} onClick={()=>select(build)} aria-label={`Review ${build.character} by ${build.ign}`}><span className="bs-avatar">{build.character.slice(0,2).toUpperCase()}</span><span><strong>{build.character}</strong><span>{build.ign} · {build.uid}</span><small>{date(build.createdAt)}</small></span><span className={`scan-chip ${build.status==='approved'?'passed':'needs-review'}`}>{build.status}</span></button>)}</div>}
+      <div className="pagination"><button className="outline-button" disabled={busy||page<=1} onClick={()=>load(page-1)}>Previous</button><span>{page}</span><button className="outline-button" disabled={busy||!result?.hasMore} onClick={()=>load(page+1)}>Next</button></div>
+     </section>
+     <section className="bs-panel bs-review" aria-label="Selected submission">{selected?<>
+      <div className="bs-panel-heading"><div><span className="eyebrow">Selected submission</span><h2>{selected.character} · {selected.ign}</h2></div><span className="bs-pill">Stats locked</span></div>
+      <div className="bs-review-fields"><label className="field"><span>Reviewer name (audit trail)</span><input ref={reviewerInput} value={reviewer} maxLength={64} onChange={e=>changeReviewer(e.target.value)} /></label><label className="field"><span>Review note</span><textarea value={note} maxLength={500} onChange={e=>setNote(e.target.value)} placeholder="Optional context for the audit history" /></label></div>
+      {selected.status==='pending'&&<label className="publish-consent"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)} /><span>I manually matched this UID/IGN to the member outside the website.</span></label>}
+      <p className="bs-action-help">{selected.status==='pending'?'Approval publishes this build. Ranking also requires eligible scoring evidence and manual identity verification.':'Verification changes apply to every approved build for this UID. Deletion removes only the selected build.'}</p>
+      <div className="bs-review-actions">{selected.status==='pending'?<><button className="action" disabled={busy} onClick={()=>action('approved')}>Approve {selected.character}</button><button className="outline-button admin-danger" disabled={busy} onClick={()=>setConfirmation('rejected')}>Reject &amp; delete {selected.character}</button></>:<><button className="action" disabled={busy} onClick={()=>action('verified',!selected.identityVerified)}>{selected.identityVerified?'Unverify':'Verify'} {selected.uid}</button><button className="outline-button admin-danger" disabled={busy} onClick={()=>setConfirmation('deleted')}>Delete {selected.character}</button></>}</div>
+      <BuildCard key={selected.id} build={selected} token={token.trim()} />
+     </>:<div className="bs-empty"><h2>Nothing selected</h2><p>Select a submission from the queue to review its Echoes and available actions.</p></div>}</section></div>
+     {view==='dashboard'&&<section className="bs-panel bs-recent"><div className="bs-panel-heading"><h2>Recent moderation activity</h2><button className="text-link" disabled={busy} onClick={()=>navigate('audit')}>View history →</button></div><Activity events={result?.activity||[]} /></section>}
     </>}
-    {error && <p role="alert" className="field-error">{error}</p>}
-    {result && <>
-      <label className="field"><span>Reviewer name (audit trail)</span><input value={reviewer} onChange={e => setReviewer(e.target.value)} maxLength={64} /></label>
-      <label className="field"><span>Review note</span><textarea value={note} onChange={e => setNote(e.target.value)} maxLength={500} /></label>
-      {view==="pending" && <label><input type="checkbox" checked={verified} onChange={e => setVerified(e.target.checked)} /> I manually matched this UID/IGN to the member outside the website.</label>}
-      {!result.builds.length && <p>{view==="pending"?"No pending submissions.":"No approved players found."}</p>}
-      {result.builds.map(build => <div key={build.id}><BuildCard build={build} token={token} />
-        <div className="hero-actions">{view==="pending"?<><button className="action" disabled={busy || reviewer.trim().length < 2} onClick={() => review(build.id, "approved")}>Approve {build.character}</button><button className="outline-button admin-danger" disabled={busy || reviewer.trim().length < 2} onClick={() => setConfirmReject(build.id)}>Reject &amp; delete {build.character}</button></>:<button className="action" disabled={busy||reviewer.trim().length<2} onClick={()=>verify(build.id,!build.identityVerified)}>{build.identityVerified?"Unverify":"Verify"} {build.uid}</button>}</div>
-        {confirmReject === build.id && <div className="workspace-note" role="alert"><p>Permanently delete this {build.character} submission and all ten stored crops? This cannot be undone.</p><button className="outline-button admin-danger" disabled={busy} onClick={() => review(build.id, "rejected")}>Confirm rejection &amp; delete</button> <button className="outline-button" disabled={busy} onClick={() => setConfirmReject(null)}>Cancel</button></div>}
-      </div>)}
-      <div className="pagination"><button className="outline-button" disabled={busy || page === 1} onClick={() => load(page - 1)}>Previous</button><span>Page {page}</span><button className="outline-button" disabled={busy || !result.hasMore} onClick={() => load(page + 1)}>Next</button></div>
-    </>}
-  </section>;
+    {view==='audit'&&<section className="bs-panel"><form className="bs-audit-search" onSubmit={e=>{e.preventDefault();void loadAudit(1);}}><label className="field"><span>Search audit history</span><input value={search} maxLength={64} onChange={e=>setSearch(e.target.value)} placeholder="Submission ID, reviewer or action" /></label><button className="action" disabled={busy}>Search history</button></form><Activity events={audit?.events||[]} /><div className="pagination"><button className="outline-button" disabled={busy||(audit?.page||1)<=1} onClick={()=>loadAudit((audit?.page||1)-1)}>Previous</button><span>Page {audit?.page||1}</span><button className="outline-button" disabled={busy||!audit?.hasMore} onClick={()=>loadAudit((audit?.page||1)+1)}>Next</button></div></section>}
+    {view==='system'&&<section className="bs-panel"><h2>Service health</h2><dl className="bs-system"><div><dt>Database and configuration</dt><dd>{health?.ok?'Ready':'Unavailable'}</dd></div><div><dt>Scoring categories</dt><dd>{health?.scoring.supportedCharacters.join(', ')||'Unavailable'}</dd></div><div><dt>Metric</dt><dd>{health?.scoring.metric||'Unavailable'}</dd></div><div><dt>Access</dt><dd>Server-enforced moderator token</dd></div><div><dt>Evidence retention</dt><dd>Rejected/deleted builds lose their stored crops. Decision history is preserved.</dd></div></dl></section>}
+   </div>
+  </div>
+ </div>}
+ {!authenticated&&error&&<p className="field-error bs-login-error" role="alert">{error}</p>}
+ <dialog ref={dialog} className="bs-confirm" onCancel={e=>{e.preventDefault();if(!busy)setConfirmation(null);}} aria-labelledby="confirm-title"><span className="eyebrow">Permanent action</span><h2 id="confirm-title">{confirmation==='deleted'?'Delete this build?':'Reject and delete this submission?'}</h2><p>This removes {selected?.character} for {selected?.ign}, its ten image crops and its ranking result. Other builds from the same player stay intact. A decision record is kept in the audit history.</p>{confirmation&&error&&<p className="field-error" role="alert">{error}</p>}<div className="bs-review-actions"><button className="outline-button" disabled={busy} onClick={()=>setConfirmation(null)}>Cancel</button><button className="outline-button admin-danger" disabled={busy} onClick={()=>confirmation&&action(confirmation)}>{busy?'Deleting…':confirmation==='deleted'?'Confirm permanent deletion':'Confirm rejection & delete'}</button></div></dialog>
+ </section>;
 }
