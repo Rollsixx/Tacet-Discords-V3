@@ -15,12 +15,12 @@ test('state machine rejects incomplete rules and tracks repeat resources, bounds
  const cooldown=structuredClone(syntheticModel);Object.assign(cooldown.actions['skill:ArtofViolenceDMG'],{cooldownKey:'skill',cooldownMs:2000});assert.equal(simulate({...spec,actions:[{...spec.actions[0],count:2}]},cooldown).valid,false);
 });
 test('drafts autosave with revision CAS, engine catalog validation and fail-closed publication',async()=>{
- const db=createClient({url:'file::memory:'});try{await migrate(db);await seed(db);const before=await listBuilds({},db);const workspace=await rotationWorkspace(db,'Carlotta');assert.equal(workspace.characters.length,5);assert.equal(workspace.active.kind,'baseline');assert.ok(workspace.catalog.length>10);
+ const db=createClient({url:'file::memory:'});try{await migrate(db);await seed(db);const before=await listBuilds({},db);const workspace=await rotationWorkspace(db,'Carlotta');assert.equal(workspace.characters.length,10);assert.equal(workspace.active.kind,'baseline');assert.ok(workspace.catalog.length>10);
  const saved=await saveRotationDraft(db,'Carlotta',spec,0);assert.equal(saved.revision,1);await assert.rejects(saveRotationDraft(db,'Carlotta',{...spec,name:'Conflicting tab'},0),e=>e.status===409);
  await assert.rejects(normalizeSpec('Carlotta',{...spec,actions:[{...spec.actions[0],buffs:[{modifier:'ATK',modifierValue:999}]}]}));
  await assert.rejects(normalizeSpec('Carlotta',{...spec,actions:[{type:'skill',key:'InventedAttack',count:1}]}));
  assert.equal((await validateRotationDraft(db,'Carlotta',1)).valid,false);const sample=await sampleRotationDraft(db,'Carlotta',1);assert.equal(sample.provisional,true);assert.equal(sample.builds.length,1);assert.ok(sample.builds[0].score>0);assert.equal(sample.builds[0].actions.length,1);
- await assert.rejects(startRotationPreview(db,'Carlotta',1),e=>e.status===422);assert.deepEqual((await listBuilds({},db)).builds.map(b=>[b.id,b.score,b.identityVerified]),before.builds.map(b=>[b.id,b.score,b.identityVerified]));await initializeRotations(db);assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM rotation_versions')).rows[0].n),5);
+ await assert.rejects(startRotationPreview(db,'Carlotta',1),e=>e.status===422);assert.deepEqual((await listBuilds({},db)).builds.map(b=>[b.id,b.score,b.identityVerified]),before.builds.map(b=>[b.id,b.score,b.identityVerified]));await initializeRotations(db);assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM rotation_versions')).rows[0].n),10);
  }finally{db.close();}
 });
 test('version staging, continuing submissions, atomic activation, approval catch-up, history and rollback',async()=>{

@@ -24,4 +24,15 @@ export const TACET_WINDOWS={
   data:{actions:[action('liberation','MomentofNihilityDMG'),action('skill','SerratedLoopDMG'),action('forteCircuit','SawringBlitzStage2DMG'),action('forteCircuit','SawringBlitzStage3DMG'),action('forteCircuit','SawringEradicationDMG')]},
  },
 };
-export function scoringPreset(character,data){return data.rotations[0]||TACET_WINDOWS[character];}
+const EXPANDED_ROSTER=new Set(['Suoming','Jingran','Hsin','Qingxiao','Suisui']);
+export function scoringPreset(character,data){
+ const preset=data.rotations[0]||TACET_WINDOWS[character];
+ if(!preset||!EXPANDED_ROSTER.has(character))return preset;
+ // Preserve pinned action order and counts. Fixed Echo damage and healing are
+ // not a universal resonator-damage benchmark. Split large counts for editing.
+ const tables={basic:data.basicAttacks,skill:data.skillAttacks,forteCircuit:data.forteCircuitAttacks,liberation:data.liberationAttacks,intro:data.introAttacks,outro:data.outroAttacks,tuneBreak:data.tuneBreakAttacks};
+ const actions=preset.data.actions.filter(a=>!a.isDisabled&&a.type!=='echoAttacks'&&tables[a.type]?.attacks?.some(x=>x.key===a.key&&!['Healing','Shield','ElementalEffect'].includes(x.type))).flatMap(a=>{
+  const rows=[];for(let left=Number(a.count||1);left>0;left-=20)rows.push({...a,count:Math.min(left,20)});return rows;
+ });
+ return {...preset,name:'Standardized '+preset.name,data:{...preset.data,actions},provenance:'Tacet adaptation of pinned upstream preset by '+preset.author+'. Fixed Echo attacks, healing, shielding and status-proc damage excluded; original remaining action order and repeat counts retained.',startState:'Resource availability assumed by the pinned upstream preset. Level 90, S0, signature R1, permanent passives only; no team buffs. This is a damage benchmark, not an automatic combat simulation.'};
+}

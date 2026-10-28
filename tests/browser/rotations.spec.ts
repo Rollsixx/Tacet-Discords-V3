@@ -5,7 +5,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  expect((await request.get('/api/admin/rotations')).status()).toBe(401);
  await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();await expect(page.getByText('Optimizer connected · Owner-reviewed benchmark',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(5);
+ await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(10);
  await page.getByLabel('Evaluation mode').selectOption('admin-reviewed');await page.getByLabel('Starting conditions & combat review notes').fill('');
  await page.getByLabel('Rotation name',{exact:true}).fill('Browser draft '+info.project.name);
  await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
@@ -26,4 +26,16 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  await expect.poll(()=>page.locator('.rotation-actions li').nth(1).locator('div').first().evaluate(el=>el.getBoundingClientRect().width)).toBeGreaterThan(120);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('rotation-editor.png'),fullPage:true});
  await page.reload();await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await expect(page.getByLabel('Rotation name',{exact:true})).toHaveValue('Browser draft '+info.project.name);expect(errors).toEqual([]);
+});
+
+test('expanded leaderboard categories load with local portraits',async({page},info)=>{
+ await page.goto('/leaderboards');
+ for(const name of ['Suoming','Jingran','Hsin','Qingxiao','Suisui']){
+  const response=page.waitForResponse(r=>r.url().includes('/api/public/leaderboards?')&&new URL(r.url()).searchParams.get('character')===name);
+  await page.locator('.lb-character-tabs button').filter({hasText:name}).click();expect((await response).status()).toBe(200);
+  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+  const portrait=page.locator('.lb-character-tabs button').filter({hasText:name}).locator('img');await expect.poll(()=>portrait.evaluate((img:HTMLImageElement)=>img.complete&&img.naturalWidth>0)).toBe(true);
+ }
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:info.outputPath('expanded-roster.png'),fullPage:true});
 });

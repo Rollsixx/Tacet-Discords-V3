@@ -1,7 +1,7 @@
 {
   "version": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
-  "sha256": "90bfbbd75faef1ab139214ac1248c9bd1e2e6a56059a242dd694990e07ac80f2",
-  "characters": 5,
+  "sha256": "1e1b04e2e167f51b23884effb2a164ca2abc1a8eede749183212bb9480d21720",
+  "characters": 10,
   "echoes": 230,
   "sets": 37,
   "supported": [
@@ -9,7 +9,12 @@
     "Cartethyia",
     "Aemeath",
     "Hiyuki",
-    "Chisa"
+    "Chisa",
+    "Suoming",
+    "Jingran",
+    "Hsin",
+    "Qingxiao",
+    "Suisui"
   ],
   "unsupported": {}
 }

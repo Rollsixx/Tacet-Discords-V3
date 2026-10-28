@@ -1,4 +1,5 @@
 "use client";
+import {featuredResonators} from "@/lib/resonators";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -79,9 +80,9 @@ function DirectoryContent({ mode }: { mode: "profiles" | "leaderboards" | "recen
   return <section>
     {mode !== "recent" && <div className="leaderboard-controls">
       <label className="field"><span>Search UID or in-game name</span><input type="search" maxLength={64} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Player UID or IGN" /></label>
-      <label className="field"><span>{mode === 'leaderboards' ? 'Scoring category' : 'Character (exact name, optional)'}</span>{mode === "leaderboards" ? <select aria-label="Scoring category" value={character} onChange={e => {setCharacter(e.target.value);setPage(1);}}>{!["Carlotta","Cartethyia","Aemeath","Hiyuki","Chisa"].includes(character) && <option value={character} disabled>{character} — scoring unavailable</option>}<option>Carlotta</option><option>Cartethyia</option><option>Aemeath</option><option>Hiyuki</option><option>Chisa</option></select> : <input maxLength={64} value={character} onChange={e => { setCharacter(e.target.value); setPage(1); }} placeholder="All characters" />}</label>
+      <label className="field"><span>{mode === 'leaderboards' ? 'Scoring category' : 'Character (exact name, optional)'}</span>{mode === "leaderboards" ? <select aria-label="Scoring category" value={character} onChange={e => {setCharacter(e.target.value);setPage(1);}}>{!featuredResonators.some(r=>r.name===character) && <option value={character} disabled>{character} — scoring unavailable</option>}{featuredResonators.map(r=><option key={r.name}>{r.name}</option>)}</select> : <input maxLength={64} value={character} onChange={e => { setCharacter(e.target.value); setPage(1); }} placeholder="All characters" />}</label>
     </div>}
-    {mode === "leaderboards" && <div className="workspace-note"><h2>Standardized Solo damage rankings</h2><p className="muted">Expected benchmark damage, not DPS. Level 90, talents 10, S0, signature weapon R1, permanent passives only, no team buffs; level 90 enemy with 10% resistance. One best build per verified player, sorted by score. Carlotta, Cartethyia, Aemeath, Hiyuki and Chisa are supported. Hiyuki and Chisa use explicitly defined Tacet damage windows with normalized starting resources.</p></div>}
+    {mode === "leaderboards" && <div className="workspace-note"><h2>Standardized Solo damage rankings</h2><p className="muted">Expected benchmark damage, not DPS. Level 90, talents 10, S0, signature weapon R1, permanent passives only, no team buffs; level 90 enemy with 10% resistance. One best build per verified player, sorted by score. {featuredResonators.map(r=>r.name).join(", ")} are supported. Hiyuki and Chisa use explicitly defined Tacet damage windows with normalized starting resources.</p></div>}
     {loading ? <p role="status">Loading approved builds…</p> : error ? <p role="alert" className="field-error">{error}</p> : <>
       {!result?.builds.length && <div className="placeholder"><h3>No approved builds found</h3><p className="muted">Try another search, or <Link className="text-link" href="/import">submit a build</Link> for moderation.</p></div>}
       {(mode === "recent" ? result?.builds.slice(0, 3) : result?.builds)?.map(build => <div key={build.id}>

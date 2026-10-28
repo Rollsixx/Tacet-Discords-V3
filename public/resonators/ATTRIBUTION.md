@@ -14,3 +14,10 @@ Aemeath.png: 8890df3117a9b8bd5c1c77e0f62848aa18870ded
 Chisa.png: c639e1b8b05da789bbc2dd99fb99009e42054f8f
 Carlotta.png: fa8967921caa204552733b734e6624a16758c626
 Cartethyia.png: f4e1f25cf821ad9a3905b28d2ffbd79de63d2a06
+
+Expanded roster portraits, same upstream asset repository:
+Suoming.png: 9975c0c29394bc8ccd9b43f5bfce3647fa473900
+Jingran.png: 540579a9c94720b6d1ca75c2b1ef8182fa9983e8
+Hsin.png: 9825ed22dd1d4b7136e0612125174f4eca0213db
+Qingxiao.png: 6a8568f8c97c233fe7934a4d9b37097d4cf18aa8
+Suisui.png: ba9b6cc3e4f513fe0df0f91d5018be3564a8ec31

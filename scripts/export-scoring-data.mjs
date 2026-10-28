@@ -3,7 +3,7 @@ import {writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {SCORING_CHARACTERS,scoringPreset} from '../src/lib/game-data/scoring-policies.mjs';
 const characters=[];
-for(const key of ['Hiyuki','Chisa','Aemeath','Carlotta','Cartethyia']){
+for(const key of SCORING_CHARACTERS){
  const c=await engine.getCharByName(key),w=await engine.getWeaponByName(c.basic.weapon,c.basic.signatureWeapon);
  characters.push({key,name:c.basic.name,element:c.basic.element,base90:c.getCharacterStatsByLevel('90'),signatureWeapon:c.basic.signatureWeapon,weapon90:w.getWeaponDataByLevel('90'),weaponPassives:w.info.passiveData,rotationAvailable:Boolean(scoringPreset(key,c)),scoringPreset:scoringPreset(key,c),rotations:c.rotations.map(r=>({name:r.name,author:r.author,actions:r.data.actions})),attackTables:Object.fromEntries(['basicAttacks','skillAttacks','liberationAttacks','forteCircuitAttacks','introAttacks','outroAttacks','tuneBreakAttacks'].map(k=>[k,c[k]])),buffs:c.buffs,resonanceChains:c.resonanceChains});
 }

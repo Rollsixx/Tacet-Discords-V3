@@ -2,7 +2,7 @@
 // Reviewed mechanics adapters belong here, never in administrator-supplied JSON.
 // Do not mark a model complete until energy, timing, cooldowns, conditional
 // character/weapon/Sonata buffs, transformations and terminal state are verified.
-export const ROTATION_ROSTER=['Carlotta','Cartethyia','Aemeath','Hiyuki','Chisa'];
+export const ROTATION_ROSTER=['Carlotta','Cartethyia','Aemeath','Hiyuki','Chisa','Suoming','Jingran','Hsin','Qingxiao','Suisui'];
 export const MECHANICS_MODELS=Object.fromEntries(ROTATION_ROSTER.map(character=>[character,{
  character,version:'unverified',complete:false,
  sourceCommit:'b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5',
