@@ -36,7 +36,7 @@ test("real reference card produces four occupied slots and blocks invented fifth
   for (let slot = 1; slot <= 4; slot++) await expect(page.getByRole("textbox", { name: `Echo ${slot} cost`, exact: true })).toHaveValue(costs[slot - 1]);
   await expect(page.getByRole("textbox", { name: "Echo 5 cost", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Submit for moderation" })).toBeDisabled();
-  const values = await page.locator('input[aria-label^="Echo "]').evaluateAll(inputs => inputs.map(input => ({ label: input.getAttribute("aria-label"), value: (input as HTMLInputElement).value })));
+  const values = await page.locator('input[aria-label^="Echo "],textarea[aria-label^="Echo "]').evaluateAll(inputs => inputs.map(input => ({ label: input.getAttribute("aria-label"), value: (input as HTMLInputElement).value })));
   expect(values.slice(0, 28).map(item => item.value)).toEqual(occupiedFields.flat());
   writeFileSync(testInfo.outputPath("ocr-observation.json"), JSON.stringify(values, null, 2));
   await testInfo.attach("actual-ocr-output", { body: JSON.stringify(values, null, 2), contentType: "application/json" });
@@ -73,9 +73,9 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   const fields = [...occupiedFields, occupiedFields[3]];
   for (let index = 0; index < 5; index++) {
     const [cost, main, ...stats] = fields[index];
-    await page.getByRole("textbox", { name: `Echo ${index + 1} cost`, exact: true }).fill(cost);
-    await page.getByRole("textbox", { name: `Echo ${index + 1} main stat`, exact: true }).fill(main);
-    for (let stat = 0; stat < 5; stat++) await page.getByRole("textbox", { name: `Echo ${index + 1} substat ${stat + 1}`, exact: true }).fill(stats[stat]);
+    await expect(page.getByRole("textbox", { name: `Echo ${index + 1} cost`, exact: true })).toHaveValue(cost);
+    await expect(page.getByRole("textbox", { name: `Echo ${index + 1} main stat`, exact: true })).toHaveValue(main);
+    for (let stat = 0; stat < 5; stat++) await expect(page.getByRole("textbox", { name: `Echo ${index + 1} substat ${stat + 1}`, exact: true })).toHaveValue(stats[stat]);
   }
   const uid = await page.getByLabel("Wuthering Waves UID", { exact: true }).inputValue();
   expect(uid).toMatch(/^[0-9]{8,12}$/);
@@ -88,6 +88,10 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   let saved = await response.json();
   const submittedBody = response.request().postDataJSON();
   await expect(page.getByText("Build saved · Pending moderation")).toBeVisible();
+  await expect(page.getByLabel("In-game name", {exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button", {name:"Copy submission ID",exact:true})).toBeVisible();
+  for(const field of await page.locator(".echo-fields input,.echo-fields textarea").all()) await expect(field).not.toBeEditable();
+  await page.getByLabel("Submission confirmation").screenshot({path:testInfo.outputPath("saved-build-receipt.png")});
   expect((await (await request.get("/api/public/builds?search=" + uid)).json()).builds).toHaveLength(0);
   await page.goto("/BlackShores");
   await page.getByLabel("Moderator token", { exact: true }).fill("browser-test-only-token-00000000000000000000");

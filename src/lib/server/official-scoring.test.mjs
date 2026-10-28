@@ -100,3 +100,24 @@ test('Tacet windows agree with the independent hit core and explicit level-10 ki
   assert.match(result.rotationOrigin,/Tacet-authored/);assert.ok(result.startState.length>80);
  }
 });
+
+
+test('locked Echo evidence rejects altered values even for unscored characters', {skip:!originals||!process.env.USER_BUILD_CARD_UID,timeout:60000},async()=>{
+ const card=cards.find(c=>c.file.startsWith('Carlotta'));
+ const source=await readFile(originals+'/'+card.file);
+ const original=inputFor(card);
+ const tampered=structuredClone(original);
+ tampered.slots[0].substats[0]={raw:'Crit. DMG 21%',value:'Crit. DMG 21%'};
+ const db=createClient({url:'file::memory:'});
+ try{
+  await migrate(db);
+  const input={...validateSubmission(fixture(original.uid)),...tampered,sourceImage:source};
+  await assert.rejects(submit(input,db,true),e=>e.status===400&&/Echo stats/.test(e.message));
+  // Draw an unsupported QA character over the header; reuse only this local
+  // source fixture. Unsupported scoring must still enforce every numeric stat.
+  const overlay=Buffer.from('<svg width="750" height="80"><rect width="750" height="80" fill="#100d18"/><text x="65" y="68" font-size="54" font-family="sans-serif" fill="white">TestRover</text></svg>');
+  const unsupportedSource=await sharp(source).composite([{input:overlay,left:0,top:0}]).png().toBuffer();
+  await assert.rejects(submit({...input,character:'TestRover',sourceImage:unsupportedSource},db,true),e=>e.status===400&&/Echo stats/.test(e.message));
+  assert.equal((await listBuilds({pending:true},db)).builds.length,0);
+ }finally{db.close();}
+});

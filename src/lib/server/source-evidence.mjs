@@ -10,7 +10,7 @@ let active=false;
 export async function assessSource(input){
  if(!input.sourceImage)return {eligible:false,reason:'Original screenshot evidence is required for scoring.'};
  if(active)return {eligible:false,reason:'Scoring worker busy; resubmit later for scoring.'};
- active=true;let worker;let sourceUid;
+ active=true;let worker;let sourceUid;let statsVerified=false;let sourceSlots;
  try{
   const image=input.sourceImage;
   const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
@@ -28,8 +28,7 @@ export async function assessSource(input){
   const uidText=await read({left:15,top:109,width:300,height:28});
   sourceUid=uidText.replace(/[^0-9]/g,'');
   if(sourceUid!==input.uid)throw Error('Source UID does not match the submitted UID.');
-  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,reason:'No validated rotation policy is available for this character.'};
-  const slots=[];
+  const slots=[];let levelIssue;
   for(let i=0;i<5;i++){
    const offset=i*374,client=input.slots[i];
    let cost=await read({left:336+offset,top:674,width:18,height:24});
@@ -45,7 +44,7 @@ export async function assessSource(input){
    const numbers=amount.match(/\d+(?:\.\d+)?/g)||[];
    const stat={ATK:'ATK',DEF:'DEF',HP:'HP','Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Healing Bonus':'HealingBonus'}[client.mainStat.value]||client.mainStat.value.replace(' DMG Bonus','');
    const expected=engine.statsTable[Number(cost)]?.[stat]?.[5];
-   if(!expected||!numbers.some(n=>Math.abs(Number(n)-expected)<.01))throw Error('Max-level main-stat amount could not be confirmed in slot '+(i+1)+'.');
+   if(!expected||!numbers.some(n=>Math.abs(Number(n)-expected)<.01))levelIssue='Max-level main-stat amount could not be confirmed in slot '+(i+1)+'.';
    const substats=[];
    for(const [j,top] of [880,918,950,984,1019].entries()){
     const raw=await read({left:64+offset,top,width:320,height:28});
@@ -55,9 +54,12 @@ export async function assessSource(input){
    }
    slots.push({slot:i+1,cost:{raw:cost,value:cost},mainStat:{raw:main,value:client.mainStat.value},substats});
   }
+  statsVerified=true;sourceSlots=slots;
+  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,sourceSlots,reason:'No validated rotation policy is available for this character.'};
+  if(levelIssue)return {eligible:false,sourceUid,statsVerified,sourceSlots,reason:levelIssue};
   const identities=await identifySlots(image,slots.map(x=>Number(x.cost.value)));
   const calculation=await calculateStandard(input.character,slots,identities);
-  return {eligible:true,sourceUid,reason:'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash:createHash('sha256').update(image).digest('hex'),calculation};
- }catch(error){return {eligible:false,sourceUid,reason:error instanceof Error?error.message:'Scoring validation failed.'};}
+  return {eligible:true,sourceUid,statsVerified,sourceSlots,reason:'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash:createHash('sha256').update(image).digest('hex'),calculation};
+ }catch(error){return {eligible:false,sourceUid,statsVerified,sourceSlots,reason:error instanceof Error?error.message:'Scoring validation failed.'};}
  finally{await worker?.terminate();active=false;}
 }

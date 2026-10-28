@@ -24,10 +24,11 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
   const assessment = await assessSource(input);
   if (requireSourceUid && assessment.reason.startsWith("Scoring worker busy")) throw new HttpError(429, "Scanner is busy. Please try again in a moment.");
   if (requireSourceUid && assessment.sourceUid !== input.uid) throw new HttpError(400, "Screenshot UID could not be confirmed. Upload a clear original card; UID cannot be changed.");
+  if (requireSourceUid && !assessment.statsVerified) throw new HttpError(400, "Echo stats could not be verified against the screenshot. Values cannot be edited; upload a clear original card and scan again.");
   const data = {
     assessment,
     character: input.character,
-    slots: input.slots.map(({ slot, cost, mainStat, substats }) => ({ slot, cost, mainStat, substats })),
+    slots: requireSourceUid ? assessment.sourceSlots : input.slots.map(({ slot, cost, mainStat, substats }) => ({ slot, cost, mainStat, substats })),
     recognition: "unverified",
   };
   const hash = createHash("sha256").update(input.uid).update(input.character.toLowerCase());

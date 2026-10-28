@@ -15,7 +15,7 @@ for (const card of expectations) test('original uploaded card: '+card.file, asyn
   await expect(page.locator('img[alt^="Extracted Echo portrait"]')).toHaveCount(5);
   await expect(page.locator('img[alt^="Extracted Sonata icon"]')).toHaveCount(5);
   await expect(page.getByRole('heading',{name:'5 Echo slots processed'})).toBeVisible({timeout:60000});
-  const values = await page.locator('input[aria-label^="Echo "]').evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value));
+  const values = await page.locator('input[aria-label^="Echo "],textarea[aria-label^="Echo "]').evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value));
   expect(values).toHaveLength(35);
   await expect(page.locator(".import-character h2")).toHaveText(card.file.split("(")[0]);
   if(process.env.USER_BUILD_CARD_UID) await expect(page.getByLabel("Wuthering Waves UID",{exact:true})).toHaveValue(process.env.USER_BUILD_CARD_UID);
@@ -45,7 +45,11 @@ test('automatic scan fills IGN and locks UID without exposing crossed-out panels
  await expect(page.locator('.import-character')).toHaveText(/Hiyuki/);
  await expect(page.locator('.import-character')).not.toContainText(/LV|90/);
  await expect(page.locator('.scan-pass')).toHaveCount(7);
+ const stats=page.locator('input[aria-label^="Echo "],textarea[aria-label^="Echo "]');
+ await expect(stats).toHaveCount(35);
+ for(const field of await stats.all()) await expect(field).not.toBeEditable();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.evaluate(()=>new Promise<void>(resolve=>{window.scrollTo(0,0);requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()));}));
  await page.screenshot({path:info.outputPath('automatic-import-review.png'),fullPage:true});
 });
 
@@ -68,6 +72,12 @@ test('all five official categories score only after approval and identity verifi
  await page.getByRole('button',{name:'Submit for moderation'}).click();
  const savedResponse=await save;
  expect(savedResponse.status(),await savedResponse.text()).toBe(201);
+ if(character === 'Carlotta') {
+  const forged=savedResponse.request().postDataJSON();
+  forged.slots[0].substats[0]={raw:'Crit. DMG 21%',value:'Crit. DMG 21%'};
+  const blocked=await request.post('/api/submissions',{data:forged});
+  expect(blocked.status()).toBe(400);expect((await blocked.json()).error).toContain('Echo stats');
+ }
  expect((await(await request.get('/api/public/leaderboards?character='+character)).json()).builds).toHaveLength(0);
  await page.goto('/BlackShores');
  await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
