@@ -1,5 +1,6 @@
-﻿import { createWorker, PSM } from "tesseract.js";
+import { createWorker, PSM } from "tesseract.js";
 import { recoverEchoCost } from "./cost-recovery";
+import { parseCardIdentity, type CardIdentity } from "./card-identity";
 import { hasEchoText } from "./slot-presence";
 
 export const CARD_WIDTH = 1920;
@@ -32,12 +33,15 @@ export type RecognitionResult = {
   height: number;
   slots: RecognizedSlot[];
   warnings: string[];
+  identity: CardIdentity;
 };
 
 export type RecognitionProgress = {
   completed: number;
   total: number;
   label: string;
+  identity?: CardIdentity;
+  slots?: RecognizedSlot[];
 };
 
 const SLOT_DISTANCE = 374;
@@ -166,7 +170,9 @@ export async function recognizeBuildCard(
   onProgress?: (progress: RecognitionProgress) => void,
 ): Promise<RecognitionResult> {
   const image = await decodeImage(file);
-  const total = SLOT_COUNT * 7;
+  const total = SLOT_COUNT * 7 + 3;
+  let identity: CardIdentity | undefined;
+  const slots: RecognizedSlot[] = [];
   let completed = 0;
 
   const worker = await createWorker("eng", 1, {
@@ -197,6 +203,8 @@ export async function recognizeBuildCard(
         completed,
         total,
         label,
+        identity,
+        slots: [...slots],
       });
 
       return {
@@ -205,7 +213,13 @@ export async function recognizeBuildCard(
       };
     }
 
-    const slots: RecognizedSlot[] = [];
+    await worker.setParameters({ tessedit_char_whitelist: "" });
+    const characterHeader = await read({ x: 65, y: 18, width: 640, height: 65 }, "Character");
+    const playerHeader = await read({ x: 15, y: 85, width: 300, height: 27 }, "In-game name");
+    const uidHeader = await read({ x: 15, y: 109, width: 300, height: 28 }, "UID");
+    identity = parseCardIdentity(characterHeader.value, playerHeader.value, uidHeader.value);
+    onProgress?.({ completed, total, label: "Player details scanned", identity, slots: [] });
+    await worker.setParameters({ tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ " });
     const warnings: string[] = [];
 
     for (let index = 0; index < SLOT_COUNT; index += 1) {
@@ -289,6 +303,7 @@ export async function recognizeBuildCard(
         mainStat,
         substats,
       });
+      onProgress?.({ completed, total, label: `Echo ${slotNumber} scanned`, identity, slots: [...slots] });
     }
 
     return {
@@ -296,6 +311,7 @@ export async function recognizeBuildCard(
       height: CARD_HEIGHT,
       slots,
       warnings,
+      identity,
     };
   } finally {
     await worker.terminate();

@@ -75,6 +75,13 @@ test('a source card with a different UID cannot obtain scoring evidence',{skip:!
  const card=cards.find(c=>c.file.startsWith('Carlotta'));
  const result=await assessSource({...inputFor(card),uid:'00000000',sourceImage:await readFile(originals+'/'+card.file)});
  assert.equal(result.eligible,false);assert.match(result.reason,/UID/);
+ const db=createClient({url:'file::memory:'});
+ try {
+  await migrate(db);
+  const forged={...validateSubmission(fixture('00000000')),character:'Carlotta',sourceImage:await readFile(originals+'/'+card.file)};
+  await assert.rejects(submit(forged,db,true),e=>e.status===400&&/UID/.test(e.message));
+  assert.equal((await listBuilds({pending:true},db)).builds.length,0);
+ }finally{db.close();}
 });
 
 test('Tacet windows agree with the independent hit core and explicit level-10 kit coefficients',async()=>{

@@ -30,7 +30,6 @@ test("real reference card produces four occupied slots and blocks invented fifth
   await page.getByLabel("Choose build screenshot").setInputFiles(fixture);
   await expect(page.locator('img[alt^="Extracted Echo portrait"]')).toHaveCount(5);
   await expect(page.locator('img[alt^="Extracted Sonata icon"]')).toHaveCount(5);
-  await page.getByRole("button", { name: "Recognize Echo stats" }).click();
   await expect(page.getByRole("heading", { name: "5 Echo slots processed" })).toBeVisible({ timeout: 150000 });
   await expect(page.getByRole("heading", { name: "Echo 5 — No equipped Echo detected" })).toBeVisible();
   const costs = ["4", "3", "1", "1"];
@@ -47,11 +46,13 @@ test("real reference card produces four occupied slots and blocks invented fifth
 });
 
 
-test("derived five-slot fixture completes OCR correction, pending save and moderator approval", async ({ page, request }, testInfo) => {
+test("derived five-slot fixture completes automatic scan, deletion and approval in private admin page", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "One submission lifecycle per isolated database.");
   test.skip(!existsSync(fixture), "Real source fixture is required.");
   await page.goto("/import");
   await page.getByLabel("Choose build screenshot").setInputFiles(fixture);
-  await expect(page.locator('img[alt="Selected build screenshot"]')).toBeVisible();
+  await expect(page.locator('img[alt="Selected build screenshot"]')).toBeAttached();
+  await expect(page.getByRole("heading", { name: "5 Echo slots processed" })).toBeVisible({ timeout: 60000 });
   // Duplicate slot 4 into slot 5 for workflow coverage only. This is a derived
   // test image, never described as an authentic complete five-Echo game card.
   const dataUrl = await page.locator('img[alt="Selected build screenshot"]').evaluate(image => {
@@ -60,10 +61,14 @@ test("derived five-slot fixture completes OCR correction, pending save and moder
     const context = canvas.getContext("2d")!;
     context.drawImage(source, 0, 0);
     context.drawImage(source, 1144, 650, 374, 430, 1518, 650, 374, 430);
+    // This reference has an unreadable UID. Give the derived QA fixture an
+    // explicitly synthetic header; never manufacture a UID for a real import.
+    context.fillStyle = "#100d18"; context.fillRect(0,0,750,145);
+    context.fillStyle = "white"; context.font = "54px sans-serif"; context.fillText("Hsin",65,70);
+    context.font = "20px sans-serif"; context.fillText("Player ID:Browser QA",20,100); context.fillText("UID:812341441",20,130);
     return canvas.toDataURL("image/png");
   });
   await page.getByLabel("Choose build screenshot").setInputFiles({ name: "derived-five-slot.png", mimeType: "image/png", buffer: Buffer.from(dataUrl.split(",")[1], "base64") });
-  await page.getByRole("button", { name: "Recognize Echo stats" }).click();
   await expect(page.getByRole("heading", { name: "5 Echo slots processed" })).toBeVisible({ timeout: 60000 });
   const fields = [...occupiedFields, occupiedFields[3]];
   for (let index = 0; index < 5; index++) {
@@ -72,27 +77,36 @@ test("derived five-slot fixture completes OCR correction, pending save and moder
     await page.getByRole("textbox", { name: `Echo ${index + 1} main stat`, exact: true }).fill(main);
     for (let stat = 0; stat < 5; stat++) await page.getByRole("textbox", { name: `Echo ${index + 1} substat ${stat + 1}`, exact: true }).fill(stats[stat]);
   }
-  const uid = testInfo.project.name === "desktop" ? "812341441" : "812341442";
-  await page.getByLabel("Wuthering Waves UID", { exact: true }).fill(uid);
+  const uid = await page.getByLabel("Wuthering Waves UID", { exact: true }).inputValue();
+  expect(uid).toMatch(/^[0-9]{8,12}$/);
+  await expect(page.getByLabel("Wuthering Waves UID", { exact: true })).not.toBeEditable();
   await page.getByLabel("In-game name", { exact: true }).fill("Browser Test Rover");
-  await page.getByLabel("Character name (player-declared, unverified)").fill("Hsin");
   await page.getByRole("checkbox").check();
   const save = page.waitForResponse(response => response.url().endsWith("/api/submissions") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Submit for moderation" }).click();
   const response = await save; expect(response.status()).toBe(201);
-  const saved = await response.json();
+  let saved = await response.json();
+  const submittedBody = response.request().postDataJSON();
   await expect(page.getByText("Build saved · Pending moderation")).toBeVisible();
   expect((await (await request.get("/api/public/builds?search=" + uid)).json()).builds).toHaveLength(0);
-  await page.goto("/profiles");
-  await page.getByText("Moderator access", { exact: true }).click();
+  await page.goto("/BlackShores");
   await page.getByLabel("Moderator token", { exact: true }).fill("browser-test-only-token-00000000000000000000");
-  await page.getByRole("button", { name: "Load pending submissions" }).click();
+  await page.getByRole("button", { name: "Unlock review desk" }).click();
   await expect(page.locator(".moderation-panel .echo-crop")).toHaveCount(5);
   await expect.poll(() => page.locator(".moderation-panel .echo-crop").evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth === 192))).toBe(true);
   await page.getByLabel("Reviewer name (audit trail)").fill("Browser QA");
   await page.getByLabel("Review note", { exact: true }).fill("Inspected derived workflow fixture");
-  await page.getByRole("button", { name: "Approve Hsin", exact: true }).click();
+  await page.getByRole("button", { name: /^Reject & delete / }).click();
+  await page.getByRole("button", { name: "Confirm rejection & delete", exact: true }).click();
   await expect(page.getByText("No pending submissions.", { exact: true })).toBeVisible();
+  expect((await request.get('/api/assets/'+saved.id+'-1-portrait')).status()).toBe(404);
+  const resubmitted = await request.post('/api/submissions',{data:submittedBody});
+  expect(resubmitted.status()).toBe(201); saved = await resubmitted.json();
+  await page.getByRole("button", { name: "Load pending submissions" }).click();
+  await page.getByRole("button", { name: /^Approve / }).click();
+  await expect(page.getByText("No pending submissions.", { exact: true })).toBeVisible();
+  await page.goto("/profiles");
+  await expect(page.getByText("Moderator access", {exact:true})).toHaveCount(0);
   await page.getByLabel("Search UID or in-game name").fill(uid);
   await expect(page.locator(".build-card").filter({ hasText: uid })).toBeVisible();
   const approved = await (await request.get("/api/public/builds?id=" + saved.id)).json();
@@ -100,4 +114,26 @@ test("derived five-slot fixture completes OCR correction, pending save and moder
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.evaluate(() => new Promise<void>(resolve => { window.scrollTo(0, 0); requestAnimationFrame(() => requestAnimationFrame(() => resolve())); }));
   await page.screenshot({ path: testInfo.outputPath("approved-build.png"), fullPage: true });
+});
+
+test('Black Shores gates the queue, stays off Profiles, and clears access on reload', async ({page,request}, info) => {
+ await page.goto('/profiles');
+ await expect(page.getByText('Moderator access',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Moderator token',{exact:true})).toHaveCount(0);
+ expect((await request.get('/api/moderation')).status()).toBe(401);
+ await page.goto('/BlackShores');
+ await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content',/noindex/);
+ await expect(page.getByLabel('Review queue',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Moderator token',{exact:true}).fill('incorrect-token-00000000000000000000');
+ await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
+ await expect(page.locator('.moderation-panel [role=alert]')).toContainText('authorization required');
+ await expect(page.getByLabel('Review queue',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
+ await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
+ await expect(page.getByLabel('Review queue',{exact:true})).toBeVisible();
+ await page.screenshot({path:info.outputPath('black-shores-review-desk.png'),fullPage:true});
+ await page.reload();
+ await expect(page.getByLabel('Moderator token',{exact:true})).toHaveValue('');
+ await expect(page.getByLabel('Review queue',{exact:true})).toHaveCount(0);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

@@ -131,3 +131,37 @@ test('post-approval player verification is audited and reversible',async()=>{
   assert.equal(Number((await db.execute('SELECT COUNT(*) AS n FROM build_events')).rows[0].n),2);
  }finally{db.close();}
 });
+
+test("reject deletes pending evidence and orphan player while preserving other approved builds", async () => {
+ const db=createClient({url:'file::memory:'});
+ try {
+  await migrate(db);
+  const kept=await submit(validateSubmission(fixture()),db);
+  await moderate(kept.id,'approved','QA reviewer','',false,db);
+  const other=fixture();other.character='Hiyuki';
+  const removed=await submit(validateSubmission(other),db);
+  await moderate(removed.id,'rejected','QA reviewer','Not acceptable',false,db);
+  assert.equal((await db.execute({sql:'SELECT COUNT(*) n FROM submissions WHERE id=?',args:[removed.id]})).rows[0].n,0);
+  assert.equal((await db.execute({sql:'SELECT COUNT(*) n FROM assets WHERE submission_id=?',args:[removed.id]})).rows[0].n,0);
+  assert.equal((await db.execute('SELECT COUNT(*) n FROM players')).rows[0].n,1);
+  assert.equal((await listBuilds({},db)).builds[0].id,kept.id);
+  const alone=await submit(validateSubmission(fixture('899999998')),db);
+  await moderate(alone.id,'rejected','QA reviewer','',false,db);
+  assert.equal((await db.execute({sql:'SELECT COUNT(*) n FROM players WHERE uid=?',args:['899999998']})).rows[0].n,0);
+  assert.equal((await db.execute('SELECT COUNT(*) n FROM rejection_events')).rows[0].n,2);
+  await assert.rejects(moderate(alone.id,'approved','QA reviewer','',false,db),e=>e.status===409);
+ }finally{db.close();}
+});
+
+test("failed rejection audit rolls back deletion, and web submissions require source UID",async()=>{
+ const db=createClient({url:'file::memory:'});
+ try{
+  await migrate(db);
+  const saved=await submit(validateSubmission(fixture()),db);
+  await db.execute("CREATE TRIGGER fail_reject BEFORE INSERT ON rejection_events BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
+  await assert.rejects(moderate(saved.id,'rejected','QA reviewer','',false,db));
+  assert.equal((await listBuilds({pending:true},db)).builds.length,1);
+  assert.equal((await db.execute('SELECT COUNT(*) n FROM assets')).rows[0].n,10);
+  await assert.rejects(submit(validateSubmission(fixture('899999997')),db,true),e=>e.status===400);
+ }finally{db.close();}
+});

@@ -20,8 +20,10 @@ export async function rateLimit(key: string, max: number, db: Client = database(
   }
   if (Number(result.rows[0].count) > max) throw new HttpError(429, "Too many requests. Wait one minute.");
 }
-export async function submit(input: SubmissionInput, db: Client = database()) {
+export async function submit(input: SubmissionInput, db: Client = database(), requireSourceUid = false) {
   const assessment = await assessSource(input);
+  if (requireSourceUid && assessment.reason.startsWith("Scoring worker busy")) throw new HttpError(429, "Scanner is busy. Please try again in a moment.");
+  if (requireSourceUid && assessment.sourceUid !== input.uid) throw new HttpError(400, "Screenshot UID could not be confirmed. Upload a clear original card; UID cannot be changed.");
   const data = {
     assessment,
     character: input.character,
@@ -59,6 +61,18 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
   const tx = await db.transaction("write");
   try {
     const now = new Date().toISOString();
+    if (action === "rejected") {
+      const saved = await tx.execute({ sql: "SELECT uid FROM submissions WHERE id=? AND status='pending'", args: [id] });
+      if (!saved.rows.length) throw new HttpError(409, "Submission is missing or has already been reviewed.");
+      await tx.execute({ sql: "INSERT INTO rejection_events VALUES (?,?,?,?,?)", args: [randomUUID(), id, reviewer, note, now] });
+      for (const table of ["assets", "calculation_results", "build_events", "moderation_events"]) {
+        await tx.execute({ sql: `DELETE FROM ${table} WHERE submission_id=?`, args: [id] });
+      }
+      await tx.execute({ sql: "DELETE FROM submissions WHERE id=?", args: [id] });
+      await tx.execute({ sql: "DELETE FROM players WHERE uid=? AND NOT EXISTS (SELECT 1 FROM submissions WHERE uid=?)", args: [String(saved.rows[0].uid), String(saved.rows[0].uid)] });
+      await tx.commit();
+      return;
+    }
     const updated = await tx.execute({ sql: "UPDATE submissions SET status=?,reviewed_at=?,identity_verified=? WHERE id=? AND status='pending'", args: [action, now, identityVerified ? 1 : 0, id] });
     if (updated.rowsAffected !== 1) throw new HttpError(409, "Submission is missing or has already been reviewed.");
     if (action === "approved") {

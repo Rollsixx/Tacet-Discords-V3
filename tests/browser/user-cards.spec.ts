@@ -14,10 +14,11 @@ for (const card of expectations) test('original uploaded card: '+card.file, asyn
   await page.getByLabel('Choose build screenshot').setInputFiles(file);
   await expect(page.locator('img[alt^="Extracted Echo portrait"]')).toHaveCount(5);
   await expect(page.locator('img[alt^="Extracted Sonata icon"]')).toHaveCount(5);
-  await page.getByRole('button', {name:'Recognize Echo stats'}).click();
   await expect(page.getByRole('heading',{name:'5 Echo slots processed'})).toBeVisible({timeout:60000});
   const values = await page.locator('input[aria-label^="Echo "]').evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value));
   expect(values).toHaveLength(35);
+  await expect(page.locator(".import-character h2")).toHaveText(card.file.split("(")[0]);
+  if(process.env.USER_BUILD_CARD_UID) await expect(page.getByLabel("Wuthering Waves UID",{exact:true})).toHaveValue(process.env.USER_BUILD_CARD_UID);
   const canonical = values.map((value, index) => {
     if(index % 7 < 2) return value;
     const parsed = parseSubstat(value);
@@ -25,41 +26,27 @@ for (const card of expectations) test('original uploaded card: '+card.file, asyn
     return parsed!.name+' '+parsed!.amount+(parsed!.percent ? '%' : '');
   });
   expect(canonical).toEqual(card.fields);
-  await expect(page.getByRole('heading',{name:'No structural warnings',exact:true})).toBeVisible();
+  await expect(page.getByText('No structural warnings',{exact:true})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   writeFileSync(info.outputPath('observed.json'),JSON.stringify({file:card.file,values,canonical},null,2));
   console.log(card.file+': 35/35 fields match; zero structural warnings.');
 });
 
-test('genuine Hiyuki card saves without manual OCR corrections and can be approved',async({page,request},info)=>{
-  test.skip(!directory,'Set USER_BUILD_CARDS_DIRECTORY to local private originals.');
-  await page.goto('/import');
-  await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Hiyuki(3).jpg'));
-  await page.getByRole('button',{name:'Recognize Echo stats'}).click();
-  await expect(page.getByRole('heading',{name:'No structural warnings',exact:true})).toBeVisible({timeout:60000});
-  const uid=info.project.name==='desktop'?'812342441':'812342442';
-  await page.getByLabel('Wuthering Waves UID',{exact:true}).fill(uid);
-  await page.getByLabel('In-game name',{exact:true}).fill('Original Card QA');
-  await page.getByLabel('Character name (player-declared, unverified)').fill('Hiyuki');
-  await page.getByRole('checkbox').check();
-  const save=page.waitForResponse(r=>r.url().endsWith('/api/submissions')&&r.request().method()==='POST');
-  await page.getByRole('button',{name:'Submit for moderation'}).click();
-  expect((await save).status()).toBe(201);
-  await expect(page.getByText('Build saved · Pending moderation')).toBeVisible();
-  expect((await(await request.get('/api/public/builds?search='+uid)).json()).builds).toHaveLength(0);
-  await page.goto('/profiles');
-  await page.getByText('Moderator access',{exact:true}).click();
-  await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
-  await page.getByRole('button',{name:'Load pending submissions'}).click();
-  await expect(page.locator('.moderation-panel .echo-crop')).toHaveCount(5);
-  await page.getByLabel('Reviewer name (audit trail)').fill('Original Card Browser QA');
-  await page.getByRole('button',{name:'Approve Hiyuki',exact:true}).click();
-  await expect(page.getByText('No pending submissions.',{exact:true})).toBeVisible();
-  await page.getByLabel('Search UID or in-game name').fill(uid);
-  await expect(page.locator('.build-card').filter({hasText:uid})).toBeVisible();
-  const publicBuild=await(await request.get('/api/public/builds?search='+uid)).json();
-  expect(publicBuild.builds[0].status).toBe('approved');
-  expect(publicBuild.builds[0].score).toBeNull();
+test('automatic scan fills IGN and locks UID without exposing crossed-out panels',async({page},info)=>{
+ test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Private original required.');
+ await page.goto('/import');
+ await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Hiyuki(3).jpg'));
+ await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).toHaveValue(process.env.USER_BUILD_CARD_UID!,{timeout:60000});
+ await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).not.toBeEditable();
+ await expect(page.getByLabel('In-game name',{exact:true})).toHaveValue('Rollsixx');
+ await page.getByLabel('In-game name',{exact:true}).fill('Editable IGN');
+ await expect(page.getByRole('button',{name:'Recognize Echo stats'})).toHaveCount(0);
+ await expect(page.getByText('Hide my UID on all my builds')).toHaveCount(0);
+ await expect(page.locator('.import-character')).toHaveText(/Hiyuki/);
+ await expect(page.locator('.import-character')).not.toContainText(/LV|90/);
+ await expect(page.locator('.scan-pass')).toHaveCount(7);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:info.outputPath('automatic-import-review.png'),fullPage:true});
 });
 
 // Private originals and UID are supplied at runtime and are never committed.
@@ -72,20 +59,19 @@ test('all five official categories score only after approval and identity verifi
  const card=expectations.find(c=>c.file.startsWith(character))!;
  await page.goto('/import');
  await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,card.file));
- await page.getByRole('button',{name:'Recognize Echo stats'}).click();
- await expect(page.getByRole('heading',{name:'No structural warnings',exact:true})).toBeVisible({timeout:60000});
- await page.getByLabel('Wuthering Waves UID',{exact:true}).fill(uid);
+ await expect(page.getByText('No structural warnings',{exact:true})).toBeVisible({timeout:60000});
+ await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).toHaveValue(uid);
+ await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).not.toBeEditable();
  await page.getByLabel('In-game name',{exact:true}).fill('Scoring Browser QA');
- await page.getByLabel('Character name (player-declared, unverified)').fill(character);
  await page.getByRole('checkbox').check();
  const save=page.waitForResponse(r=>r.url().endsWith('/api/submissions')&&r.request().method()==='POST');
  await page.getByRole('button',{name:'Submit for moderation'}).click();
- expect((await save).status()).toBe(201);
+ const savedResponse=await save;
+ expect(savedResponse.status(),await savedResponse.text()).toBe(201);
  expect((await(await request.get('/api/public/leaderboards?character='+character)).json()).builds).toHaveLength(0);
- await page.goto('/profiles');
- await page.getByText('Moderator access',{exact:true}).click();
+ await page.goto('/BlackShores');
  await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
- await page.getByRole('button',{name:'Load pending submissions'}).click();
+ await page.getByRole('button',{name:'Unlock review desk'}).click();
  await expect(page.getByText('Scoring: Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',{exact:true})).toBeVisible();
  await page.getByLabel('Reviewer name (audit trail)').fill('Scoring Browser QA');
  await page.getByLabel('I manually matched this UID/IGN to the member outside the website.').check();
@@ -118,7 +104,7 @@ test('unreadable initial fifth cost is recovered from real image OCR without edi
      let forwarded=event;
      if(event.data?.status==='resolve'&&event.data?.action==='recognize'){
       reads++;
-      if(reads===29){
+      if(reads===32){
        forwarded=new MessageEvent('message',{data:{...event.data,data:{...event.data.data,text:'',confidence:0}}});
       }
      }
@@ -129,14 +115,13 @@ test('unreadable initial fifth cost is recovered from real image OCR without edi
  });
  await page.goto('/import');
  await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Hiyuki(3).jpg'));
- await page.getByRole('button',{name:'Recognize Echo stats'}).click();
  await expect(page.getByRole('heading',{name:'5 Echo slots processed'})).toBeVisible({timeout:60000});
  await expect(page.getByLabel('Echo 5 cost',{exact:true})).toHaveValue('1');
  await expect(page.getByText('Cost: Unreadable (recovered from image: 1)',{exact:true})).toHaveCount(1);
  const fifth=page.getByRole('heading',{name:'Echo 5',exact:true}).locator('..');
  await fifth.locator('summary').click();
  await fifth.screenshot({path:info.outputPath('recovered-fifth-cost.png')});
- await expect(page.getByRole('heading',{name:'No structural warnings',exact:true})).toBeVisible();
+ await expect(page.getByText('No structural warnings',{exact:true})).toBeVisible();
 });
 
 
@@ -144,10 +129,11 @@ test('moderator can verify and revoke an approved player after initial review',a
  test.skip(info.project.name!=='desktop','One identity lifecycle per isolated DB.');
  test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Private source evidence required.');
  const uid=process.env.USER_BUILD_CARD_UID!;
- await page.goto('/profiles');await page.getByText('Moderator access',{exact:true}).click();
+ await page.goto('/BlackShores');
  await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
+ await page.getByRole('button',{name:'Unlock review desk'}).click();
  await page.getByLabel('Review queue',{exact:true}).selectOption('approved');
- await page.getByLabel('Find approved UID or IGN',{exact:true}).fill(uid);
+ await page.getByLabel('Find UID or IGN',{exact:true}).fill(uid);
  await page.getByRole('button',{name:'Load approved players',exact:true}).click();
  await expect(page.getByRole('button',{name:'Unverify '+uid,exact:true})).toHaveCount(5);
  await page.getByLabel('Reviewer name (audit trail)').fill('Verification Browser QA');

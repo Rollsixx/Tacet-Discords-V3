@@ -13,7 +13,7 @@ npm run build
 npm run start:production
 ```
 
-Open http://localhost:3000. Setup creates a private .env.local without overwriting an existing one. The production launcher applies migrations and upgrades previously validated calculations before serving. Find your moderator token only in your local .env.local. The application has exactly four public pages; moderation is inside Profiles.
+Open http://localhost:3000. Setup creates a private .env.local without overwriting an existing one. The production launcher applies migrations and upgrades previously validated calculations before serving. Find your moderator token only in your local .env.local. The public navigation has four pages. Moderation is at `/BlackShores`, requires the moderator token, and is excluded from search indexing.
 
 ## What works
 
@@ -22,7 +22,7 @@ Open http://localhost:3000. Setup creates a private .env.local without overwriti
 - Anonymous UID/IGN/declared-character submission, atomic SQLite/libSQL persistence and ten bounded binary PNG assets per build.
 - Persistent rate limits, duplicate protection, pending/approved/rejected states, protected crop access and atomic moderation audit events.
 - Approved-build lookup by UID/IGN, exact character filters, individual build links and bounded pagination. No fictional public profiles or scores.
-- Protected moderator panel inside Profiles, outside the four-page public navigation. Server-side bearer authorization; token stays in tab memory.
+- Separate token-gated `/BlackShores` review desk, outside the public navigation. Server-side bearer authorization; token stays in tab memory.
 - Optional manual identity verification recorded during review. Membership checks take place outside the website; no Discord integration.
 
 ## Run locally (Windows PowerShell)
@@ -42,9 +42,9 @@ npm run db:migrate
 npm run dev
 ```
 
-Open http://localhost:3000. Upload a supported build card, recognize stats, compare all five visual slots and correct OCR issues, enter UID/IGN/character, confirm the preview and submit. A successful save returns a real pending submission ID. On Profiles, expand Moderator access, enter the private token and inspect pending builds. Enter a reviewer name and approve or reject. Only approved builds become public.
+Open http://localhost:3000. Upload a supported build card: scanning starts automatically. Review the character, player details and five Echo pass/review states, compare the visual slots and correct OCR issues. UID and character come from the screenshot, UID is read-only, and IGN is editable. Confirm the preview and submit. A successful save returns a real pending submission ID. Visit `/BlackShores`, enter the private token and inspect pending builds. Enter a reviewer name and approve or reject. Rejection permanently removes that pending submission and its crops in an audited transaction; an orphan player record is also removed. Other approved builds for the same UID remain intact. Only approved builds become public.
 
-Do not interpret moderation as proof of screenshot authenticity, game legality or verified damage output. Character names are player-declared. For scoring, originals up to 1.1 MB are temporarily processed on the server; the original is discarded and a SHA-256 evidence hash, calculation and ten cropped PNGs are retained. Larger files remain unscored. Moderators see the crops and both raw and corrected statistics.
+Do not interpret moderation as proof of screenshot authenticity, game legality or verified damage output. Character names are scanned from the screenshot. Every web submission must pass independent server UID verification, including unscored characters. For scoring, originals up to 1.1 MB are temporarily processed on the server; the original is discarded and a SHA-256 evidence hash, calculation and ten cropped PNGs are retained. Larger files are encoded to JPEG in the browser at the same resolution before server verification. Moderators see the crops and both raw and corrected statistics.
 
 ## Database and migrations
 
@@ -52,7 +52,7 @@ Do not interpret moderation as proof of screenshot authenticity, game legality o
 
 SQLite local files are for development or a deliberately configured persistent-volume server. Production requires an explicit database URL and refuses local files unless `ALLOW_LOCAL_DATABASE=true` is set by an operator with a persistent volume. Never use a local file on serverless hosting.
 
-Binary crops live in a separate assets table, not base64 inside build JSON. They are bounded to 150 KiB each and exact dimensions (portrait 192 × 182, Sonata 56 × 56). Pending/rejected crops require moderator authorization. Approved crops are public. No external image host is required.
+Binary crops live in a separate assets table, not base64 inside build JSON. They are bounded to 150 KiB each and exact dimensions (portrait 192 × 182, Sonata 56 × 56). Pending crops require moderator authorization; newly rejected submissions and their crops are deleted. Approved crops are public. No external image host is required.
 
 ## Free-tier deployment path
 

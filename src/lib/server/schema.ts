@@ -57,4 +57,12 @@ export const migrations = [
     )`,
     "CREATE INDEX build_events_submission ON build_events(submission_id, created_at)",
   ] },
+  { version: 4, statements: [
+    // Retain the decision without retaining a rejected player's UID, name or crops.
+    `CREATE TABLE rejection_events (
+      id TEXT PRIMARY KEY, submission_id TEXT NOT NULL,
+      reviewer TEXT NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX rejection_events_submission ON rejection_events(submission_id)",
+  ] },
 ];

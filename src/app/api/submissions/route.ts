@@ -6,6 +6,6 @@ export async function POST(request: Request) {
     await rateLimit("submission-global", 30);
     const input = validateSubmission(await readJson(request));
     await rateLimit("uid:" + input.uid, 10);
-    return json(await submit(input), 201);
+    return json(await submit(input, undefined, true), 201);
   } catch (error) { return failure(error); }
 }

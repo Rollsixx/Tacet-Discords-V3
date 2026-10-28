@@ -15,7 +15,7 @@ type PreviewState = {
   error: string;
 };
 
-function PreviewContent({ file }: { file: File }) {
+function PreviewContent({ file, renderFields }: { file: File; renderFields?: (slot: number) => React.ReactNode }) {
   const [state, setState] = useState<PreviewState | null>(null);
 
   useEffect(() => {
@@ -78,16 +78,6 @@ function PreviewContent({ file }: { file: File }) {
       aria-label="Automatic Echo crop preview"
       className="mt-5 space-y-3"
     >
-      <div>
-        <h3 className="text-sm font-semibold">
-          Automatic image extraction preview
-        </h3>
-        <p className="mt-1 text-xs text-slate-400">
-          Development preview only. Echo and Sonata identities
-          have not been verified.
-        </p>
-      </div>
-
       {!current && (
         <p className="text-sm text-slate-400">
           Extracting five Echo portraits and Sonata icons...
@@ -101,37 +91,30 @@ function PreviewContent({ file }: { file: File }) {
       )}
 
       {current && current.slots.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="import-echo-grid">
           {current.slots.map(item => (
             <div
               key={item.slot}
-              className="rounded-xl border border-white/10 bg-black/20 p-3"
+              className="import-echo-card"
             >
-              <p className="mb-2 text-xs font-semibold">
-                Echo slot {item.slot}
-              </p>
-
-              <p className="mb-1 text-xs text-slate-400">
-                Portrait · 192×182
-              </p>
+              <div className="echo-review-images">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.portraitUrl}
                 alt={`Extracted Echo portrait for slot ${item.slot}`}
-                className="h-auto w-full rounded-md"
+                className="echo-review-portrait"
               />
 
-              <p className="mb-1 mt-3 text-xs text-slate-400">
-                Sonata icon · 56×56
-              </p>
+
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.sonataUrl}
                 alt={`Extracted Sonata icon for slot ${item.slot}`}
                 width={56}
                 height={56}
-                className="rounded-md"
-              />
+                className="echo-review-sonata"
+              /></div>
+              {renderFields?.(item.slot)}
             </div>
           ))}
         </div>
@@ -140,8 +123,8 @@ function PreviewContent({ file }: { file: File }) {
   );
 }
 
-export function EchoVisualPreview({ file }: { file: File | null }) {
+export function EchoVisualPreview({ file, renderFields }: { file: File | null; renderFields?: (slot: number) => React.ReactNode }) {
   if (!file) return null;
 
-  return <PreviewContent key={file.name + ":" + file.size + ":" + file.lastModified} file={file} />;
+  return <PreviewContent key={file.name + ":" + file.size + ":" + file.lastModified} file={file} renderFields={renderFields} />;
 }
