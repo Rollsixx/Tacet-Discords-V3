@@ -7,7 +7,7 @@ test("four pages render without overflow or browser errors", async ({ page }, te
   for (const route of ["/", "/import", "/profiles", "/leaderboards"]) {
     await page.goto(route);
     await expect(page.locator("h1")).toBeVisible();
-    if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table").first()).toBeVisible();
+    if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table, .pp-player-list").first()).toBeVisible();
     if(route === '/leaderboards') {
       await page.locator('.lb-character-tabs button[aria-pressed="true"]').click();
       await expect(page.locator('.placeholder,.lb-table').first()).toBeVisible();
@@ -127,8 +127,11 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   await expect(page.getByText("No pending submissions.", { exact: true })).toBeVisible();
   await page.goto("/profiles");
   await expect(page.getByText("Moderator access", {exact:true})).toHaveCount(0);
-  await page.getByLabel("Search UID or in-game name").fill(uid);
-  await expect(page.locator(".build-card").filter({ hasText: uid })).toBeVisible();
+  await page.getByLabel("Player name or UID").fill(uid);
+  await page.locator('.pp-player').filter({hasText:uid}).click();
+  await expect(page.locator('.pp-player-header')).toContainText(uid);
+  await page.getByRole('button',{name:'View Hsin stats',exact:true}).click();
+  await expect(page.locator('.lb-echo')).toHaveCount(5);
   const approved = await (await request.get("/api/public/builds?id=" + saved.id)).json();
   expect(approved.builds[0].status).toBe("approved"); expect(approved.builds[0].score).toBeNull();
   await page.goto('/BlackShores');
@@ -184,7 +187,7 @@ test('Black Shores gates the queue, stays off Profiles, and clears access on rel
  await page.screenshot({path:info.outputPath('black-shores-review-desk.png'),fullPage:true});
  await page.getByRole('link',{name:'View public website',exact:false}).click();
  await expect(page.locator('nav[aria-label="Main navigation"]')).toBeVisible();
- await expect(page.getByRole('heading',{name:'Every player. Every build.',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Find a player',exact:true})).toBeVisible();
  await page.goto('/BlackShores');
  await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
  await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();

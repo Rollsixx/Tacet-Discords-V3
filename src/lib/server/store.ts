@@ -96,7 +96,7 @@ export const scoringReadiness = {
   metric: "Expected standardized benchmark damage (not DPS)",
   missing: [],
 };
-export async function listBuilds(options: { search?: string; character?: string; id?: string; page?: number; pending?: boolean } = {}, db: Client = database()) {
+export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; page?: number; pending?: boolean } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
   const character = (options.character || "").slice(0, 64).trim();
@@ -104,9 +104,9 @@ export async function listBuilds(options: { search?: string; character?: string;
     sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,
       CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id='${POLICY_VERSION}' THEN c.score ELSE NULL END AS verified_score
       FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE status=? AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
-      AND (?='' OR character=?) AND (?='' OR s.id=?)
+      AND (?='' OR character=?) AND (?='' OR s.id=?) AND (?='' OR uid=?)
       ORDER BY created_at DESC,s.id DESC LIMIT 21 OFFSET ?`,
-    args: [options.pending ? "pending" : "approved", query, query, query, query, character, character, options.id || "", options.id || "", (page - 1) * 20],
+    args: [options.pending ? "pending" : "approved", query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", (page - 1) * 20],
   });
   return {
     builds: result.rows.slice(0, 20).map(publicBuild),
@@ -118,7 +118,7 @@ function publicBuild(row: Row) { return {
       id: String(row.id), rank: row.global_rank == null ? null : Number(row.global_rank), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
       status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
       identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
-      data: JSON.parse(String(row.data)) as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+      data: JSON.parse(String(row.data)) as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalHp?:number;totalDef?:number;totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
     }; }
 
 export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
@@ -189,4 +189,13 @@ export async function deleteBuild(id: string, reviewer: string, note: string, db
     await tx.commit();
     return {deleted:id};
   }finally{tx.close();}
+}
+
+export async function findPlayers(search = "", db: Client = database()) {
+ const query=search.trim().slice(0,64);
+ const result=await db.execute({sql:`SELECT uid,MAX(created_at) AS updated_at,COUNT(*) AS builds,COUNT(DISTINCT character) AS characters,
+ (SELECT ign FROM submissions latest WHERE latest.uid=s.uid AND latest.status='approved' ORDER BY created_at DESC,id DESC LIMIT 1) AS ign
+ FROM submissions s WHERE status='approved' AND uid IN (SELECT uid FROM submissions WHERE status='approved' AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0))
+ GROUP BY uid ORDER BY updated_at DESC,uid ASC LIMIT 21`,args:[query,query,query]});
+ return {players:result.rows.slice(0,20).map(row=>({uid:String(row.uid),ign:String(row.ign),builds:Number(row.builds),characters:Number(row.characters),updatedAt:String(row.updated_at)})),hasMore:result.rows.length>20};
 }

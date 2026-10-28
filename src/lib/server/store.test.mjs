@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "./database.ts";
 import { validateSubmission } from "./validation.ts";
-import { listBuilds, submit, moderate, rateLimit, scoringReadiness } from "./store.ts";
+import { findPlayers, listBuilds, submit, moderate, rateLimit, scoringReadiness } from "./store.ts";
 import { authorize, readJson } from "./http.ts";
 import { fixture } from "./fixtures.mjs";
 
@@ -33,6 +33,11 @@ test("transactional pending → approved journey, durable storage and private re
     assert.equal(publicBuilds.builds[0].identityVerified, true);
     assert.equal((await listBuilds({ search: "rover" }, db)).builds.length, 1);
     assert.equal((await listBuilds({ search: "nonexistent" }, db)).builds.length, 0);
+    assert.equal((await findPlayers("rover",db)).players[0].uid,"812345678");
+    assert.equal((await findPlayers("rover",db)).players[0].builds,1);
+    assert.equal((await findPlayers("nonexistent",db)).players.length,0);
+    assert.equal((await listBuilds({uid:"812345678"},db)).builds.length,1);
+    assert.equal((await listBuilds({uid:"81234567"},db)).builds.length,0);
     assert.equal((await listBuilds({ character: "Camellya" }, db)).builds.length, 0);
     const second = await submit(validateSubmission(fixture("899999999")), db);
     await moderate(second.id, "rejected", "Test moderator", "Bad screenshot", false, db);

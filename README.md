@@ -18,10 +18,10 @@ Open http://localhost:3000. Setup creates a private .env.local without overwriti
 ## What works
 
 - Browser screenshot OCR and automatic extraction of five Echo portraits and five Sonata icons from the supported 1920 × 1080 build-card layout.
-- Editable OCR values, original text retained alongside corrections, structural/numeric validation and explicit screenshot review confirmation.
+- Read-only Echo values and UID after automatic OCR; original text retained with structural/numeric validation and explicit screenshot review confirmation. IGN remains editable before submission.
 - Anonymous UID/IGN/declared-character submission, atomic SQLite/libSQL persistence and ten bounded binary PNG assets per build.
 - Persistent rate limits, duplicate protection, pending/approved/rejected states, protected crop access and atomic moderation audit events.
-- Approved-build lookup by UID/IGN, exact character filters, individual build links and bounded pagination. No fictional public profiles or scores.
+- Player search by UID/IGN, up to eight browser-local player tabs, exact UID profiles, compact resonator rows and inline five-Echo details with standardized HP/ATK/DEF/crit/Energy Regen. Approved builds only, bounded pagination, and honest unranked states. Existing individual build links still resolve. No fictional public profiles or scores.
 - Separate token-gated `/BlackShores` review desk, outside the public navigation. Server-side bearer authorization; token stays in tab memory.
 - Optional manual identity verification recorded during review. Membership checks take place outside the website; no Discord integration.
 
