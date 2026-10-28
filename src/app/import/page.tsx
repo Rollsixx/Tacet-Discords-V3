@@ -35,7 +35,7 @@ export default function ImportPage() {
       if(!recognized.slots.flatMap(validateEchoSlot).length){
        setIdentityChecking(true);const bitmap=await createImageBitmap(candidate);let crops;
        try{crops=extractEchoVisuals(bitmap,bitmap.width,bitmap.height).map((c,i)=>({slot:i+1,cost:Number(recognized.slots[i].cost.value),portrait:c.portrait.toDataURL('image/png'),sonata:c.sonata.toDataURL('image/png')}));}finally{bitmap.close();}
-       try{const response=await fetch('/api/scan/identities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slots:crops})});if(response.ok)setReadiness((await response.json()).readiness);}catch{/* Upload verification remains authoritative if the preview is unavailable. */}
+       try{const response=await fetch('/api/scan/identities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slots:crops})});if(response.ok)setReadiness({...((await response.json()).readiness),rolls:true});}catch{/* Upload verification remains authoritative if the preview is unavailable. */}
       }
     }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Screenshot scan failed. Please retry."); }

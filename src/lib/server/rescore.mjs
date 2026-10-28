@@ -1,5 +1,6 @@
 import {hasRetainedRecovery,recoverVisualEvidence,recoveryMode} from './visual-recovery.mjs';
 import {scoreActiveRotation,recordRotationScore} from './rotations/store.mjs';
+import {validateEchoSlot} from '../scanner/stat-validation.ts';
 import {randomUUID} from 'node:crypto';
 import {calculateStandard,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring.mjs';
 // Reuse only previously server-validated evidence from this known data snapshot.
@@ -19,10 +20,19 @@ export async function rescoreStoredBuilds(db){
   try{
    const recovered=recoverable?await recoverVisualEvidence(row,data,db):null;
    if(recoverable&&!recovered){result.skipped++;continue;}
+   const numericIssues=data.slots.flatMap(s=>validateEchoSlot(s).map(issue=>({slot:s.slot,...issue})));
+   if(recovered&&numericIssues.length){
+    const next={...data,assessment:{...a,eligible:false,rollsVerified:false,visualRecovery:recovered.evidence,previousIdentityFailure:a.reason,visualReport:recovered.identities.map((s,i)=>({slot:i+1,cost:Number(data.slots[i].cost.value),echo:s.echo,set:s.set,problem:null})),scoringIssues:numericIssues,reason:'Echo '+numericIssues[0].slot+': '+numericIssues[0].message}};
+    const tx=await db.transaction('write');try{
+     const update=await tx.execute({sql:'UPDATE submissions SET data=? WHERE id=? AND data=? AND status=? AND identity_verified=? AND reviewed_at IS ?',args:[JSON.stringify(next),String(row.id),String(row.data),String(row.status),Number(row.identity_verified),row.reviewed_at]});if(update.rowsAffected!==1)throw Error('Build changed during diagnosis.');
+     await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),String(row.id),'echo_identity_recovered_scoring_blocked','system',JSON.stringify({reason:next.assessment.reason,reference:recovered.evidence.referenceVersion,cropHash:recovered.evidence.cropHash,identities:recovered.identities}),new Date().toISOString()]});
+     await tx.commit();result.updated++;
+    }finally{tx.close();}continue;
+   }
    const calculation=await calculateStandard(String(row.character),data.slots,recovered?.identities||c.identities);
    const tx=await db.transaction('write');
    try{
-    data.assessment={...a,eligible:true,calculation,...(recovered?{visualRecovery:recovered.evidence,visualReport:recovered.identities.map((s,i)=>({slot:i+1,cost:Number(data.slots[i].cost.value),echo:s.echo,set:s.set,problem:null}))}:{}),reason:recovered?'Server-verified source stats and retained visual evidence recovered after a reference-image correction.':'Source evidence retained; recalculated under the current scoring policy.'};
+    data.assessment={...a,eligible:true,rollsVerified:true,calculation,...(recovered?{visualRecovery:recovered.evidence,visualReport:recovered.identities.map((s,i)=>({slot:i+1,cost:Number(data.slots[i].cost.value),echo:s.echo,set:s.set,problem:null}))}:{}),reason:recovered?'Server-verified source stats and retained visual evidence recovered after a reference-image correction.':'Source evidence retained; recalculated under the current scoring policy.'};
     const updated=await tx.execute({sql:'UPDATE submissions SET data=? WHERE id=? AND data=? AND status=? AND identity_verified=? AND reviewed_at IS ?',args:[JSON.stringify(data),String(row.id),String(row.data),String(row.status),Number(row.identity_verified),row.reviewed_at]});
     if(updated.rowsAffected!==1)throw Error('Build changed during rescore.');
     const currentCalculation=row.status==='approved'?await scoreActiveRotation(tx,String(row.character),data)||calculation:calculation;

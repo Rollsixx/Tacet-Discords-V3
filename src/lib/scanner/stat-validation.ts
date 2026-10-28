@@ -1,4 +1,5 @@
-﻿import type { RecognizedSlot } from "./build-card-ocr";
+import rollTable from "../game-data/substat-rolls.json" with {type:"json"};
+import type { RecognizedSlot } from "./build-card-ocr";
 
 export type StatIssue = {
   code: string;
@@ -153,6 +154,8 @@ export function validateEchoSlot(
     }
 
     const statKey = parsed.name + (parsed.percent ? ":percent" : ":flat");
+    const allowedRolls=(rollTable.values as Record<string,number[]>)[statKey];
+    if(!allowedRolls?.some(v=>Math.abs(v-parsed.amount)<1e-6))issues.push({code:"UNSUPPORTED_ROLL",message:`Substat ${position}: ${field.value} is not an allowed five-star Echo roll. Reimport a clear original card; stats stay locked.`});
     if (seen.has(statKey)) {
       issues.push({
         code: "DUPLICATE_SUBSTAT",

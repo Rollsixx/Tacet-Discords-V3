@@ -15,3 +15,10 @@ The existing asset checkout `LottieLost.webp` depicts another creature. English 
 The maximum distance and ambiguity margins remain unchanged. The corrected portrait identifies Lottie Lost, then restricts Sonata comparison to that Echo's legal sets. Existing source-verified identity failures can be recovered by the deployment rescore command, with a system audit entry and preserved moderation/verification. Recovery respects an already-published managed rotation; it does not revert the character to its baseline policy. Already-scored current builds are skipped, and there is no automatic learning from moderator selections.
 
 Sources: https://github.com/Arikatsu/WutheringWaves_Data/tree/3.7 (English multi_text and monster_Info); https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_31046_UI.webp . The pinned optimizer continues supplying costs, legal sets and damage calculations. Preserve its existing GPL notices and source distribution.
+
+
+## Invalid stored numeric rolls remain unranked
+
+The affected retained Carlotta build also contains `DEF 11.9%`, which is absent from the pinned optimizer's DEF roll table. Its original screenshot is no longer retained, so the system must not guess a replacement value. Recognition recovery now records the corrected Echo identities and reports the exact illegal slot/value while preserving every numeric stat, approval and verification flag. It remains unranked until a clearer original is reimported successfully.
+
+The browser and submission validation share `substat-rolls.json`, derived directly from the pinned optimizer. Unknown rolls are blocked before upload, and original-image verification independently checks the extracted fields. Readiness separates readable text from allowed rolls. Identity correction cannot override numeric legality. Failed numeric recovery is audited and idempotent; no score is inserted.

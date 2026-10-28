@@ -66,7 +66,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
       }
     }
     await tx.commit();
-    return { ok: true, id, status: "pending", createdAt, readiness:{...visualReadiness(assessment.visualReport||[],assessment.statsVerified===true),ready:assessment.eligible,reason:assessment.reason} };
+    return { ok: true, id, status: "pending", createdAt, readiness:{...visualReadiness(assessment.visualReport||[],assessment.statsVerified===true),rolls:assessment.rollsVerified??(assessment.eligible?true:null),ready:assessment.eligible,reason:assessment.reason} };
   } finally { tx.close(); }
 }
 export async function moderate(id: string, action: "approved" | "rejected", reviewer: string, note: string, identityVerified: boolean, db: Client = database(), allowUnranked = false) {
@@ -142,7 +142,7 @@ function publicBuild(row: Row) {
       id: String(row.id), rank: row.global_rank == null ? null : Number(row.global_rank), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
       status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
       identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
-      data: data as { assessment?: {eligible: boolean; reason: string; statsVerified?:boolean; visualReport?:import("../scanner/scoring-readiness.ts").VisualReportSlot[]; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalHp?:number;totalDef?:number;totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+      data: data as { assessment?: {eligible: boolean; reason: string; statsVerified?:boolean; rollsVerified?:boolean; visualReport?:import("../scanner/scoring-readiness.ts").VisualReportSlot[]; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalHp?:number;totalDef?:number;totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
     }; }
 
 export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {

@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
@@ -16,7 +16,8 @@ const compiled = ts.transpileModule(source, {
 
 const context = {
   exports: {},
-  require() {
+  require(name) {
+    if(name==="../game-data/substat-rolls.json")return {default:JSON.parse(readFileSync(new URL("../game-data/substat-rolls.json",import.meta.url),"utf8"))};
     throw new Error("Unexpected runtime dependency");
   },
 };
@@ -147,4 +148,9 @@ test("Hiyuki screenshot transcription leaves only the genuinely missing fifth co
   assert.equal(issues[0].code, "INVALID_COST");
   builds[4].cost.value = "1"; // Explicit screenshot-confirmed user correction.
   assert.equal(builds.flatMap(validateEchoSlot).length, 0);
+});
+
+
+test("illegal DEF 11.9 percent is blocked without changing the recognized value",()=>{
+ const input=slot("1","ATK",["DEF 11.9%","Crit. Rate 6.3%","Crit. DMG 18.6%","ATK 9.4%","Resonance Skill DMG 7.9%"]);const before=JSON.stringify(input);const issues=validateEchoSlot(input);assert.ok(issues.some(i=>i.code==='UNSUPPORTED_ROLL'&&i.message.includes('DEF 11.9%')));assert.equal(JSON.stringify(input),before);input.substats[0]={raw:'DEF 11.8%',value:'DEF 11.8%'};assert.equal(validateEchoSlot(input).length,0);
 });

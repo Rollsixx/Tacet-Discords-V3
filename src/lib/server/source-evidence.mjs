@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import sharp from 'sharp';
 import {createWorker,PSM} from 'tesseract.js';
-import {parseSubstat} from '../scanner/stat-validation.ts';
+import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import {SUPPORTED,diagnoseSlots,identitiesFromReport,calculateStandard} from './scoring.mjs';
 const languagePath=resolve(process.cwd(),'node_modules/@tesseract.js-data/eng/4.0.0');
@@ -54,15 +54,16 @@ export async function assessSource(input){
    }
    slots.push({slot:i+1,cost:{raw:cost,value:cost},mainStat:{raw:main,value:client.mainStat.value},substats});
   }
+  for(const slot of slots){const issue=validateEchoSlot(slot)[0];if(issue)throw Error('Echo '+slot.slot+': '+issue.message);}
   statsVerified=true;sourceSlots=slots;
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
   visualReport=await diagnoseSlots(image,slots.map(x=>Number(x.cost.value)));
-  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
-  if(levelIssue)return {eligible:false,sourceUid,statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:levelIssue};
+  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
+  if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:levelIssue};
   const identities=identitiesFromReport(visualReport);
   const calculation=await calculateStandard(input.character,slots,identities);
-  return {eligible:true,sourceUid,statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash,calculation};
- }catch(error){return {eligible:false,sourceUid,statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:error instanceof Error?error.message:'Scoring validation failed.'};}
+  return {eligible:true,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash,calculation};
+ }catch(error){return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:error instanceof Error?error.message:'Scoring validation failed.'};}
  finally{await worker?.terminate();active=false;}
 }

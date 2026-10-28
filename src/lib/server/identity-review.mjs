@@ -23,9 +23,9 @@ async function cropsFor(db,row,data){
  return {crops,cropHash:digest.digest('hex')};
 }
 export async function identityWorkspace(db,id){
- const {row,data}=await snapshot(db,id);const evidence=repairEvidence(row,data);let report=[],crops=[],cropHash=null;
+ const {row,data}=await snapshot(db,id);const statIssues=data.slots?.flatMap(s=>validateEchoSlot(s).map(i=>'Echo '+s.slot+': '+i.message))||[];const evidence=repairEvidence(row,data);let report=[],crops=[],cropHash=null;
  if(evidence){const retained=await cropsFor(db,row,data);report=await diagnoseCrops(retained.crops);cropHash=retained.cropHash;crops=retained.crops.map(c=>({slot:c.slot,portrait:'data:image/png;base64,'+c.portrait.toString('base64'),sonata:'data:image/png;base64,'+c.sonata.toString('base64')}));}
- return {id,revision:hash(String(row.data)),evidence,evidenceReason:evidence?'Source UID, numeric stats, maximum main stats and canonical crops were verified.':'Verified canonical source evidence is incomplete. Reimport a clear original screenshot; identity correction cannot bypass missing proof.',supported:SUPPORTED.includes(String(row.character)),report,crops,cropHash,catalog:identityCatalog(),sets:Object.entries(engine.echoSetLabelMap).map(([key,name])=>({key,name})),readiness:{...visualReadiness(report,data.assessment?.statsVerified===true),ready:data.assessment?.eligible===true,reason:data.assessment?.reason||'No scoring evidence.'}};
+ return {id,revision:hash(String(row.data)),evidence,evidenceReason:statIssues.length?statIssues.join(' '):evidence?'Source UID, numeric stats, maximum main stats and canonical crops were verified.':'Verified canonical source evidence is incomplete. Reimport a clear original screenshot; identity correction cannot bypass missing proof.',supported:SUPPORTED.includes(String(row.character)),report,crops,cropHash,catalog:identityCatalog(),sets:Object.entries(engine.echoSetLabelMap).map(([key,name])=>({key,name})),readiness:{...visualReadiness(report,data.assessment?.statsVerified===true),ready:data.assessment?.eligible===true,reason:data.assessment?.reason||'No scoring evidence.'}};
 }
 export function validateIdentities(input,slots){
  must(Array.isArray(input)&&input.length===5,'Confirm all five ordered identities.',400);
@@ -41,10 +41,10 @@ export async function repairIdentities(db,id,input){
  let identities;
  if(input.operation==='confirm'){must(input.confirmed===true,'Confirm visual comparison of all five Echoes and Sonatas.',400);identities=validateIdentities(input.identities,data.slots);}
  else{try{identities=identitiesFromReport(report);}catch(e){throw new HttpError(422,e.message+' Compare the retained crops and confirm their identities, or reimport a clearer screenshot.');}}
- const baseline=await calculateStandard(String(row.character),data.slots,identities);const at=new Date().toISOString();
+ let baseline;try{baseline=await calculateStandard(String(row.character),data.slots,identities);}catch(e){throw new HttpError(422,String(e.message)+'. Reimport a clearer original card; retained stats cannot be edited.');}const at=new Date().toISOString();
  const before=data.assessment?.calculation?.identities||report.map(s=>({echo:s.echo,set:s.set}));
  const proof={version:'moderator-identity-review/1',sourceHash:data.assessment.sourceHash,cropHash:retained.cropHash,confirmedAt:at,method:input.operation};
- const next={...data,assessment:{...data.assessment,eligible:true,calculation:baseline,visualReport:identities.map((s,i)=>({...report[i],echo:s.echo,set:s.set,problem:null,manuallyConfirmed:input.operation==='confirm'})),identityReview:proof,reason:input.operation==='confirm'?'Source-verified stats and moderator-confirmed equipment identities validated.':'Equipment identities recovered from retained canonical crops using current strict references.'}};
+ const next={...data,assessment:{...data.assessment,eligible:true,rollsVerified:true,calculation:baseline,visualReport:identities.map((s,i)=>({...report[i],echo:s.echo,set:s.set,problem:null,manuallyConfirmed:input.operation==='confirm'})),identityReview:proof,reason:input.operation==='confirm'?'Source-verified stats and moderator-confirmed equipment identities validated.':'Equipment identities recovered from retained canonical crops using current strict references.'}};
  const tx=await db.transaction('write');try{
   const fresh=(await tx.execute({sql:'SELECT data,status,identity_verified FROM submissions WHERE id=?',args:[id]})).rows[0];must(fresh&&fresh.data===row.data&&fresh.status===row.status&&Number(fresh.identity_verified)===Number(row.identity_verified),'Build changed during identity review. Reload before confirming.',409);
   const active=await scoreActiveRotation(tx,String(row.character),next);const calculation=active||baseline;

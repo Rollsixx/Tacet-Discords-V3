@@ -1,0 +1,129 @@
+{
+  "source": "ryanbenson/wuthering-waves-optimizer",
+  "sourceCommit": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
+  "license": "GPL-3.0-or-later",
+  "values": {
+    "Crit. Rate:percent": [
+      6.3,
+      6.9,
+      7.5,
+      8.1,
+      8.7,
+      9.3,
+      9.9,
+      10.5
+    ],
+    "Crit. DMG:percent": [
+      12.6,
+      13.8,
+      15,
+      16.2,
+      17.4,
+      18.6,
+      19.8,
+      21
+    ],
+    "ATK:percent": [
+      6.4,
+      7.1,
+      7.9,
+      8.6,
+      9.4,
+      10.1,
+      10.9,
+      11.6
+    ],
+    "ATK:flat": [
+      30,
+      40,
+      50,
+      60
+    ],
+    "HP:percent": [
+      6.4,
+      7.1,
+      7.9,
+      8.6,
+      9.4,
+      10.1,
+      10.9,
+      11.6
+    ],
+    "HP:flat": [
+      320,
+      360,
+      390,
+      430,
+      470,
+      510,
+      540,
+      580
+    ],
+    "DEF:percent": [
+      8.1,
+      9,
+      10,
+      10.9,
+      11.8,
+      12.8,
+      13.8,
+      14.7
+    ],
+    "DEF:flat": [
+      40,
+      50,
+      60,
+      70
+    ],
+    "Basic Attack DMG Bonus:percent": [
+      6.4,
+      7.1,
+      7.9,
+      8.6,
+      9.4,
+      10.1,
+      10.9,
+      11.6
+    ],
+    "Heavy Attack DMG Bonus:percent": [
+      6.4,
+      7.1,
+      7.9,
+      8.6,
+      9.4,
+      10.1,
+      10.9,
+      11.6
+    ],
+    "Resonance Skill DMG Bonus:percent": [
+      6.4,
+      7.1,
+      7.9,
+      8.6,
+      9.4,
+      10.1,
+      10.9,
+      11.6
+    ],
+    "Resonance Liberation DMG Bonus:percent": [
+      6.4,
+      7.1,
+      7.9,
+      8.6,
+      9.4,
+      10.1,
+      10.9,
+      11.6
+    ],
+    "Energy Regen:percent": [
+      6.8,
+      7.6,
+      8.4,
+      9.2,
+      10,
+      10.8,
+      11.6,
+      12.4
+    ]
+  }
+}
