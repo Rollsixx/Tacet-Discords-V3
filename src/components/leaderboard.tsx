@@ -1,10 +1,11 @@
 "use client";
+import { ResonatorPortrait } from "./resonator-portrait";
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { listLeaderboard } from "@/lib/server/store";
 import { compactNumber, echoCritValue, readableName } from "@/lib/leaderboards/display";
-import { featuredResonators } from "./resonator-showcase";
+import { featuredResonators } from "@/lib/resonators";
 type Result=Awaited<ReturnType<typeof listLeaderboard>>;
 type Build=Result['builds'][number];
 function sets(build:Build) {
@@ -55,9 +56,9 @@ export function Leaderboard(){
  const builds=result?.builds||[];
  return <div className="leaderboard-page">
   <header className="lb-page-heading"><div><span className="eyebrow">Competitive rankings</span><h1>Solo Leaderboards</h1><p>Verified players. One best build per character.</p></div><Link className="outline-button" href="/import">Import your build ↗</Link></header>
-  <div ref={tabs} className="lb-character-tabs" aria-label="Leaderboard character">{featuredResonators.map(item=><button key={item.name} className={character===item.name?'selected':''} aria-pressed={character===item.name} onClick={()=>chooseCharacter(item.name)}><span className={`lb-monogram tone-${item.tone}`}>{item.monogram}</span>{item.name}</button>)}</div>
+  <div ref={tabs} className="lb-character-tabs" aria-label="Leaderboard character">{featuredResonators.map(item=><button key={item.name} className={character===item.name?'selected':''} aria-pressed={character===item.name} onClick={()=>chooseCharacter(item.name)}><ResonatorPortrait name={item.name} className={`lb-monogram tone-${item.tone}`}/>{item.name}</button>)}</div>
   <section className="lb-board" aria-label={`${character} rankings`}>
-   <div className="lb-board-heading"><div><span className={`lb-monogram lb-board-mark tone-${resonator?.tone||'glacio'}`}>{resonator?.monogram||'?'}</span><div><h2>{character}</h2><p>{resonator?.element||'Character'} · Standardized Solo benchmark</p></div></div><span className="lb-metric-label">Expected damage · not DPS</span></div>
+   <div className="lb-board-heading"><div><ResonatorPortrait name={character} className={`lb-monogram lb-board-mark tone-${resonator?.tone||'glacio'}`}/><div><h2>{character}</h2><p>{resonator?.element||'Character'} · Standardized Solo benchmark</p></div></div><span className="lb-metric-label">Expected damage · not DPS</span></div>
    <div className="lb-toolbar"><label><span className="visually-hidden">Search UID or in-game name</span><input type="search" placeholder="Search player name or UID…" value={search} maxLength={64} onChange={e=>{setSearch(e.target.value);setPage(1);}} /></label>{search&&<button className="text-link" onClick={()=>{setSearch('');setPage(1);}}>Clear search</button>}<span>{loading?'Loading…':`${builds.length} player${builds.length===1?'':'s'} on this page`}</span></div>
    {error?<div className="placeholder" role="alert"><h3>Rankings unavailable</h3><p>{error}</p><button className="outline-button" onClick={()=>setRetry(value=>value+1)}>Try again</button></div>:loading?<div className="lb-loading" role="status">Loading {character} rankings…</div>:!builds.length?<div className="placeholder lb-empty"><h3>{search?'No matching players':`No verified scores for ${character} yet`}</h3><p>{search?'Try a different name or UID.':'Approved, identity-verified builds with current scoring evidence appear here.'}</p>{search?<button className="outline-button" onClick={()=>setSearch('')}>Clear search</button>:<Link className="text-link" href="/import">Import a build →</Link>}</div>:<div className="lb-table-wrap"><table className="lb-table"><caption className="visually-hidden">{character} players ranked by expected standardized benchmark damage. Select a player to inspect their Echoes.</caption><thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col" className="lb-secondary">Sonatas</th><th scope="col" className="lb-secondary">Crit. Rate / DMG</th><th scope="col" className="lb-secondary">Echo CV</th><th scope="col" className="lb-extra">ATK</th><th scope="col" className="lb-extra">Energy Regen</th><th scope="col" aria-sort="descending" className="lb-score-heading">Score ↓</th></tr></thead><tbody>{builds.map(build=>{
     const open=expanded===build.id;const stats=build.data.assessment?.calculation?.finalStats;const groups=sets(build);

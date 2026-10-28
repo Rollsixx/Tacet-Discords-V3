@@ -15,6 +15,17 @@ npm run start:production
 
 Open http://localhost:3000. Setup creates a private .env.local without overwriting an existing one. The production launcher applies migrations and upgrades previously validated calculations before serving. Find your moderator token only in your local .env.local. The public navigation has four pages. Moderation is at `/BlackShores`, requires the moderator token, and is excluded from search indexing.
 
+## Beta Home and resonator artwork
+
+Home shows a compact player search, three latest **supported** resonators by original release order (not reruns), and up to five real ranked players each. `/api/public/home` reuses the current leaderboard policy, returns only summary fields, and does not expose full Echo records. Fewer than five eligible players means fewer rows; no sample competitors are shown.
+
+The shared navigation highlights the active route and shows V3 / BETA on desktop and mobile. Five locally hosted character portraits are reused by Home, Import, Profiles and Leaderboards, with initials as an image-failure fallback. See `public/resonators/ATTRIBUTION.md` for artwork sources and hashes. The scanner never needs an external artwork host.
+
+Original release ordering sources:
+- Hiyuki, 3.3: https://blog.playstation.com/2026/04/17/wuthering-waves-version-3-3-reverbs-from-the-end-of-galaxies-update-arrives-april-30/
+- Aemeath, 3.1: https://wutheringwaves.kurogames.com/en/main/news/detail/4102
+- Chisa, 2.8: https://blog.playstation.com/2025/11/14/wuthering-waves-version-2-8-introduces-the-chronorift-metropolis/
+
 ## What works
 
 - Browser screenshot OCR and automatic extraction of five Echo portraits and five Sonata icons from the supported 1920 × 1080 build-card layout.

@@ -1,3 +1,4 @@
+import { latestResonators } from "../resonators.ts";
 import { createHash, randomUUID } from "node:crypto";
 import type { Client, Row } from "@libsql/client";
 import { database } from "./database.ts";
@@ -198,4 +199,14 @@ export async function findPlayers(search = "", db: Client = database()) {
  FROM submissions s WHERE status='approved' AND uid IN (SELECT uid FROM submissions WHERE status='approved' AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0))
  GROUP BY uid ORDER BY updated_at DESC,uid ASC LIMIT 21`,args:[query,query,query]});
  return {players:result.rows.slice(0,20).map(row=>({uid:String(row.uid),ign:String(row.ign),builds:Number(row.builds),characters:Number(row.characters),updatedAt:String(row.updated_at)})),hasMore:result.rows.length>20};
+}
+
+// Reuse the ranking policy, including one best build per verified UID and stable ties.
+// Return only the fields needed on Home, never full Echo records or private submissions.
+export async function homeRankings(db: Client = database()) {
+ const boards=await Promise.all(latestResonators.map(async character=>{
+  const result=await listLeaderboard({character:character.name},db);
+  return {character:character.name,players:result.builds.slice(0,5).map(build=>({id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}))};
+ }));
+ return {boards};
 }

@@ -1,13 +1,13 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
 const links = [
   { href: "/", label: "Home" },
-  { href: "/import", label: "Import Build" },
+  { href: "/import", label: "Import" },
   { href: "/profiles", label: "Profiles" },
   { href: "/leaderboards", label: "Leaderboards" },
 ];
 
-export function Navigation() {
+export function Navigation({ pathname = "/" }: { pathname?: string }) {
   return (
     <header className="site-header">
       <div className="nav-inner">
@@ -17,10 +17,10 @@ export function Navigation() {
         </Link>
         <nav className="nav-links" aria-label="Main navigation">
           {links.map(link => (
-            <Link key={link.href} href={link.href}>{link.label}</Link>
+            <Link key={link.href} href={link.href} aria-current={pathname === link.href ? "page" : undefined}>{link.label}</Link>
           ))}
         </nav>
-        <span className="version-label">V3 / SOLO</span>
+        <span className="version-label">V3 / BETA</span>
       </div>
     </header>
   );

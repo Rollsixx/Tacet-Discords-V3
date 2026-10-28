@@ -7,7 +7,7 @@ test("four pages render without overflow or browser errors", async ({ page }, te
   for (const route of ["/", "/import", "/profiles", "/leaderboards"]) {
     await page.goto(route);
     await expect(page.locator("h1")).toBeVisible();
-    if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table, .pp-player-list").first()).toBeVisible();
+    if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table, .pp-player-list, .home-ranking-card").first()).toBeVisible();
     if(route === '/leaderboards') {
       await page.locator('.lb-character-tabs button[aria-pressed="true"]').click();
       await expect(page.locator('.placeholder,.lb-table').first()).toBeVisible();
@@ -32,9 +32,9 @@ test("real reference card produces four occupied slots and blocks invented fifth
   page.on("request", request => { if (!request.url().startsWith("http://127.0.0.1:3100") && !/^(blob:|data:)/.test(request.url())) external.push(request.url()); });
   await page.goto("/import");
   await page.getByLabel("Choose build screenshot").setInputFiles(fixture);
+  await expect(page.getByRole("heading", { name: "5 Echo slots processed" })).toBeVisible({ timeout: 150000 });
   await expect(page.locator('img[alt^="Extracted Echo portrait"]')).toHaveCount(5);
   await expect(page.locator('img[alt^="Extracted Sonata icon"]')).toHaveCount(5);
-  await expect(page.getByRole("heading", { name: "5 Echo slots processed" })).toBeVisible({ timeout: 150000 });
   await expect(page.getByRole("heading", { name: "Echo 5 — No equipped Echo detected" })).toBeVisible();
   const costs = ["4", "3", "1", "1"];
   for (let slot = 1; slot <= 4; slot++) await expect(page.getByRole("textbox", { name: `Echo ${slot} cost`, exact: true })).toHaveValue(costs[slot - 1]);

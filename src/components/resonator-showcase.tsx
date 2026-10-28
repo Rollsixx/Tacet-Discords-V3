@@ -1,20 +1,9 @@
 import Link from "next/link";
 
-export type ResonatorPreview = {
-  name: string;
-  element: string;
-  weapon: string;
-  tone: string;
-  monogram: string;
-};
-
-export const featuredResonators: ResonatorPreview[] = [
-  { name: "Carlotta", element: "Glacio", weapon: "Pistols", tone: "glacio", monogram: "CL" },
-  { name: "Cartethyia", element: "Aero", weapon: "Sword", tone: "aero", monogram: "CT" },
-  { name: "Aemeath", element: "Fusion", weapon: "Sword", tone: "fusion", monogram: "AM" },
-  { name: "Hiyuki", element: "Glacio", weapon: "Sword", tone: "glacio", monogram: "HY" },
-  { name: "Chisa", element: "Havoc", weapon: "Broadblade", tone: "havoc", monogram: "CH" },
-];
+import { ResonatorPortrait } from "./resonator-portrait";
+import { type ResonatorPreview } from "@/lib/resonators";
+export { featuredResonators } from "@/lib/resonators";
+export type { ResonatorPreview } from "@/lib/resonators";
 
 export function ResonatorCard({
   resonator,
@@ -27,7 +16,7 @@ export function ResonatorCard({
       className={`resonator-card tone-${resonator.tone}`}
     >
       <div className="resonator-art" aria-hidden="true">
-        <span>{resonator.monogram}</span>
+        <ResonatorPortrait name={resonator.name} className="resonator-card-portrait"/>
       </div>
       <div className="resonator-info">
         <span className="resonator-element">{resonator.element}</span>

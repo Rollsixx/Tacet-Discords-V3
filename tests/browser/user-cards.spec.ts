@@ -10,11 +10,11 @@ for (const card of expectations) test('original uploaded card: '+card.file, asyn
   test.skip(!directory, 'Set USER_BUILD_CARDS_DIRECTORY to local private originals.');
   const file = join(directory!, card.file);
   expect(createHash('sha256').update(readFileSync(file)).digest('hex')).toBe(card.sha256);
-  await page.goto('/import');
+  await page.goto('/import',{waitUntil:'networkidle'});
   await page.getByLabel('Choose build screenshot').setInputFiles(file);
+  await expect(page.getByRole('heading',{name:'5 Echo slots processed'})).toBeVisible({timeout:60000});
   await expect(page.locator('img[alt^="Extracted Echo portrait"]')).toHaveCount(5);
   await expect(page.locator('img[alt^="Extracted Sonata icon"]')).toHaveCount(5);
-  await expect(page.getByRole('heading',{name:'5 Echo slots processed'})).toBeVisible({timeout:60000});
   const values = await page.locator('input[aria-label^="Echo "],textarea[aria-label^="Echo "]').evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value));
   expect(values).toHaveLength(35);
   await expect(page.locator(".import-character h2")).toHaveText(card.file.split("(")[0]);
@@ -34,7 +34,7 @@ for (const card of expectations) test('original uploaded card: '+card.file, asyn
 
 test('automatic scan fills IGN and locks UID without exposing crossed-out panels',async({page},info)=>{
  test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Private original required.');
- await page.goto('/import');
+ await page.goto('/import',{waitUntil:'networkidle'});
  await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Hiyuki(3).jpg'));
  await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).toHaveValue(process.env.USER_BUILD_CARD_UID!,{timeout:60000});
  await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).not.toBeEditable();
@@ -61,7 +61,7 @@ test('all five official categories score only after approval and identity verifi
  for(const golden of scoringCases.cases){
  const character=golden.character;
  const card=expectations.find(c=>c.file.startsWith(character))!;
- await page.goto('/import');
+ await page.goto('/import',{waitUntil:'networkidle'});
  await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,card.file));
  await expect(page.getByText('No structural warnings',{exact:true})).toBeVisible({timeout:60000});
  await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).toHaveValue(uid);
@@ -140,7 +140,7 @@ test('unreadable initial fifth cost is recovered from real image OCR without edi
    },
   });
  });
- await page.goto('/import');
+ await page.goto('/import',{waitUntil:'networkidle'});
  await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Hiyuki(3).jpg'));
  await expect(page.getByRole('heading',{name:'5 Echo slots processed'})).toBeVisible({timeout:60000});
  await expect(page.getByLabel('Echo 5 cost',{exact:true})).toHaveValue('1');

@@ -1,5 +1,6 @@
 "use client";
 
+import { ResonatorPortrait } from "@/components/resonator-portrait";
 import { useEffect, useRef, useState } from "react";
 import { PageHeading, Panel, LockIcon } from "@/components/ui";
 import { SubmitBuild } from "@/components/submit-build";
@@ -71,7 +72,7 @@ export default function ImportPage() {
           {running && <progress aria-label="Screenshot scan" value={progress?.completed || 0} max={progress?.total || 38} />}
           <p className="muted scan-footnote">Passed means the extracted fields are readable and structurally valid. Every stat is checked against the screenshot when you submit.</p>
         </Panel>
-        {identity && <Panel className="import-character"><div><span className="eyebrow">Character</span><h2>{identity.character || "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
+        {identity && <Panel className="import-character"><ResonatorPortrait key={identity.character} name={identity.character||""} className="import-character-portrait"/><div><span className="eyebrow">Character</span><h2>{identity.character || "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
         {preview && <details className="source-preview"><summary>Compare original screenshot</summary>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="Selected build screenshot" />

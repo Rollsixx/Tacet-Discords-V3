@@ -224,3 +224,26 @@ test('leaderboard rank remains global when searching and ties use stable build I
   assert.equal((await listLeaderboard({character:'Carlotta',search:lowest.uid},db)).builds[0].rank,3);
  }finally{db.close();}
 });
+
+test('Home returns only Top 5 current verified players for the latest supported releases',async()=>{
+ const {homeRankings,listLeaderboard}=await import('./store.ts');
+ const db=createClient({url:'file::memory:'});
+ try{
+  await migrate(db);
+  for(let i=0;i<8;i++){
+   const input=fixture('88776655'+i);input.character='Hiyuki';input.ign='Home Player '+i;
+   const saved=await submit(validateSubmission(input),db);
+   if(i!==7)await moderate(saved.id,'approved','QA','',i!==6,db);
+   await db.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[saved.id,1000-i,scoringReadiness.engineVersion,scoringReadiness.dataVersion,'test',new Date().toISOString(),scoringReadiness.policyId,'{}']});
+  }
+  const home=await homeRankings(db);
+  assert.deepEqual(home.boards.map(b=>b.character),['Hiyuki','Aemeath','Chisa']);
+  const board=home.boards[0];
+  assert.deepEqual(board.players.map(p=>p.rank),[1,2,3,4,5]);
+  assert.deepEqual(board.players.map(p=>p.id),(await listLeaderboard({character:'Hiyuki'},db)).builds.slice(0,5).map(p=>p.id));
+  assert.equal(home.boards[1].players.length,0);
+  assert.equal(home.boards[2].players.length,0);
+  assert.deepEqual(Object.keys(board.players[0]).sort(),['id','ign','rank','score','uid']);
+  assert.ok(board.players.every(p=>p.uid!=='887766556'&&p.uid!=='887766557'));
+ }finally{db.close();}
+});

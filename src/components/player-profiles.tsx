@@ -1,26 +1,39 @@
 "use client";
+import { ResonatorPortrait } from "./resonator-portrait";
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { findPlayers, listBuilds } from "@/lib/server/store";
 import { compactNumber, echoCritValue } from "@/lib/leaderboards/display";
 import { EchoDetails } from "./echo-details";
-import { featuredResonators } from "./resonator-showcase";
+import { featuredResonators } from "@/lib/resonators";
 type Player=Awaited<ReturnType<typeof findPlayers>>['players'][number];
 type Builds=Awaited<ReturnType<typeof listBuilds>>;
 type Tab={uid:string;ign:string};
 const storageKey='tacet-player-tabs-v1';
 export function PlayerProfiles(){
+ const params=useSearchParams();
+ return <ProfileWorkspace key={params.toString()}/>;
+}
+function ProfileWorkspace(){
  const params=useSearchParams(),router=useRouter();
  const uid=params.get('uid')||params.get('search')||'';
  const buildId=params.get('build')||'';
- const [query,setQuery]=useState('');
+ const [query,setQuery]=useState(params.get('search')||'');
  const [players,setPlayers]=useState<Player[]>([]);
  const [tabs,setTabs]=useState<Tab[]>([]);
  const [result,setResult]=useState<Builds|null>(null);
  const [page,setPage]=useState(1),[filter,setFilter]=useState('');
  const [loading,setLoading]=useState(true),[error,setError]=useState('');
- const [expanded,setExpanded]=useState<string|null>(buildId||null);
+ const [expansion,updateExpansion]=useState<{route:string;id:string|null}|null>(null);
+ const expansionRoute=uid+'|'+buildId;
+ const expanded=expansion?.route===expansionRoute?expansion.id:buildId||null;
+ function setExpanded(value:string|null|((previous:string|null)=>string|null)){
+  updateExpansion(previous=>{
+   const current=previous?.route===expansionRoute?previous.id:buildId||null;
+   return {route:expansionRoute,id:typeof value==='function'?value(current):value};
+  });
+ }
  const [retry,setRetry]=useState(0),[morePlayers,setMorePlayers]=useState(false);
  const selected=/^\d{8,12}$/.test(uid)?uid:'';
  // Hydrate browser-local history after SSR; the stored value is an external source.
@@ -52,8 +65,8 @@ export function PlayerProfiles(){
    {!first?<div className="placeholder"><h2>No approved builds for this player</h2><p>Check the UID or search for another player.</p><button className="outline-button" onClick={newSearch}>Find a player</button></div>:<>
    <header className="pp-player-header"><span className="pp-avatar">{first.ign.slice(0,2).toUpperCase()}</span><div><h2>{first.ign}</h2><p>UID {first.uid} <span>·</span> {first.identityVerified?'Identity verified':'Identity unverified'}</p><small>Approved resonator builds · Latest on this page {new Date(first.createdAt).toLocaleDateString()}</small></div></header>
    <div className="pp-section-title"><div><h2>Resonator builds</h2><p>Choose a resonator to inspect its stats and five Echoes.</p></div><label><span className="visually-hidden">Filter resonators on this page</span><input type="search" placeholder="Filter resonators on this page…" value={filter} onChange={e=>setFilter(e.target.value)}/></label></div>
-   <div className="pp-resonators">{visible.map(build=>{const character=featuredResonators.find(item=>item.name===build.character);return <button key={build.id} className={expanded===build.id?'active':''} onClick={()=>setExpanded(value=>value===build.id?null:build.id)} aria-pressed={expanded===build.id}><span className={`lb-monogram tone-${character?.tone||'glacio'}`}>{character?.monogram||build.character.slice(0,2)}</span><span><strong>{build.character}</strong><small>{build.score===null?'Approved · Unranked':'Solo benchmark'}</small></span><b>{build.score===null?'—':build.score.toLocaleString(undefined,{maximumFractionDigits:0})}</b></button>;})}</div>
-   <div className="lb-table-wrap"><table className="lb-table pp-build-table"><caption className="visually-hidden">Approved resonator builds. Select a resonator to view its standardized stats and Echoes.</caption><thead><tr><th>Resonator</th><th className="lb-secondary">Crit. Rate / DMG</th><th className="lb-secondary">Echo CV</th><th className="lb-extra">ATK</th><th className="lb-extra">Energy Regen</th><th>Benchmark damage</th></tr></thead><tbody>{visible.map(build=>{const stats=build.data.assessment?.calculation?.finalStats,open=expanded===build.id;return <Fragment key={build.id}><tr className={`lb-player-row ${open?'expanded':''}`} onClick={()=>setExpanded(open?null:build.id)}><td><button className="lb-player-button" aria-label={`${open?'Hide':'View'} ${build.character} stats`} aria-expanded={open} aria-controls={'echo-details-'+build.id} onClick={e=>{e.stopPropagation();setExpanded(open?null:build.id);}}><strong>{build.character}</strong><span className="lb-chevron">{open?'−':'+'}</span></button></td><td className="lb-secondary lb-number">{compactNumber(stats?.totalCritRate,true)}<small>{compactNumber(stats?.totalCritDMG,true)}</small></td><td className="lb-secondary lb-cv-number">{build.data.slots.reduce((sum,slot)=>sum+echoCritValue(slot.substats),0).toFixed(1)}</td><td className="lb-extra lb-number">{compactNumber(stats?.totalAtk)}</td><td className="lb-extra lb-number">{compactNumber(stats?.energyRegen,true)}</td><td className="lb-score">{build.score===null?'Unranked':build.score.toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>{open&&<tr className="lb-detail-row"><td colSpan={6}><div className="pp-stats-notice">{stats?'Standardized stats · Level 90, S0, signature weapon R1. These values use benchmark assumptions.':'Standardized resonator stats unavailable for this build. Echo values below are the approved scan.'}{build.score===null&&<p>{build.data.assessment?.reason||'This build has no verified ranking score.'}</p>}</div><EchoDetails build={build} profile/></td></tr>}</Fragment>;})}</tbody></table>{!visible.length&&<p className="placeholder">No resonators match this filter on this page.</p>}</div>
+   <div className="pp-resonators">{visible.map(build=>{const character=featuredResonators.find(item=>item.name===build.character);return <button key={build.id} className={expanded===build.id?'active':''} onClick={()=>setExpanded(value=>value===build.id?null:build.id)} aria-pressed={expanded===build.id}><ResonatorPortrait name={build.character} className={`lb-monogram tone-${character?.tone||'glacio'}`}/><span><strong>{build.character}</strong><small>{build.score===null?'Approved · Unranked':'Solo benchmark'}</small></span><b>{build.score===null?'—':build.score.toLocaleString(undefined,{maximumFractionDigits:0})}</b></button>;})}</div>
+   <div className="lb-table-wrap"><table className="lb-table pp-build-table"><caption className="visually-hidden">Approved resonator builds. Select a resonator to view its standardized stats and Echoes.</caption><thead><tr><th>Resonator</th><th className="lb-secondary">Crit. Rate / DMG</th><th className="lb-secondary">Echo CV</th><th className="lb-extra">ATK</th><th className="lb-extra">Energy Regen</th><th>Benchmark damage</th></tr></thead><tbody>{visible.map(build=>{const stats=build.data.assessment?.calculation?.finalStats,open=expanded===build.id;return <Fragment key={build.id}><tr className={`lb-player-row ${open?'expanded':''}`} onClick={()=>setExpanded(open?null:build.id)}><td><button className="lb-player-button" aria-label={`${open?'Hide':'View'} ${build.character} stats`} aria-expanded={open} aria-controls={'echo-details-'+build.id} onClick={e=>{e.stopPropagation();setExpanded(open?null:build.id);}}><ResonatorPortrait name={build.character} className="pp-row-portrait"/><strong>{build.character}</strong><span className="lb-chevron">{open?'−':'+'}</span></button></td><td className="lb-secondary lb-number">{compactNumber(stats?.totalCritRate,true)}<small>{compactNumber(stats?.totalCritDMG,true)}</small></td><td className="lb-secondary lb-cv-number">{build.data.slots.reduce((sum,slot)=>sum+echoCritValue(slot.substats),0).toFixed(1)}</td><td className="lb-extra lb-number">{compactNumber(stats?.totalAtk)}</td><td className="lb-extra lb-number">{compactNumber(stats?.energyRegen,true)}</td><td className="lb-score">{build.score===null?'Unranked':build.score.toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>{open&&<tr className="lb-detail-row"><td colSpan={6}><div className="pp-stats-notice">{stats?'Standardized stats · Level 90, S0, signature weapon R1. These values use benchmark assumptions.':'Standardized resonator stats unavailable for this build. Echo values below are the approved scan.'}{build.score===null&&<p>{build.data.assessment?.reason||'This build has no verified ranking score.'}</p>}</div><EchoDetails build={build} profile/></td></tr>}</Fragment>;})}</tbody></table>{!visible.length&&<p className="placeholder">No resonators match this filter on this page.</p>}</div>
    <footer className="lb-bottom"><small>Echo CV = 2 × substat Crit. Rate + substat Crit. DMG</small><div className="lb-pagination"><button className="outline-button" disabled={page===1} onClick={()=>{setPage(value=>value-1);setExpanded(null);}}>Previous</button><span>Page {page}</span><button className="outline-button" disabled={!result?.hasMore} onClick={()=>{setPage(value=>value+1);setExpanded(null);}}>Next</button></div></footer>
    </>}
   </section>}
