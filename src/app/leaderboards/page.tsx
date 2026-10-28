@@ -1,5 +1,5 @@
-import { PageHeading, Panel } from "@/components/ui";
-import { BuildDirectory } from "@/components/build-directory";
+import { Suspense } from "react";
+import { Leaderboard } from "@/components/leaderboard";
 export default function LeaderboardsPage() {
-  return <><PageHeading eyebrow="Competitive rankings / 03" title="Solo Leaderboards." description="Approved builds, with official rankings reserved for verified calculation results." /><Panel><BuildDirectory mode="leaderboards" /></Panel></>;
+ return <Suspense fallback={<div className="placeholder"><h1>Solo Leaderboards</h1><p>Loading rankings…</p></div>}><Leaderboard /></Suspense>;
 }

@@ -198,3 +198,24 @@ test('admin dashboard, ID search, audited approved deletion and rollback are rea
   assert.equal((await adminOverview(db)).players,0);
  }finally{db.close();}
 });
+
+test('leaderboard rank remains global when searching and ties use stable build IDs',async()=>{
+ const {listLeaderboard}=await import('./store.ts');
+ const db=createClient({url:'file::memory:'});
+ try{
+  await migrate(db);
+  const ids=[];
+  for(const [i,score] of [300,200,200].entries()){
+   const body=fixture('88888888'+i);body.character='Carlotta';body.ign='Rank Player '+i;
+   const saved=await submit(validateSubmission(body),db);ids.push(saved.id);
+   await moderate(saved.id,'approved','QA reviewer','',true,db);
+   await db.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[saved.id,score,scoringReadiness.engineVersion,scoringReadiness.dataVersion,'test-reference',new Date().toISOString(),scoringReadiness.policyId,'{}']});
+  }
+  const all=await listLeaderboard({character:'Carlotta'},db);
+  assert.deepEqual(all.builds.map(b=>b.rank),[1,2,3]);
+  assert.equal(all.builds[0].id,ids[0]);
+  assert.deepEqual(all.builds.slice(1).map(b=>b.id),ids.slice(1).sort());
+  const lowest=all.builds[2];
+  assert.equal((await listLeaderboard({character:'Carlotta',search:lowest.uid},db)).builds[0].rank,3);
+ }finally{db.close();}
+});

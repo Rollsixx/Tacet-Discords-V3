@@ -7,7 +7,11 @@ test("four pages render without overflow or browser errors", async ({ page }, te
   for (const route of ["/", "/import", "/profiles", "/leaderboards"]) {
     await page.goto(route);
     await expect(page.locator("h1")).toBeVisible();
-    if (route !== "/import") await expect(page.locator(".build-card, .placeholder").first()).toBeVisible();
+    if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table").first()).toBeVisible();
+    if(route === '/leaderboards') {
+      await page.locator('.lb-character-tabs button[aria-pressed="true"]').click();
+      await expect(page.locator('.placeholder,.lb-table').first()).toBeVisible();
+    }
     await expect(page.locator('nav[aria-label="Main navigation"] a')).toHaveCount(4);
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(route.slice(1) || "home") + ".png", fullPage: true });

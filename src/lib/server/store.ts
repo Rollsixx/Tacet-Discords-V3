@@ -115,10 +115,10 @@ export async function listBuilds(options: { search?: string; character?: string;
 }
 
 function publicBuild(row: Row) { return {
-      id: String(row.id), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
+      id: String(row.id), rank: row.global_rank == null ? null : Number(row.global_rank), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
       status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
       identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
-      data: JSON.parse(String(row.data)) as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+      data: JSON.parse(String(row.data)) as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
     }; }
 
 export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
@@ -131,8 +131,10 @@ export async function listLeaderboard(options: {character?: string;search?: stri
     row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
     FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
     WHERE s.status='approved' AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=?
-  ) SELECT * FROM candidates WHERE player_best=1 AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
-    ORDER BY verified_score DESC,id ASC LIMIT 21 OFFSET ?`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,search,search,search,(page-1)*20]});
+  ), ranked AS (
+    SELECT *,row_number() OVER (ORDER BY verified_score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1
+  ) SELECT * FROM ranked WHERE (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
+    ORDER BY global_rank ASC LIMIT 21 OFFSET ?`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,search,search,search,(page-1)*20]});
   return {builds:result.rows.slice(0,20).map(publicBuild),page,hasMore:result.rows.length>20,scoring:scoringReadiness};
 }
 

@@ -91,12 +91,29 @@ test('all five official categories score only after approval and identity verifi
  expect(ranked.builds).toHaveLength(1);
  expect(ranked.builds[0].score).toBeCloseTo(golden.score,5);
  await page.goto('/leaderboards?character='+character);
- await expect(page.locator('.build-card').filter({hasText:character})).toBeVisible();
+ await expect(page.locator('.lb-player-row')).toHaveCount(1);
+ await expect(page.locator('.lb-rank')).toHaveText('1');
+ await expect(page.locator('.lb-expanded')).toHaveCount(0);
+ await page.getByRole('button',{name:'View Scoring Browser QA Echoes',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Equipped Echoes',exact:true})).toBeVisible();
+ await expect(page.locator('.lb-echo')).toHaveCount(5);
+ await expect.poll(()=>page.locator('.lb-portrait').evaluateAll(images=>images.every(image=>(image as HTMLImageElement).naturalWidth===192))).toBe(true);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});
  await page.screenshot({path:info.outputPath(character+'-official-leaderboard.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});
+ await expect.poll(()=>page.locator('.lb-character-tabs').evaluate(container=>{
+  const selected=container.querySelector('[aria-pressed="true"]')!;
+  const a=selected.getBoundingClientRect(),b=container.getBoundingClientRect();return a.left>=b.left-1&&a.right<=b.right+1;
+ })).toBe(true);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:info.outputPath(character+'-official-leaderboard-mobile.png'),fullPage:true});
+ await page.getByRole('button',{name:'Hide Scoring Browser QA Echoes',exact:true}).click();
+ await expect(page.locator('.lb-expanded')).toHaveCount(0);
+ await page.getByLabel('Search UID or in-game name',{exact:true}).fill('NoSuchPlayer');
+ await expect(page.getByRole('heading',{name:'No matching players',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Clear search',exact:true}).first().click();
+ await expect(page.locator('.lb-player-row')).toHaveCount(1);
  await page.setViewportSize({width:1440,height:1000});
  }
 });

@@ -1,0 +1,27 @@
+{
+  "1": {
+    "HP": 22.8,
+    "ATK": 18,
+    "DEF": 18
+  },
+  "3": {
+    "HP": 30,
+    "ATK": 30,
+    "DEF": 38,
+    "Glacio": 30,
+    "Fusion": 30,
+    "Electro": 30,
+    "Aero": 30,
+    "Spectro": 30,
+    "Havoc": 30,
+    "EnergyRegen": 32
+  },
+  "4": {
+    "HP": 33,
+    "ATK": 33,
+    "DEF": 41.8,
+    "CritRate": 22,
+    "CritDMG": 44,
+    "HealingBonus": 26
+  }
+}
