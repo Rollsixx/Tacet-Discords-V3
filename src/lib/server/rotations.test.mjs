@@ -75,7 +75,9 @@ test('owner-reviewed optimizer workflow validates definitions, gates gear, stage
  await migrate(db);await seed(db);await rotationWorkspace(db,'Carlotta');const catalog=await modifierCatalog('Carlotta');
  const reviewed={...spec,name:'Owner-reviewed benchmark',mode:'admin-reviewed',conditions:'Start with enough energy and Substance. Owner reviews preparation, cooldowns and buff uptime.',actions:[{...spec.actions[0],effects:[{id:'buffs:Deconstruction',isEnabled:true},{id:'weaponPassives:TheLastDanceSKillBonus',isEnabled:true}]}]};
  for(const character of ['Carlotta','Cartethyia','Aemeath','Hiyuki','Chisa']){const w=await rotationWorkspace(db,character);const candidate={...reviewed,actions:[{...w.catalog.find(a=>a.type==='basic'),count:1}]};candidate.actions=candidate.actions.map(({type,key,count})=>({type,key,count}));assert.equal((await validateSpec(character,candidate)).valid,true,character);}
- assert.equal((await validateSpec('Carlotta',{...reviewed,conditions:''})).valid,false);
+ assert.equal((await validateSpec('Carlotta',{...reviewed,conditions:''})).valid,true);
+ assert.equal((await validateSpec('Carlotta',{...reviewed,conditions:undefined})).valid,true);
+ assert.equal((await validateSpec('Carlotta',{...reviewed,conditions:'',actions:[]})).valid,false);
  await assert.rejects(normalizeSpec('Carlotta',{...reviewed,actions:[{...reviewed.actions[0],effects:[{id:'buffs:NotReal',isEnabled:true}]}]}));
  await assert.rejects(normalizeSpec('Carlotta',{...reviewed,actions:[{...reviewed.actions[0],advancedConfig:{teamBuffs:{Fake:{isEnabled:true}}}}]}));
  const stacked=catalog.find(d=>d.hasStacks);assert.ok(stacked);await assert.rejects(normalizeSpec('Carlotta',{...reviewed,actions:[{...spec.actions[0],effects:[{id:stacked.id,isEnabled:true,stacks:stacked.maxStacks+1}]}]}));

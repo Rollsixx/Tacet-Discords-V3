@@ -81,7 +81,7 @@ export function simulate(spec,model,environment={}){
 export async function validateSpec(character,spec){
  const normalized=await normalizeSpec(character,spec);
  let result;
- if(normalized.mode===REVIEWED_MODE){const errors=[];if(!normalized.actions.length)errors.push('Add at least one attack.');if(normalized.conditions.length<20)errors.push('Describe the starting resources, transformation state, preparation, and buff-uptime assumptions (at least 20 characters).');if(normalized.actions.some(a=>a.mainEcho))errors.push('Universal leaderboard rotations cannot include a fixed Echo attack: players may equip different main Echoes. Remove Echo attacks from this draft.');result={valid:!errors.length,errors,trace:[],actions:normalized.actions,mechanicsVersion:REVIEWED_VERSION,warnings:['Technical configuration checks only. The owner must review cooldowns, resources, stacks, transformations, and buff uptime before publishing.']};}
+ if(normalized.mode===REVIEWED_MODE){const errors=[];if(!normalized.actions.length)errors.push('Add at least one attack.');if(normalized.actions.some(a=>a.mainEcho))errors.push('Universal leaderboard rotations cannot include a fixed Echo attack: players may equip different main Echoes. Remove Echo attacks from this draft.');result={valid:!errors.length,errors,trace:[],actions:normalized.actions,mechanicsVersion:REVIEWED_VERSION,warnings:['Technical configuration checks only. The owner must review cooldowns, resources, stacks, transformations, and buff uptime before publishing.']};}
  else result=simulate(normalized,MECHANICS_MODELS[character]);
  return {...result,hash:specificationHash(normalized),spec:normalized};
 }
