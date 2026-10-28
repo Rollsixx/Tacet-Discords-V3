@@ -9,14 +9,14 @@ export async function GET(request:Request){try{
  return json(await rotationWorkspace(database(),query.get('character')||'Carlotta',Number(query.get('historyPage'))||1));
 }catch(error){return failure(error);}}
 export async function POST(request:Request){try{
- authorize(request);const body=await readJson(request,50000);
+ authorize(request);const body=await readJson(request,200000);
  if(!record(body)||typeof body.operation!=='string')throw new HttpError(400,'Rotation operation required.');
  const db=database();
  if(['step','publish'].includes(body.operation)){
   if(typeof body.runId!=='string'||!/^[a-f0-9-]{36}$/.test(body.runId))throw new HttpError(400,'Valid preview ID required.');
   if(body.operation==='step')return json(await stepRotationPreview(db,body.runId));
   if(typeof body.confirmation!=='string')throw new HttpError(400,'Explicit publication confirmation required.');
-  return json(await activateRotation(db,body.runId,body.confirmation));
+  return json(await activateRotation(db,body.runId,body.confirmation,body.ownerReviewed===true));
  }
  if(typeof body.character!=='string'||body.character.length>64)throw new HttpError(400,'Resonator required.');
  if(body.operation==='rollback'){

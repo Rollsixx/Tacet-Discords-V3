@@ -226,3 +226,20 @@ test('rotation editor previews an approved source build through the server optim
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('rotation-real-approved-build-preview.png'),fullPage:true});
  expect((await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds[0].score).toBeCloseTo(scoringCases.cases.find(c=>c.character==='Carlotta')!.score,5);
 });
+
+
+test('owner-reviewed rotation publishes only after explicit confirmation and can roll back without losing builds',async({page,request},info)=>{
+ test.skip(info.project.name!=='desktop'||!directory||!process.env.USER_BUILD_CARD_UID,'Requires preceding isolated five-category lifecycle.');
+ const token='browser-test-only-token-00000000000000000000',headers={Authorization:'Bearer '+token};
+ const workspace=await(await request.get('/api/admin/rotations?character=Carlotta',{headers})).json();const baseline=workspace.active.id;
+ const initial=(await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds[0].score;
+ const spec={...workspace.active.spec,mode:'admin-reviewed',name:'Browser owner-reviewed rotation',conditions:'Sufficient energy and Substance at start; owner reviewed cooldowns and weapon buff uptime. No team buffs.',actions:workspace.active.spec.actions.map((a:Record<string,unknown>,i:number)=>({...a,effects:i===0?[{id:'buffs:Deconstruction',isEnabled:true}]:[]}))};
+ expect((await request.post('/api/admin/rotations',{headers,data:{operation:'save',character:'Carlotta',revision:workspace.draft?.revision||0,spec}})).ok()).toBe(true);
+ await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await page.getByRole('button',{name:'Validate draft',exact:true}).click();await page.getByRole('button',{name:'Preview leaderboard changes',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Review publication confirmation'})).toBeEnabled({timeout:30000});await page.getByRole('button',{name:'Review publication confirmation'}).click();
+ const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();const phrase=await dialog.locator('strong').textContent();await dialog.getByLabel('Publication confirmation').fill(phrase!);await expect(dialog.getByRole('button',{name:'Confirm publication',exact:true})).toBeDisabled();await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Confirm publication',exact:true}).click();await expect(page.getByText('Official rotation activated atomically. Previous scores and versions are retained.',{exact:true})).toBeVisible();
+ const changed=(await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds;expect(changed).toHaveLength(1);expect(changed[0].score).not.toBe(initial);expect(changed[0].data.assessment.calculation.benchmarkMode).toBe('admin-reviewed');
+ await page.screenshot({path:info.outputPath('reviewed-rotation-published.png'),fullPage:true});
+ const rollback=await(await request.post('/api/admin/rotations',{headers,data:{operation:'rollback',character:'Carlotta',versionId:baseline}})).json();let preview=await(await request.post('/api/admin/rotations',{headers,data:{operation:'step',runId:rollback.id}})).json();while(preview.run.state==='building')preview=await(await request.post('/api/admin/rotations',{headers,data:{operation:'step',runId:rollback.id}})).json();expect(preview.run.state).toBe('ready');expect((await request.post('/api/admin/rotations',{headers,data:{operation:'publish',runId:rollback.id,confirmation:preview.confirmation,ownerReviewed:true}})).ok()).toBe(true);
+ expect((await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds[0].score).toBe(initial);expect((await(await request.get('/api/public/builds')).json()).builds).toHaveLength(5);
+});

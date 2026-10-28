@@ -1,22 +1,27 @@
 import {test,expect} from '@playwright/test';
 const token='browser-test-only-token-00000000000000000000';const headers={Authorization:'Bearer '+token};
-test('rotation drafts autosave, reorder and survive reload; unverified mechanics cannot publish',async({page,request},info)=>{
+test('rotation drafts autosave, reorder and survive reload; reviewed effects validate while incomplete assumptions cannot publish',async({page,request},info)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  expect((await request.get('/api/admin/rotations')).status()).toBe(401);
  await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();await expect(page.getByText('Damage engine connected · Full combat validation unavailable',{exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();await expect(page.getByText('Optimizer connected · Owner-reviewed benchmark',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(5);
+ await page.getByLabel('Evaluation mode').selectOption('admin-reviewed');await page.getByLabel('Starting conditions & combat review notes').fill('');
  await page.getByLabel('Rotation name',{exact:true}).fill('Browser draft '+info.project.name);
  await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
  await page.getByLabel('Repeat action 1',{exact:true}).fill('2');await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
  const name=await page.locator('.rotation-actions li').first().locator('strong').textContent();await page.getByRole('button',{name:'Move action 1 down',exact:true}).click();await expect(page.locator('.rotation-actions li').first().locator('strong')).not.toHaveText(name!);await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
  await page.getByLabel('Add verified attack data').selectOption('skill:ArtofViolenceDMG');const count=await page.locator('.rotation-actions li').count();await page.getByRole('button',{name:'Add attack',exact:true}).click();await expect(page.locator('.rotation-actions li')).toHaveCount(count+1);await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});await page.getByRole('button',{name:'Remove action '+(count+1),exact:true}).click();await expect(page.locator('.rotation-actions li')).toHaveCount(count);await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
- await page.getByRole('button',{name:'Validate mechanics',exact:true}).click();await expect(page.getByText('Blocked · draft cannot be published',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Preview leaderboard changes',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Validate draft',exact:true}).click();await expect(page.getByText('Blocked · draft cannot be published',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Preview leaderboard changes',exact:true})).toBeDisabled();
  const workspace=await(await request.get('/api/admin/rotations?character=Carlotta',{headers})).json();expect(workspace.draft.spec.name).toBe('Browser draft '+info.project.name);
  const blocked=await request.post('/api/admin/rotations',{headers,data:{operation:'preview',character:'Carlotta',revision:workspace.draft.revision}});expect(blocked.status()).toBe(422);
  const conflict=await request.post('/api/admin/rotations',{headers,data:{operation:'save',character:'Carlotta',revision:0,spec:workspace.draft.spec}});expect(conflict.status()).toBe(409);
  const forged=await request.post('/api/admin/rotations',{headers,data:{operation:'save',character:'Carlotta',revision:workspace.draft.revision,spec:{...workspace.draft.spec,actions:[{type:'skill',key:'ArtofViolenceDMG',count:1,buffs:[{modifier:'ATK',modifierValue:999}]}]}}});expect(forged.status()).toBe(400);
- await page.getByRole('button',{name:'Test against builds',exact:true}).click();await expect(page.getByRole('heading',{name:'Provisional damage comparison'})).toBeVisible();
+ await page.getByLabel('Starting conditions & combat review notes').fill('Owner-reviewed start with sufficient energy. Preparation damage excluded; verify cooldowns and uptime for each attack.');
+ await page.locator('.rotation-effects').first().locator('summary').click();await page.getByLabel('Optimizer effect for action 1',{exact:true}).selectOption('buffs:Deconstruction');await page.locator('.rotation-effects').first().getByRole('button',{name:'Add effect',exact:true}).click();
+ await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});await page.getByRole('button',{name:'Validate draft',exact:true}).click();await expect(page.getByText('Passed · optimizer configuration checked; owner review required',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Preview leaderboard changes',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Test against builds',exact:true}).click();await expect(page.getByRole('heading',{name:'Optimizer build comparison'})).toBeVisible();
+ await expect.poll(()=>page.locator('.rotation-actions li').nth(1).locator('div').first().evaluate(el=>el.getBoundingClientRect().width)).toBeGreaterThan(120);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('rotation-editor.png'),fullPage:true});
  await page.reload();await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await expect(page.getByLabel('Rotation name',{exact:true})).toHaveValue('Browser draft '+info.project.name);expect(errors).toEqual([]);
 });

@@ -68,3 +68,33 @@ test('rescore batches catch up with approvals arriving behind the cursor and his
  try{await migrate(db);for(let i=0;i<9;i++)await seed(db,String(812345670+i));await rotationWorkspace(db,'Carlotta');await saveRotationDraft(db,'Carlotta',spec,0);const job=await startRotationPreview(db,'Carlotta',1);let p=await stepRotationPreview(db,job.id);assert.equal(p.run.state,'building');await seed(db,'899999990');for(let i=0;i<6&&p.run.state==='building';i++)p=await stepRotationPreview(db,job.id);assert.equal(p.run.state,'ready');assert.equal(p.stale,false);assert.equal(p.ranking.length,10);await activateRotation(db,job.id,p.confirmation);assert.equal((await listLeaderboard({},db)).builds.length,10);const page=await rotationWorkspace(db,'Carlotta',2);assert.equal(page.historyPage,2);assert.equal(page.history.length,0);
  }finally{MECHANICS_MODELS.Carlotta=previous;db.close();}
 });
+
+test('owner-reviewed optimizer workflow validates definitions, gates gear, stages all builds and requires owner confirmation',async()=>{
+ const {modifierCatalog,compileReviewed}=await import('./rotations/configuration.mjs');const {validateSpec}=await import('./rotations/mechanics.mjs');
+ const db=createClient({url:'file::memory:'});try{
+ await migrate(db);await seed(db);await rotationWorkspace(db,'Carlotta');const catalog=await modifierCatalog('Carlotta');
+ const reviewed={...spec,name:'Owner-reviewed benchmark',mode:'admin-reviewed',conditions:'Start with enough energy and Substance. Owner reviews preparation, cooldowns and buff uptime.',actions:[{...spec.actions[0],effects:[{id:'buffs:Deconstruction',isEnabled:true},{id:'weaponPassives:TheLastDanceSKillBonus',isEnabled:true}]}]};
+ for(const character of ['Carlotta','Cartethyia','Aemeath','Hiyuki','Chisa']){const w=await rotationWorkspace(db,character);const candidate={...reviewed,actions:[{...w.catalog.find(a=>a.type==='basic'),count:1}]};candidate.actions=candidate.actions.map(({type,key,count})=>({type,key,count}));assert.equal((await validateSpec(character,candidate)).valid,true,character);}
+ assert.equal((await validateSpec('Carlotta',{...reviewed,conditions:''})).valid,false);
+ await assert.rejects(normalizeSpec('Carlotta',{...reviewed,actions:[{...reviewed.actions[0],effects:[{id:'buffs:NotReal',isEnabled:true}]}]}));
+ await assert.rejects(normalizeSpec('Carlotta',{...reviewed,actions:[{...reviewed.actions[0],advancedConfig:{teamBuffs:{Fake:{isEnabled:true}}}}]}));
+ const stacked=catalog.find(d=>d.hasStacks);assert.ok(stacked);await assert.rejects(normalizeSpec('Carlotta',{...reviewed,actions:[{...spec.actions[0],effects:[{id:stacked.id,isEnabled:true,stacks:stacked.maxStacks+1}]}]}));
+ const set=catalog.find(d=>d.category==='echoSetPassives'&&d.scope==='Freezing Frost 5 Set');const echo=catalog.find(d=>d.category==='mainEchoBuff');assert.ok(set&&echo);
+ const identity=cases.cases.find(c=>c.character==='Carlotta').echoes;
+ const gear=compileReviewed({...reviewed,actions:[{...spec.actions[0],effects:[{id:set.id,isEnabled:true,...(set.hasStacks?{stacks:set.maxStacks}:{})},{id:echo.id,isEnabled:true,...(echo.hasStacks?{stacks:echo.maxStacks}:{})}]}]},catalog,identity);assert.equal(gear.trace[0].inactive.length,2);assert.deepEqual(gear.actions[0].advancedConfig,{});
+ const equipped=catalog.find(d=>d.category==='echoSetPassives'&&d.scope==='Frosty Resolve 5 Set'&&!d.hasStacks);const activeGear=compileReviewed({...reviewed,actions:[{...spec.actions[0],effects:[{id:equipped.id,isEnabled:true}]}]},catalog,identity);assert.equal(activeGear.trace[0].applied.length,1);assert.equal(activeGear.actions[0].advancedConfig.echoSetPassives[equipped.key].isEnabled,true);
+ await saveRotationDraft(db,'Carlotta',reviewed,0);assert.equal((await validateRotationDraft(db,'Carlotta',1)).valid,true);const samples=await sampleRotationDraft(db,'Carlotta',1);assert.equal(samples.provisional,false);assert.ok(samples.builds[0].trace[0].applied.length===2);
+ const off={...reviewed,actions:[{...spec.actions[0],effects:[]}]};await saveRotationDraft(db,'Carlotta',off,1);const without=await sampleRotationDraft(db,'Carlotta',2);assert.ok(samples.builds[0].score>without.builds[0].score,'real optimizer buffs increase expected damage');
+ await saveRotationDraft(db,'Carlotta',reviewed,2);const run=await startRotationPreview(db,'Carlotta',3);const preview=await stepRotationPreview(db,run.id);assert.equal(preview.run.state,'ready');
+ const pending=await seed(db,'899999998',false);assert.equal((await rotationPreview(db,run.id)).stale,false);
+ await assert.rejects(activateRotation(db,run.id,preview.confirmation),e=>e.status===400);await activateRotation(db,run.id,preview.confirmation,true);
+ assert.equal((await listLeaderboard({},db)).builds[0].data.assessment.calculation.benchmarkMode,'admin-reviewed');await moderate(pending.id,'approved','QA','',true,db);assert.equal((await listLeaderboard({},db)).builds.length,2);
+ const rollback=await startRotationPreview(db,'Carlotta',null,'baseline-Carlotta');const old=await stepRotationPreview(db,rollback.id);await activateRotation(db,rollback.id,old.confirmation,true);
+ const restore=await startRotationPreview(db,'Carlotta',null,preview.version.id);const restored=await stepRotationPreview(db,restore.id);await activateRotation(db,restore.id,restored.confirmation,true);assert.equal((await rotationWorkspace(db,'Carlotta')).active.id,preview.version.id);assert.ok(Number((await db.execute('SELECT COUNT(*) n FROM rotation_score_history')).rows[0].n)>2);
+ }finally{db.close();}
+});
+
+
+test('owner-reviewed publication cannot activate an untested empty scoring cohort',async()=>{
+ const db=createClient({url:'file::memory:'});try{await migrate(db);await rotationWorkspace(db,'Carlotta');await saveRotationDraft(db,'Carlotta',{...spec,mode:'admin-reviewed',conditions:'Owner-reviewed complete start and end conditions with sufficient resources.'},0);const job=await startRotationPreview(db,'Carlotta',1);const preview=await stepRotationPreview(db,job.id);assert.equal(preview.run.state,'ready');await assert.rejects(activateRotation(db,job.id,preview.confirmation,true),e=>e.status===422);assert.equal((await rotationWorkspace(db,'Carlotta')).active.kind,'baseline');}finally{db.close();}
+});

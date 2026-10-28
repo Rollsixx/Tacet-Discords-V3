@@ -5,6 +5,7 @@ import {ROTATION_ROSTER,MECHANICS_MODELS} from '../../game-data/rotation-mechani
 import {scoringPreset} from '../../game-data/scoring-policies.mjs';
 import {calculateStandard,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from '../scoring.mjs';
 import {actionCatalog,normalizeSpec,validateSpec,simulate,specificationHash} from './mechanics.mjs';
+import {modifierCatalog,compileReviewed,REVIEWED_MODE,REVIEWED_VERSION} from './configuration.mjs';
 import {HttpError} from '../validation.ts';
 const now=()=>new Date().toISOString();
 const parse=row=>row?Object.fromEntries(Object.entries(row).map(([k,v])=>[k,['spec','validation'].includes(k)&&v?JSON.parse(String(v)):v])):null;
@@ -36,7 +37,7 @@ export async function rotationWorkspace(db,character,historyPage=1){
  const draft=(await db.execute({sql:'SELECT * FROM rotation_drafts WHERE character=?',args:[character]})).rows[0];
  const history=(await db.execute({sql:'SELECT v.id,v.number,v.kind,v.spec_hash,v.mechanics_version,v.policy_id,v.created_at,EXISTS(SELECT 1 FROM rotation_activations a WHERE a.version_id=v.id) AS published FROM rotation_versions v WHERE v.character=? ORDER BY v.number DESC LIMIT 51 OFFSET ?',args:[character,(historyPage-1)*50]})).rows;
  const runs=(await db.execute({sql:'SELECT * FROM rotation_runs WHERE character=? ORDER BY created_at DESC,id DESC LIMIT 10',args:[character]})).rows;
- return {characters:ROTATION_ROSTER,character,active:parse(current),draft:parse(draft),catalog:await actionCatalog(character),mechanics:MECHANICS_MODELS[character],history:history.slice(0,50),historyPage,historyHasMore:history.length>50,runs};
+ return {characters:ROTATION_ROSTER,character,active:parse(current),draft:parse(draft),catalog:await actionCatalog(character),modifiers:await modifierCatalog(character),mechanics:MECHANICS_MODELS[character],history:history.slice(0,50),historyPage,historyHasMore:history.length>50,runs};
 }
 export async function saveRotationDraft(db,character,input,revision){
  await initializeRotations(db);const spec=await normalizeSpec(character,input);must(Number.isInteger(revision)&&revision>=0,'Valid draft revision required.',400);
@@ -58,6 +59,12 @@ export async function evaluateVersion(character,data,version,{allowProvisional=f
  must(version.engine_version===ENGINE_VERSION&&version.data_version===DATA_VERSION,'Pinned engine/data version is unavailable.',422);
  const spec=typeof version.spec==='string'?JSON.parse(version.spec):version.spec;
  if(version.kind==='baseline'){must(version.policy_id===POLICY_VERSION,'The historical baseline policy adapter is unavailable.',422);return calculateStandard(character,data.slots,source.identities,{name:spec.name,actions:spec.actions,policyId:version.policy_id,versionId:version.id,mechanicsVersion:'legacy-damage-window',verifiedMechanics:false,provenance:'Preserved legacy damage benchmark, not a mechanics-validated full rotation.',startState:'Original benchmark resource assumptions; no sequential combat simulation.'});}
+ if(spec.mode===REVIEWED_MODE){
+  const validation=await validateSpec(character,spec);must(validation.valid||allowProvisional,'Benchmark configuration is incomplete.',422);
+  must(!spec.actions.some(a=>a.mainEcho),'A universal benchmark cannot use a fixed main Echo attack.',422);
+  const compiled=compileReviewed(validation.spec,await modifierCatalog(character),source.identities);
+  return calculateStandard(character,data.slots,source.identities,{name:spec.name,actions:compiled.actions,policyId:version.policy_id,versionId:version.id,mechanicsVersion:REVIEWED_VERSION,trace:compiled.trace,configuredEffects:true,provenance:'Owner-reviewed benchmark using pinned optimizer effects. Combat timing and resource legality are manually reviewed, not automatically simulated.',startState:spec.conditions});
+ }
  const baseline=await calculateStandard(character,data.slots,source.identities);
  const validation=simulate(spec,MECHANICS_MODELS[character],{stats:baseline.finalStats});
  if(validation.valid)must(!spec.actions.some(a=>a.mainEcho&&a.mainEcho!==source.identities[0].echo),'Rotation Echo action does not match the equipped main Echo.',422);
@@ -72,7 +79,7 @@ export async function sampleRotationDraft(db,character,revision){
  const builds=[];
  for(const r of rows){const data=JSON.parse(String(r.data));if(!sourceCalculation(data))continue;
   const calculation=await evaluateVersion(character,data,{id:'draft-'+character,kind:'official',spec:row.spec,engine_version:ENGINE_VERSION,data_version:DATA_VERSION,policy_id:'provisional-'+row.spec_hash},{allowProvisional:true});
-  builds.push({id:r.id,uid:r.uid,ign:r.ign,currentScore:r.score,score:calculation.score,delta:r.score==null?null:calculation.score-Number(r.score),actions:calculation.actions,trace:validation.trace});
+  builds.push({id:r.id,uid:r.uid,ign:r.ign,currentScore:r.score,score:calculation.score,delta:r.score==null?null:calculation.score-Number(r.score),actions:calculation.actions,trace:calculation.combatTrace||validation.trace});
  }
  return {validation,provisional:!validation.valid,builds,limit:12,note:'Sample of up to 12 approved builds. This is not a publication preview; every eligible approved build is staged separately before activation.'};
 }
@@ -87,7 +94,7 @@ export async function startRotationPreview(db,character,revision,rollbackVersion
  if(rollbackVersionId){version=(await db.execute({sql:'SELECT * FROM rotation_versions WHERE id=? AND character=?',args:[rollbackVersionId,character]})).rows[0];must(version,'Rotation version not found.',404);
   if(version.kind!=='baseline')must((await db.execute({sql:'SELECT 1 FROM rotation_activations WHERE version_id=? LIMIT 1',args:[version.id]})).rows.length,'Only a previously published version can be rolled back.');}
  else{
-  const result=await validateRotationDraft(db,character,revision);must(result.valid,'Publication blocked: integrate verified combat mechanics before creating an official leaderboard preview.',422);
+  const result=await validateRotationDraft(db,character,revision);must(result.valid,'Complete benchmark validation before creating a leaderboard preview.',422);
   const id=randomUUID(),policy='rotation/'+character+'/'+id;
   const tx=await db.transaction('write');try{
    const d=(await tx.execute({sql:'SELECT * FROM rotation_drafts WHERE character=?',args:[character]})).rows[0];must(d&&Number(d.revision)===revision&&d.spec_hash===result.hash,'Draft changed during validation.');
@@ -134,7 +141,7 @@ export async function rotationPreview(db,id){
  SELECT ranked.*,old_ranked.score old_score,old_ranked.old_rank FROM ranked LEFT JOIN old_ranked ON old_ranked.uid=ranked.uid ORDER BY rank LIMIT 50`,args:[run.character,ENGINE_VERSION,DATA_VERSION,id]})).rows;
  return {run,version,ranking,confirmation:`PUBLISH ${run.character} ${String(version.spec_hash).slice(0,12)}`,stale:await clock(db,run.character)!==Number(run.source_revision),rankingLimit:50};
 }
-export async function activateRotation(db,id,confirmation){
+export async function activateRotation(db,id,confirmation,ownerReviewed=false){
  const tx=await db.transaction('write');try{
   const run=(await tx.execute({sql:'SELECT * FROM rotation_runs WHERE id=?',args:[id]})).rows[0];must(run&&run.state==='ready','Complete a fresh leaderboard preview first.');
   const version=(await tx.execute({sql:'SELECT * FROM rotation_versions WHERE id=?',args:[run.version_id]})).rows[0];
@@ -142,7 +149,9 @@ export async function activateRotation(db,id,confirmation){
   must((await active(tx,run.character)).id===run.base_version_id,'The active rotation changed. Create another preview.');
   must(await clock(tx,run.character)===Number(run.source_revision),'Approved builds changed. Refresh the leaderboard preview before publishing.');
   if(run.draft_revision!==null){const d=(await tx.execute({sql:'SELECT * FROM rotation_drafts WHERE character=?',args:[run.character]})).rows[0];must(d&&Number(d.revision)===Number(run.draft_revision)&&d.spec_hash===version.spec_hash,'Draft changed. Revalidate and preview the new revision.');}
-  if(version.kind==='official'){const v=await validateSpec(run.character,JSON.parse(version.spec));must(v.valid&&v.mechanicsVersion===version.mechanics_version,'Strict mechanics validation no longer passes.',422);}
+  if(JSON.parse(version.spec).mode===REVIEWED_MODE)must(ownerReviewed===true,'Confirm owner review of combat legality and benchmark assumptions.',400);
+  if(version.kind==='official'){const v=await validateSpec(run.character,JSON.parse(version.spec));must(v.valid&&v.mechanicsVersion===version.mechanics_version,'The pinned rotation validation no longer passes.',422);}
+  if(version.kind==='official'){const tested=(await tx.execute({sql:'SELECT COUNT(*) n FROM rotation_run_scores WHERE run_id=?',args:[id]})).rows[0];must(Number(tested.n)>0,'Test this benchmark against at least one approved build with verified scoring inputs before publishing.',422);}
   // Independent coverage check, in addition to the approved-build clock.
   const missing=(await tx.execute({sql:`SELECT COUNT(*) n FROM submissions s WHERE s.character=? AND s.status='approved'
    AND json_extract(s.data,'$.assessment.eligible')=1 AND json_extract(s.data,'$.assessment.calculation.dataVersion')=?
@@ -166,7 +175,7 @@ export async function activateRotation(db,id,confirmation){
   await tx.execute({sql:'UPDATE rotation_active SET version_id=?,activated_at=? WHERE character=?',args:[version.id,at,run.character]});
   await tx.execute({sql:'INSERT INTO rotation_activations VALUES (?,?,?,?,?,?)',args:[randomUUID(),run.character,run.base_version_id,version.id,id,at]});
   await tx.execute({sql:"UPDATE rotation_runs SET state='activated',updated_at=? WHERE id=?",args:[at,id]});
-  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),version.id,'rotation_published','owner',run.character+'; '+version.spec_hash,at]});
+  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),version.id,'rotation_published','owner',run.character+'; '+version.spec_hash+(JSON.parse(version.spec).mode===REVIEWED_MODE?'; owner confirmed combat review':''),at]});
   await tx.commit();return {ok:true,versionId:version.id};
  }finally{tx.close();}
 }

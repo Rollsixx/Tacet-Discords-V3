@@ -4,6 +4,7 @@ import * as engine from '../../../../vendor/wuthering-tools/dist/index.mjs';
 import {MECHANICS_MODELS,ROTATION_ROSTER} from '../../game-data/rotation-mechanics.mjs';
 import {HttpError} from '../validation.ts';
 import {scoringPreset} from '../../game-data/scoring-policies.mjs';
+import {modifierCatalog,normalizeEffects,REVIEWED_MODE,REVIEWED_VERSION} from './configuration.mjs';
 import {DATA_VERSION} from '../scoring.mjs';
 export const specificationHash=spec=>createHash('sha256').update(JSON.stringify(spec)).digest('hex');
 const types=['basic','skill','forteCircuit','liberation','intro','outro','tuneBreak'];
@@ -15,14 +16,17 @@ export async function actionCatalog(character){
  return attacks;
 }
 export async function normalizeSpec(character,input){
- if(!input||typeof input!=='object'||Object.keys(input).some(k=>!['name','actions'].includes(k))||typeof input.name!=='string'||input.name.trim().length<2||input.name.length>100||!Array.isArray(input.actions)||input.actions.length>100)throw new HttpError(400,'Use a name (2–100 characters) and up to 100 actions.');
- const catalog=await actionCatalog(character);let total=0;
+ if(!input||typeof input!=='object'||Object.keys(input).some(k=>!['name','actions','mode','conditions'].includes(k))||typeof input.name!=='string'||input.name.trim().length<2||input.name.length>100||!Array.isArray(input.actions)||input.actions.length>100)throw new HttpError(400,'Use a name (2–100 characters) and up to 100 actions.');
+ if(input.mode!==undefined&&input.mode!==REVIEWED_MODE)throw new HttpError(400,'Unknown rotation mode.');
+ if(input.conditions!==undefined&&(typeof input.conditions!=='string'||input.conditions.length>4000))throw new HttpError(400,'Starting conditions must be text of up to 4000 characters.');
+ const catalog=await actionCatalog(character),modifiers=await modifierCatalog(character);let total=0;
  const actions=input.actions.map(a=>{
-  if(!a||Object.keys(a).some(k=>!['type','key','count','mainEcho'].includes(k))||!catalog.some(c=>c.type===a.type&&c.key===a.key&&c.mainEcho===a.mainEcho)||!Number.isInteger(a.count)||a.count<1||a.count>20)throw new HttpError(400,'Unknown attack, unsupported override or invalid repeat count.');
-  total+=a.count;return {type:a.type,key:a.key,count:a.count,...(a.mainEcho?{mainEcho:a.mainEcho}:{})};
+  if(!a||Object.keys(a).some(k=>!['type','key','count','mainEcho','effects'].includes(k))||!catalog.some(c=>c.type===a.type&&c.key===a.key&&c.mainEcho===a.mainEcho)||!Number.isInteger(a.count)||a.count<1||a.count>20)throw new HttpError(400,'Unknown attack, unsupported override or invalid repeat count.');
+  if(a.effects!==undefined&&input.mode!==REVIEWED_MODE)throw new HttpError(400,'Configured effects require admin-reviewed mode.');
+  total+=a.count;return {type:a.type,key:a.key,count:a.count,...(a.mainEcho?{mainEcho:a.mainEcho}:{}),...(input.mode===REVIEWED_MODE?{effects:normalizeEffects(a.effects,modifiers)}:{})};
  });
  if(total>200)throw new HttpError(400,'A rotation may contain at most 200 expanded actions.');
- return {name:input.name.trim(),actions};
+ return {name:input.name.trim(),actions,...(input.mode===REVIEWED_MODE?{mode:REVIEWED_MODE,conditions:(input.conditions||'').trim()}:{})};
 }
 // Small declarative state machine. All definitions are server-reviewed source,
 // not editable mechanics. No expressions, eval, dynamic imports or user buffs.
@@ -75,6 +79,9 @@ export function simulate(spec,model,environment={}){
  return {valid:errors.length===0,errors,trace,actions,mechanicsVersion:model.version+'@'+specificationHash(model)};
 }
 export async function validateSpec(character,spec){
- const normalized=await normalizeSpec(character,spec);const result=simulate(normalized,MECHANICS_MODELS[character]);
+ const normalized=await normalizeSpec(character,spec);
+ let result;
+ if(normalized.mode===REVIEWED_MODE){const errors=[];if(!normalized.actions.length)errors.push('Add at least one attack.');if(normalized.conditions.length<20)errors.push('Describe the starting resources, transformation state, preparation, and buff-uptime assumptions (at least 20 characters).');if(normalized.actions.some(a=>a.mainEcho))errors.push('Universal leaderboard rotations cannot include a fixed Echo attack: players may equip different main Echoes. Remove Echo attacks from this draft.');result={valid:!errors.length,errors,trace:[],actions:normalized.actions,mechanicsVersion:REVIEWED_VERSION,warnings:['Technical configuration checks only. The owner must review cooldowns, resources, stacks, transformations, and buff uptime before publishing.']};}
+ else result=simulate(normalized,MECHANICS_MODELS[character]);
  return {...result,hash:specificationHash(normalized),spec:normalized};
 }
