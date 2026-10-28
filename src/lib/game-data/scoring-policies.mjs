@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Tacet-authored fixed damage windows. Attack keys and transition rules come
 // from the pinned upstream kit source; these are not upstream rotation presets.
-export const SCORING_CHARACTERS=['Carlotta','Cartethyia','Aemeath','Hiyuki','Chisa'];
+import {ROTATION_ROSTER} from './rotation-mechanics.mjs';
+export const SCORING_CHARACTERS=ROTATION_ROSTER;
 const action=(type,key,count=1)=>({type,key,count,buffs:[]});
 export const TACET_WINDOWS={
  Hiyuki:{

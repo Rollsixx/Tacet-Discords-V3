@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import {RotationEditor} from "./rotation-editor";
 import { BuildCard } from "./build-directory";
 import type { listAdminPlayers, adminPlayerBuilds, listBuilds, adminOverview, listAdminAudit } from "@/lib/server/store";
 type Audit = Awaited<ReturnType<typeof listAdminAudit>>;
@@ -8,8 +9,8 @@ type Results = Awaited<ReturnType<typeof listBuilds>> & { overview: Awaited<Retu
 type Build = Results["builds"][number];
 type Players=Awaited<ReturnType<typeof listAdminPlayers>>;
 type PlayerDetail=Awaited<ReturnType<typeof adminPlayerBuilds>>;
-type View = "dashboard" | "submissions" | "players" | "audit" | "system";
-const names: Record<View,string> = {dashboard:"Command overview",submissions:"Submission management",players:"Players & their builds",audit:"Audit history",system:"System status"};
+type View = "dashboard" | "submissions" | "players" | "audit" | "system" | "rotations";
+const names: Record<View,string> = {dashboard:"Command overview",submissions:"Submission management",players:"Players & their builds",audit:"Audit history",system:"System status",rotations:"Rotation management"};
 function date(value:string){ return new Date(value).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"}); }
 function Activity({events}:{events:Audit["events"]}){return events.length?<div className="bs-activity">{events.map(event=><div key={event.id}><span className="bs-activity-dot"/><div><strong>{event.action.replaceAll('_',' ')}</strong><p>{event.reviewer} · {date(event.createdAt)}</p><code>{event.submissionId}</code>{event.note&&<p>{event.note}</p>}</div></div>)}</div>:<p className="bs-empty">No moderation activity yet.</p>;}
 export function ModerationPanel() {
@@ -17,6 +18,8 @@ export function ModerationPanel() {
  const [reviewer,setReviewer]=useState("Moderator");
  const [authenticated,setAuthenticated]=useState(false);
  const [view,setView]=useState<View>("dashboard");
+ const [rotationPending,setRotationPending]=useState(false);
+ const [rotationRefresh,setRotationRefresh]=useState(0);
  const [queue,setQueue]=useState("pending");
  const [search,setSearch]=useState("");
  const [character,setCharacter]=useState("");
@@ -74,6 +77,7 @@ export function ModerationPanel() {
  async function navigate(next:View){setView(next);setMessage("");setError("");setSearch("");setCharacter("");setConfirmation(null);
   if(next==='audit'){setBusy(true);try{setAudit(await request('/api/moderation?view=audit'));}catch(cause){setError(cause instanceof Error?cause.message:'Could not load history.');}finally{setBusy(false);}}
   else if(next==='system'){setBusy(true);try{setHealth(await request('/api/health'));}catch(cause){setError(cause instanceof Error?cause.message:'Could not check system health.');}finally{setBusy(false);}}
+  else if(next==='rotations'){return;}
   else if(next==='players')await loadPlayers(1,'','');
   else await load(1,'pending','', '');
  }
@@ -104,11 +108,12 @@ export function ModerationPanel() {
    <button className="action" disabled={busy}>{busy?'Checking access…':'Unlock review desk'}</button>
   </form><small>Token access only. Your token stays in memory and is cleared on reload or when you lock the desk.</small><Link className="text-link" href="/">← Return to website</Link>
  </div>:<div className="bs-shell">
-  <aside className="bs-sidebar"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMIN</small></div></Link><nav aria-label="Administration">{([['dashboard','◫','Dashboard'],['submissions','▣','Submissions'],['players','◈','Players & builds'],['audit','◷','Audit history'],['system','⚙','System status']] as const).map(([key,icon,label])=><button key={key} className={view===key?'active':''} aria-current={view===key?'page':undefined} disabled={busy} onClick={()=>navigate(key)}><span aria-hidden="true">{icon}</span>{label}{key==='submissions'&&Boolean(overview?.pending)&&<small>{overview?.pending}</small>}</button>)}</nav><div className="bs-sidebar-footer"><strong>{reviewer || 'Moderator'}</strong><span>Shared-token access</span><Link href="/profiles">View public website ↗</Link><button className="outline-button" disabled={busy} onClick={lock}>Lock review desk</button></div></aside>
-  <div className="bs-main"><header className="bs-top"><span><i className="status-dot"/> Connected to live data</span><button className="outline-button" disabled={busy} onClick={()=>view==='audit'?loadAudit(audit?.page||1):view==='system'?navigate('system'):view==='players'?loadPlayers(page):load(page)}>{busy?'Working…':'Refresh'}</button></header>
-   <div className="bs-content"><div className="bs-heading"><div><span className="eyebrow">Tacet Discords / Black Shores</span><h1>{names[view]}</h1><p>{view==='dashboard'?'Review submissions, verify players, and track every moderation decision.':view==='audit'?'Server-recorded decisions, including deleted submissions.':view==='system'?'Current database connectivity and scoring availability.':view==='players'?'Players are grouped by UID. Open a player to see all pending and approved builds.':'Select a build to inspect its five Echoes and take action.'}</p></div><span className="bs-pill">Authenticated workspace</span></div>
+  <aside className="bs-sidebar"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMIN</small></div></Link><nav aria-label="Administration">{([['dashboard','◫','Dashboard'],['submissions','▣','Submissions'],['players','◈','Players & builds'],['rotations','↻','Rotations'],['audit','◷','Audit history'],['system','⚙','System status']] as const).map(([key,icon,label])=><button key={key} className={view===key?'active':''} aria-current={view===key?'page':undefined} disabled={busy||rotationPending} onClick={()=>navigate(key)}><span aria-hidden="true">{icon}</span>{label}{key==='submissions'&&Boolean(overview?.pending)&&<small>{overview?.pending}</small>}</button>)}</nav><div className="bs-sidebar-footer"><strong>{reviewer || 'Moderator'}</strong><span>Shared-token access</span><Link href="/profiles">View public website ↗</Link><button className="outline-button" disabled={busy||rotationPending} onClick={lock}>Lock review desk</button></div></aside>
+  <div className="bs-main"><header className="bs-top"><span><i className="status-dot"/> Connected to live data</span><button className="outline-button" disabled={busy||rotationPending} onClick={()=>view==='rotations'?setRotationRefresh(value=>value+1):view==='audit'?loadAudit(audit?.page||1):view==='system'?navigate('system'):view==='players'?loadPlayers(page):load(page)}>{busy?'Working…':'Refresh'}</button></header>
+   <div className="bs-content"><div className="bs-heading"><div><span className="eyebrow">Tacet Discords / Black Shores</span><h1>{names[view]}</h1><p>{view==='dashboard'?'Review submissions, verify players, and track every moderation decision.':view==='audit'?'Server-recorded decisions, including deleted submissions.':view==='system'?'Current database connectivity and scoring availability.':view==='rotations'?'Author rotation drafts, inspect expected damage, and manage versioned publication.':view==='players'?'Players are grouped by UID. Open a player to see all pending and approved builds.':'Select a build to inspect its five Echoes and take action.'}</p></div><span className="bs-pill">Authenticated workspace</span></div>
     <div aria-live="polite">{message&&<p className="bs-success" role="status">✓ {message}</p>}{error&&!confirmation&&<p className="field-error bs-error" role="alert">{error}</p>}</div>
     {view==='dashboard'&&overview&&<div className="bs-metrics">{[[overview.pending,'Pending submissions','Awaiting a decision'],[overview.unverified,'Unverified players','Approved players needing identity checks'],[overview.approved,'Approved builds','Visible in public Profiles'],[overview.players,'Players','UIDs with stored builds']].map(([value,label,detail])=><div key={String(label)}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>)}</div>}
+    {view==='rotations'&&<RotationEditor key={rotationRefresh} token={token.trim()} onPendingChange={setRotationPending}/>}
     {['dashboard','submissions','players'].includes(view)&&<>
      <div className={`bs-panel bs-controls ${view==='players'?'bs-player-controls':''}`}><form onSubmit={e=>{e.preventDefault();void (view==='players'?loadPlayers(1):load(1));}}><label><span>Find UID or IGN</span><input aria-label="Find UID or IGN" placeholder="UID, IGN, or submission ID…" value={search} maxLength={64} onChange={e=>setSearch(e.target.value)} /></label>{view!=='players'&&<label><span>Review queue</span><select aria-label="Review queue" value={queue} disabled={busy} onChange={e=>{setQueue(e.target.value);void load(1,e.target.value);}}><option value="pending">Pending submissions</option><option value="approved">Approved builds</option></select></label>}<label><span>Character</span><input aria-label="Filter character" placeholder="All characters" value={character} maxLength={64} onChange={e=>setCharacter(e.target.value)} /></label><button className="action" disabled={busy}>Apply filters</button></form></div>
      <div className="bs-workspace"><section className="bs-panel bs-queue">{view==='players'?<>

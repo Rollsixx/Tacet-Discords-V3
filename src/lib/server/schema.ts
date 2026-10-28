@@ -79,4 +79,17 @@ export const migrations = [
     "UPDATE players SET identity_verified=1,verified_at=(SELECT MAX(reviewed_at) FROM submissions s WHERE s.uid=players.uid AND s.status='approved' AND s.identity_verified=1) WHERE EXISTS (SELECT 1 FROM submissions s WHERE s.uid=players.uid AND s.status='approved' AND s.identity_verified=1)",
     "UPDATE submissions SET identity_verified=COALESCE((SELECT identity_verified FROM players p WHERE p.uid=submissions.uid),0)",
   ] },
+  {version:7,statements:[
+    `CREATE TABLE rotation_versions (id TEXT PRIMARY KEY, character TEXT NOT NULL, number INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('baseline','official')), spec TEXT NOT NULL, spec_hash TEXT NOT NULL, engine_version TEXT NOT NULL, data_version TEXT NOT NULL, mechanics_version TEXT NOT NULL, policy_id TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(character,number))`,
+    `CREATE TABLE rotation_active (character TEXT PRIMARY KEY, version_id TEXT NOT NULL REFERENCES rotation_versions(id), activated_at TEXT NOT NULL)`,
+    `CREATE TABLE rotation_drafts (character TEXT PRIMARY KEY, revision INTEGER NOT NULL, spec TEXT NOT NULL, spec_hash TEXT NOT NULL, validation TEXT, updated_at TEXT NOT NULL)`,
+    `CREATE TABLE rotation_clock (character TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0)`,
+    `CREATE TABLE rotation_runs (id TEXT PRIMARY KEY, character TEXT NOT NULL, version_id TEXT NOT NULL REFERENCES rotation_versions(id), draft_revision INTEGER, base_version_id TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('building','ready','activated','failed')), cursor TEXT NOT NULL DEFAULT '', source_revision INTEGER NOT NULL, processed INTEGER NOT NULL DEFAULT 0, skipped INTEGER NOT NULL DEFAULT 0, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+    `CREATE TABLE rotation_run_scores (run_id TEXT NOT NULL REFERENCES rotation_runs(id), submission_id TEXT NOT NULL, input_data TEXT NOT NULL, input_hash TEXT NOT NULL, score REAL NOT NULL, details TEXT NOT NULL, PRIMARY KEY(run_id,submission_id))`,
+    `CREATE TABLE rotation_score_history (id TEXT PRIMARY KEY, version_id TEXT NOT NULL REFERENCES rotation_versions(id), submission_id TEXT NOT NULL, input_hash TEXT NOT NULL, score REAL NOT NULL, details TEXT NOT NULL, recorded_at TEXT NOT NULL, UNIQUE(version_id,submission_id,input_hash))`,
+    `CREATE TABLE rotation_activations (id TEXT PRIMARY KEY, character TEXT NOT NULL, previous_version_id TEXT NOT NULL, version_id TEXT NOT NULL, run_id TEXT NOT NULL UNIQUE REFERENCES rotation_runs(id), created_at TEXT NOT NULL)`,
+    `CREATE TRIGGER rotation_approved_insert AFTER INSERT ON submissions WHEN NEW.status='approved' BEGIN INSERT INTO rotation_clock VALUES(NEW.character,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1; END`,
+    `CREATE TRIGGER rotation_approved_update AFTER UPDATE OF data,status,identity_verified ON submissions WHEN OLD.status='approved' OR NEW.status='approved' BEGIN INSERT INTO rotation_clock VALUES(NEW.character,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1; END`,
+    `CREATE TRIGGER rotation_approved_delete AFTER DELETE ON submissions WHEN OLD.status='approved' BEGIN INSERT INTO rotation_clock VALUES(OLD.character,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1; END`,
+  ]},
 ];

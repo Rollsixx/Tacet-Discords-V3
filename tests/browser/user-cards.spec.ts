@@ -215,3 +215,14 @@ test('verified UID inherits review status and admin groups every build under one
  await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});await page.screenshot({path:info.outputPath('grouped-admin-player.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('grouped-admin-player-mobile.png'),fullPage:true});
 });
+
+test('rotation editor previews an approved source build through the server optimizer',async({page,request},info)=>{
+ test.skip(info.project.name!=='desktop'||!directory||!process.env.USER_BUILD_CARD_UID,'Requires preceding isolated five-category lifecycle.');
+ const token='browser-test-only-token-00000000000000000000',headers={Authorization:'Bearer '+token};
+ const workspace=await(await request.get('/api/admin/rotations?character=Carlotta',{headers})).json();
+ const saved=await request.post('/api/admin/rotations',{headers,data:{operation:'save',character:'Carlotta',revision:workspace.draft?.revision||0,spec:workspace.active.spec}});expect(saved.ok()).toBe(true);
+ await page.goto('/BlackShores',{waitUntil:'networkidle'});await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await page.getByRole('button',{name:'Test against builds',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Provisional damage comparison'})).toBeVisible();await expect(page.locator('.rotation-manager')).toContainText('1 build tested');await expect(page.locator('.rotation-table').first()).toContainText('296,418.56');await expect(page.getByText('Per-action expected damage',{exact:true})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('rotation-real-approved-build-preview.png'),fullPage:true});
+ expect((await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds[0].score).toBeCloseTo(scoringCases.cases.find(c=>c.character==='Carlotta')!.score,5);
+});

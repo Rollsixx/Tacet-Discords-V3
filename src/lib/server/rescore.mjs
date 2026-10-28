@@ -8,6 +8,8 @@ export async function rescoreStoredBuilds(db){
  const result={updated:0,skipped:0,failed:0};
  for(const row of rows.rows){
   const data=JSON.parse(String(row.data)),a=data.assessment,c=a?.calculation;
+  const managed=(await db.execute({sql:"SELECT v.kind FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?",args:[String(row.character)]})).rows[0];
+  if(managed?.kind==='official'){result.skipped++;continue;}
   if(!SUPPORTED.includes(String(row.character))){result.skipped++;continue;}
   const recoverable=recoveryMode(row,data);
   const retained=a?.eligible&&(/^[a-f0-9]{64}$/.test(a.sourceHash||'')||hasRetainedRecovery(a))&&c?.dataVersion===DATA_VERSION&&c.engineVersion?.startsWith('wuthering-tools-b32cdbd+tacet/')&&c.identities?.length===5&&c.character===String(row.character);

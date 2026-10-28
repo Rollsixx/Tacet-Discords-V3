@@ -53,7 +53,7 @@ export function identifyFingerprints(features){
  }
  return result;
 }
-export async function calculateStandard(character,slots,identities){
+export async function calculateStandard(character,slots,identities,managed=null){
  if(!SUPPORTED.includes(character))throw Error('No reference-backed rotation policy is available for '+character+'.');
  const chosen=await engine.getCharByName(character);
  const weapon=chosen.basic.signatureWeapon;
@@ -73,15 +73,16 @@ export async function calculateStandard(character,slots,identities){
  const buffs=Object.fromEntries(chosen.buffs.filter(b=>b.key.startsWith('StatBonus')||b.alwaysEnabled).map(b=>[b.key,{isEnabled:true,stacks:b.maxStacks||0}]));
  const build={characterLevel:'90',talents:{basic:10,skill:10,forte:10,liberation:10,intro:10},weapon,weapons:{[weapon]:{weaponLevel:'90',refinement:'1'}},echoes,buffs,resonanceChains:{},teamBuffs:{},customBuffs:{},mainEcho:{echo:identities[0].echo,rank:5},echoSetBonus:engine.sets.getSetBonusEffects(identities.map(x=>x.set)),echoSetPassives:{}};
  const enemy={enemyLevel:90,enemyResist:.1,enemyType:'Calamity'};
- const options={alwaysEnabledOnly:true};
+ const options={alwaysEnabledOnly:!managed?.verifiedMechanics};
  const context=await engine.buildCharacterCalculationContext(character,{[character]:build},enemy,[],options);
- const preset=scoringPreset(character,chosen);if(!preset?.data?.actions?.length)throw Error('Missing rotation.');
- const actions=preset.data.actions.filter(a=>!a.isDisabled).map((a,i)=>({...a,id:'action-'+i,count:Number(a.count??1)}));
+ const preset=managed?{name:managed.name,data:{actions:managed.actions},provenance:managed.provenance,startState:managed.startState}:scoringPreset(character,chosen);if(!preset?.data?.actions?.length)throw Error('Missing rotation.');
+ const actions=preset.data.actions.filter(a=>!a.isDisabled).map((a,i)=>({...a,...(a.type==='echoAttacks'?{mainEchoRank:5}:{}),id:'action-'+i,count:Number(a.count??1)}));
  for(const action of actions){if(!Number.isInteger(action.count)||action.count<1||!engine.resolveRotationActionToAttackData(action,chosen,'90'))throw Error('Unresolved rotation action '+action.key);}
- const rotation={...preset.data,id:POLICY_VERSION+'-'+character,actions};
+ const policyId=managed?.policyId||POLICY_VERSION;
+ const rotation={...preset.data,id:policyId+'-'+character,name:preset.name,actions};
  const result=await engine.calcCharacterRotationDamage(rotation,null,character,{[character]:build},enemy,[],null,options);
  if(result.attacks.length!==actions.length)throw Error('Incomplete rotation evaluation.');
  const score=result.damageAggregation.avgDamage;
  if(typeof score!=='number'||!Number.isFinite(score)||score<=0)throw Error('Invalid calculation result.');
- return {score,character,policyId:POLICY_VERSION,engineVersion:ENGINE_VERSION,dataVersion:DATA_VERSION,referenceCaseVersion:'reference-cases/2',metric:'Expected standardized benchmark damage',rotation:preset.name,rotationOrigin:preset.provenance||'First pinned upstream rotation preset.',startState:preset.startState||'Resource availability assumed by the pinned upstream rotation preset.',weapon,enemy,conditions:'Level 90; talents 10; S0; signature weapon level 90 R1; max-level five-star Echoes; permanent passives only; no team buffs; not DPS.',identities,finalStats:context.finalStats,actions:result.attacks.map(a=>({key:a.key,count:a.count,damage:{normal:a.damage?.totalDamage,expected:a.damage?.avgDamage,critical:a.damage?.critDamage}})),normalDamage:result.damageAggregation.normalDamage,criticalDamage:result.damageAggregation.critDamage};
+ return {score,character,policyId,rotationVersion:managed?.versionId||null,mechanicsVersion:managed?.mechanicsVersion||null,combatTrace:managed?.trace||null,engineVersion:ENGINE_VERSION,dataVersion:DATA_VERSION,referenceCaseVersion:'reference-cases/2',metric:'Expected standardized benchmark damage',rotation:preset.name,rotationOrigin:preset.provenance||'First pinned upstream rotation preset.',startState:preset.startState||'Resource availability assumed by the pinned upstream rotation preset.',weapon,enemy,conditions:managed?.verifiedMechanics?'Level 90; talents 10; S0; signature weapon level 90 R1; max-level five-star Echoes; verified automatic rotation-state effects; no team buffs; average expected TOTAL rotation damage, not DPS.':'Level 90; talents 10; S0; signature weapon level 90 R1; max-level five-star Echoes; permanent passives only; no team buffs; not DPS.',identities,finalStats:context.finalStats,actions:result.attacks.map(a=>({key:a.key,count:a.count,damage:{normal:a.damage?.totalDamage,expected:a.damage?.avgDamage,critical:a.damage?.critDamage}})),normalDamage:result.damageAggregation.normalDamage,criticalDamage:result.damageAggregation.critDamage};
 }

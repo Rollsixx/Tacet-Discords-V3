@@ -7,6 +7,7 @@ import { DAMAGE_CORE_VERSION } from "./damage-core.ts";
 import { assessSource } from "./source-evidence.mjs";
 import { ENGINE_VERSION, DATA_VERSION, POLICY_VERSION, SUPPORTED } from "./scoring.mjs";
 import sharp from "sharp";
+import {scoreActiveRotation,recordRotationScore} from "./rotations/store.mjs";
 
 export async function rateLimit(key: string, max: number, db: Client = database()) {
   const window = Math.floor(Date.now() / 60000);
@@ -75,7 +76,7 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
       const saved = await tx.execute({ sql: "SELECT uid FROM submissions WHERE id=? AND status='pending'", args: [id] });
       if (!saved.rows.length) throw new HttpError(409, "Submission is missing or has already been reviewed.");
       await tx.execute({ sql: "INSERT INTO rejection_events VALUES (?,?,?,?,?)", args: [randomUUID(), id, reviewer, note, now] });
-      for (const table of ["assets", "calculation_results", "build_events", "moderation_events"]) {
+      for (const table of ["assets", "calculation_results", "build_events", "moderation_events", "rotation_run_scores"]) {
         await tx.execute({ sql: `DELETE FROM ${table} WHERE submission_id=?`, args: [id] });
       }
       await tx.execute({ sql: "DELETE FROM submissions WHERE id=?", args: [id] });
@@ -93,9 +94,10 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
     if (action === "approved") {
       const saved = await tx.execute({sql: "SELECT data FROM submissions WHERE id=?", args: [id]});
       const assessment = JSON.parse(String(saved.rows[0].data)).assessment;
-      const calculation = assessment?.eligible ? assessment.calculation : null;
-      if (calculation && calculation.engineVersion === ENGINE_VERSION && calculation.dataVersion === DATA_VERSION && calculation.policyId === POLICY_VERSION && Number.isFinite(calculation.score) && calculation.score > 0) {
-        await tx.execute({sql: "INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)", args: [id,calculation.score,ENGINE_VERSION,DATA_VERSION,calculation.referenceCaseVersion,now,POLICY_VERSION,JSON.stringify(calculation)]});
+      const calculation = assessment?.eligible ? await scoreActiveRotation(tx, String((await tx.execute({sql:'SELECT character FROM submissions WHERE id=?',args:[id]})).rows[0].character),JSON.parse(String(saved.rows[0].data))) || assessment.calculation : null;
+      if (calculation && calculation.engineVersion === ENGINE_VERSION && calculation.dataVersion === DATA_VERSION && (calculation.policyId === POLICY_VERSION || calculation.rotationVersion) && Number.isFinite(calculation.score) && calculation.score > 0) {
+        await tx.execute({sql: "INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)", args: [id,calculation.score,ENGINE_VERSION,DATA_VERSION,calculation.referenceCaseVersion,now,calculation.policyId,JSON.stringify(calculation)]});
+        await recordRotationScore(tx,id,String((await tx.execute({sql:'SELECT character FROM submissions WHERE id=?',args:[id]})).rows[0].character),JSON.parse(String(saved.rows[0].data)),calculation,now);
       }
     }
     await tx.execute({ sql: "INSERT INTO moderation_events VALUES (?,?,?,?,?,?)", args: [randomUUID(), id, action, reviewer, note, now] });
@@ -116,7 +118,8 @@ export async function listBuilds(options: { search?: string; character?: string;
   const character = (options.character || "").slice(0, 64).trim();
   const result = await db.execute({
     sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,
-      CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id='${POLICY_VERSION}' THEN c.score ELSE NULL END AS verified_score
+      CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.score ELSE NULL END AS verified_score
+       ,CASE WHEN c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.details END AS current_calculation
       FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE (status=? OR (?=1 AND status IN ('pending','approved'))) AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
       AND (?='' OR character=?) AND (?='' OR s.id=?) AND (?='' OR uid=?)
       ORDER BY created_at DESC,s.id DESC LIMIT 21 OFFSET ?`,
@@ -128,11 +131,14 @@ export async function listBuilds(options: { search?: string; character?: string;
   };
 }
 
-function publicBuild(row: Row) { return {
+function publicBuild(row: Row) {
+ const data=JSON.parse(String(row.data));
+ if(row.current_calculation){data.assessment={...data.assessment,calculation:JSON.parse(String(row.current_calculation))};}
+ return {
       id: String(row.id), rank: row.global_rank == null ? null : Number(row.global_rank), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
       status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
       identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
-      data: JSON.parse(String(row.data)) as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalHp?:number;totalDef?:number;totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+      data: data as { assessment?: {eligible: boolean; reason: string; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalHp?:number;totalDef?:number;totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
     }; }
 
 export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
@@ -141,10 +147,10 @@ export async function listLeaderboard(options: {character?: string;search?: stri
   if (!SUPPORTED.includes(character)) return {builds: [],page,hasMore:false,scoring:scoringReadiness};
   const search = (options.search || "").slice(0,64).trim();
   const result = await db.execute({sql: `WITH candidates AS (
-    SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,c.score AS verified_score,
+    SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,c.details AS current_calculation,c.score AS verified_score,
     row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
     FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
-    WHERE s.status='approved' AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=?
+    WHERE s.status='approved' AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
   ), ranked AS (
     SELECT *,row_number() OVER (ORDER BY verified_score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1
   ) SELECT * FROM ranked WHERE (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
@@ -208,7 +214,7 @@ export async function deleteBuild(id: string, reviewer: string, note: string, db
     // Preserve decisions in a ledger without foreign keys before removing evidence.
     for(const table of ['moderation_events','build_events']) await tx.execute({sql:`INSERT INTO admin_audit_events SELECT id,submission_id,action,reviewer,note,created_at FROM ${table} WHERE submission_id=?`,args:[id]});
     await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'deleted',reviewer,note,new Date().toISOString()]});
-    for(const table of ['assets','calculation_results','build_events','moderation_events']) await tx.execute({sql:`DELETE FROM ${table} WHERE submission_id=?`,args:[id]});
+    for(const table of ['assets','calculation_results','build_events','moderation_events','rotation_run_scores']) await tx.execute({sql:`DELETE FROM ${table} WHERE submission_id=?`,args:[id]});
     await tx.execute({sql:'DELETE FROM submissions WHERE id=?',args:[id]});
     const uid=String(saved.rows[0].uid);
     await tx.execute({sql:'DELETE FROM players WHERE uid=? AND identity_verified=0 AND NOT EXISTS (SELECT 1 FROM submissions WHERE uid=?)',args:[uid,uid]});
