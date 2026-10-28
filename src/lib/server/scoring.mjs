@@ -1,5 +1,6 @@
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import catalog from '../game-data/fingerprints.json' with {type:'json'};
+import corrections from '../game-data/fingerprint-corrections.json' with {type:'json'};
 import {fingerprint,rankFingerprint} from './image-fingerprint.mjs';
 import {SCORING_CHARACTERS,scoringPreset} from '../game-data/scoring-policies.mjs';
 import {parseSubstat} from '../scanner/stat-validation.ts';
@@ -9,6 +10,7 @@ export const POLICY_VERSION='solo-permanent-s0-signature-r1/2';
 export const SUPPORTED=SCORING_CHARACTERS;
 const attributes={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Basic Attack DMG Bonus':'BasicAttackDMGBonus','Heavy Attack DMG Bonus':'HeavyAttackDMGBonus','Resonance Skill DMG Bonus':'ResonanceSkillDMGBonus','Resonance Liberation DMG Bonus':'ResonanceLiberationDMGBonus','Glacio DMG Bonus':'Glacio','Fusion DMG Bonus':'Fusion','Aero DMG Bonus':'Aero','Electro DMG Bonus':'Electro','Spectro DMG Bonus':'Spectro','Havoc DMG Bonus':'Havoc','Healing Bonus':'HealingBonus',ATK:'ATK',DEF:'DEF',HP:'HP'};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
+const echoReferences=catalog.echoes.map(e=>corrections.echoes.find(c=>c.key===e.key)||e);
 export function matchVisual(f,references,maximum,margin,equivalent=false){
  const ranked=rankFingerprint(f,references);const best=ranked[0],next=ranked[1];
  if(!best||best.difference>maximum)return null;
@@ -21,14 +23,27 @@ export function matchVisual(f,references,maximum,margin,equivalent=false){
  return {key:best.key,difference:best.difference,margin:next?next.difference-best.difference:1};
 }
 export async function identifySlots(image,costs){
- const result=[];
+ const features=[];
  for(let i=0;i<5;i++){
   const sf=await fingerprint(image,{left:264+i*374,top:660,width:56,height:56});
   const ef=await fingerprint(image,{left:22+i*374,top:650,width:192,height:182});
+  features.push({cost:costs[i],portrait:ef,sonata:sf});
+ }
+ return identifyFingerprints(features);
+}
+export async function identifyCrops(crops){
+ if(crops.length!==5)throw Error('Five retained Echo crops are required.');
+ const features=[];
+ for(const crop of crops)features.push({cost:crop.cost,portrait:await fingerprint(crop.portrait),sonata:await fingerprint(crop.sonata)});
+ return identifyFingerprints(features);
+}
+export function identifyFingerprints(features){
+ const result=[];
+ for(const [i,{cost,portrait:ef,sonata:sf}] of features.entries()){
   let set=matchVisual(sf,catalog.sets,.20,.015);
-  let echo=set?matchVisual(ef,catalog.echoes.filter(e=>e.cost===costs[i]&&e.sets.includes(set.key)),.18,.025,i>0):null;
+  let echo=set?matchVisual(ef,echoReferences.filter(e=>e.cost===cost&&e.sets.includes(set.key)),.18,.025,i>0):null;
   if(!echo){
-   echo=matchVisual(ef,catalog.echoes.filter(e=>e.cost===costs[i]),.18,.025,i>0);
+   echo=matchVisual(ef,echoReferences.filter(e=>e.cost===cost),.18,.025,i>0);
    if(!echo)throw Error('Echo '+(i+1)+' is unknown or ambiguous.');
    const possible=engine.mainEchoesData[echo.key].sets;
    set=matchVisual(sf,catalog.sets.filter(s=>possible.includes(s.key)),.20,.015);

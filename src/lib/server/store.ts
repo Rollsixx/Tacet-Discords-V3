@@ -6,6 +6,7 @@ import { HttpError, type SubmissionInput } from "./validation.ts";
 import { DAMAGE_CORE_VERSION } from "./damage-core.ts";
 import { assessSource } from "./source-evidence.mjs";
 import { ENGINE_VERSION, DATA_VERSION, POLICY_VERSION, SUPPORTED } from "./scoring.mjs";
+import sharp from "sharp";
 
 export async function rateLimit(key: string, max: number, db: Client = database()) {
   const window = Math.floor(Date.now() / 60000);
@@ -22,10 +23,17 @@ export async function rateLimit(key: string, max: number, db: Client = database(
   if (Number(result.rows[0].count) > max) throw new HttpError(429, "Too many requests. Wait one minute.");
 }
 export async function submit(input: SubmissionInput, db: Client = database(), requireSourceUid = false) {
-  const assessment = await assessSource(input);
+  const sourceAssessment = await assessSource(input);
+  const assessment = {...sourceAssessment, ...(sourceAssessment.statsVerified && input.sourceImage ? {cropEvidenceVersion:'source-crops/1'} : {})};
   if (requireSourceUid && assessment.reason.startsWith("Scoring worker busy")) throw new HttpError(429, "Scanner is busy. Please try again in a moment.");
   if (requireSourceUid && assessment.sourceUid !== input.uid) throw new HttpError(400, "Screenshot UID could not be confirmed. Upload a clear original card; UID cannot be changed.");
   if (requireSourceUid && !assessment.statsVerified) throw new HttpError(400, "Echo stats could not be verified against the screenshot. Values cannot be edited; upload a clear original card and scan again.");
+  // Retain server-derived visual evidence. Client crops never establish scoring identity.
+  const sourceCrops = assessment.statsVerified && input.sourceImage ? await Promise.all(input.slots.map(async (slot,index)=>({
+    ...slot,
+    portrait:await sharp(input.sourceImage).extract({left:22+index*374,top:650,width:192,height:182}).png().toBuffer(),
+    sonata:await sharp(input.sourceImage).extract({left:264+index*374,top:660,width:56,height:56}).png().toBuffer(),
+  }))) : input.slots;
   const data = {
     assessment,
     character: input.character,
@@ -33,7 +41,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     recognition: "unverified",
   };
   const hash = createHash("sha256").update(input.uid).update(input.character.toLowerCase());
-  for (const slot of input.slots) {
+  for (const slot of sourceCrops) {
     hash.update(JSON.stringify([slot.cost.value, slot.mainStat.value, slot.substats.map(x => x.value)]));
     hash.update(slot.portrait).update(slot.sonata);
   }
@@ -50,7 +58,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     if (Number(recent.rows[0].count) >= 10) throw new HttpError(429, "Please wait before submitting another build for this UID.");
     await tx.execute({ sql: "INSERT INTO players(uid,created_at) VALUES (?,?) ON CONFLICT(uid) DO NOTHING", args: [input.uid, createdAt] });
     await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at,identity_verified) VALUES (?,?,?,?,?,?,?,(SELECT identity_verified FROM players WHERE uid=?))", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt, input.uid] });
-    for (const slot of input.slots) {
+    for (const slot of sourceCrops) {
       for (const kind of ["portrait", "sonata"] as const) {
         await tx.execute({ sql: "INSERT INTO assets(id,submission_id,slot,kind,png) VALUES (?,?,?,?,?)", args: [`${id}-${slot.slot}-${kind}`, id, slot.slot, kind, slot[kind]] });
       }

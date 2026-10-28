@@ -27,3 +27,18 @@ test('retained server evidence upgrades atomically and rescore is idempotent',as
   assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM build_events WHERE action='rescore'")).rows[0].n),1);
  }finally{db.close();}
 });
+
+test('visual recovery requires complete server validation and bounded legacy moderator proof',async()=>{
+ const {recoveryMode,hasRetainedRecovery,recoverVisualEvidence}=await import('./visual-recovery.mjs');
+ const slots=Array.from({length:5},(_,i)=>({slot:i+1,cost:{value:i===0?'4':i<3?'3':'1'},mainStat:{value:'ATK'},substats:[]}));
+ const row={id:'test',uid:'812345678',status:'approved',identity_verified:1,reviewed_at:'2026-10-28T00:00:00.000Z'};
+ const data={slots,assessment:{eligible:false,statsVerified:true,sourceUid:row.uid,sourceSlots:slots,reason:'Echo 3 is unknown or ambiguous.'}};
+ assert.equal(recoveryMode(row,data),'moderated-crop-recovery/1');
+ for(const change of [{status:'pending'},{identity_verified:0},{reviewed_at:null},{uid:'899999999'}])assert.equal(recoveryMode({...row,...change},data),null);
+ for(const change of [{statsVerified:false},{sourceUid:'899999999'},{reason:'Max-level main-stat amount could not be confirmed in slot 3.'},{reason:'Source substat OCR does not match reviewed field 3.1.'},{sourceSlots:[]},{sourceHash:'forged'}])assert.equal(recoveryMode(row,{...data,assessment:{...data.assessment,...change}}),null);
+ const canonical={...data,assessment:{...data.assessment,sourceHash:'a'.repeat(64),cropEvidenceVersion:'source-crops/1',maxMainStatsVerified:true}};
+ assert.equal(recoveryMode({...row,status:'pending',identity_verified:0},canonical),'source-crops/1');
+ assert.equal(recoveryMode(row,{...canonical,assessment:{...canonical.assessment,maxMainStatsVerified:false}}),null);
+ assert.equal(hasRetainedRecovery({statsVerified:true,visualRecovery:{version:'moderated-crop-recovery/1',cropHash:'a'.repeat(64),correction:'unknown',approvedAt:row.reviewed_at}}),false);
+ const db=createClient({url:'file::memory:'});try{await migrate(db);await assert.rejects(recoverVisualEvidence(row,data,db),/all ten/);}finally{db.close();}
+});

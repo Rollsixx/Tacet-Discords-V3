@@ -8,7 +8,8 @@ import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import cases from '../game-data/scoring-cases.json' with {type:'json'};
 import baseCases from '../game-data/upstream-base-cases.json' with {type:'json'};
 import manifest from '../game-data/manifest.json' with {type:'json'};
-import {identifySlots,calculateStandard,matchVisual,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from './scoring.mjs';
+import {identifySlots,identifyFingerprints,calculateStandard,matchVisual,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from './scoring.mjs';
+import visualFeatures from '../../../tests/fixtures/carlotta-visual-features.json' with {type:'json'};
 import {migrate} from './database.ts';
 import {submit,moderate,listLeaderboard,listBuilds} from './store.ts';
 import {validateSubmission} from './validation.ts';
@@ -16,6 +17,15 @@ import {fixture} from './fixtures.mjs';
 import {assessSource} from './source-evidence.mjs';
 const originals=process.env.USER_BUILD_CARDS_DIRECTORY;
 const cards=JSON.parse(await readFile(new URL('../../../tests/browser/user-card-expectations.json',import.meta.url),'utf8'));
+test('corrected Cuddle Wuddle reference recognizes the five-slot Carlotta regression without relaxed thresholds',()=>{
+ const identities=identifyFingerprints(visualFeatures);
+ assert.deepEqual(identities.map(x=>x.echo),['SentryConstruct','AbyssalMercator','CuddleWuddle','ChopChopLeftless','ChestMimic']);
+ assert.ok(identities.every(x=>x.set==='FrostyResolve'));
+ assert.ok(identities[2].echoMatch.difference<.18);
+ assert.ok(identities[2].echoMatch.margin>.025);
+ const wrongCost=structuredClone(visualFeatures);wrongCost[2].cost=4;
+ assert.throws(()=>identifyFingerprints(wrongCost),/Echo 3/);
+});
 function inputFor(card){return {uid:process.env.USER_BUILD_CARD_UID||'812355555',ign:'Scoring QA',character:card.file.split('(')[0],slots:Array.from({length:5},(_,i)=>({slot:i+1,cost:{raw:card.fields[i*7],value:card.fields[i*7]},mainStat:{raw:card.fields[i*7+1],value:card.fields[i*7+1]},substats:card.fields.slice(i*7+2,i*7+7).map(v=>({raw:v,value:v}))}))};}
 test('scoring catalog integrity and 18 upstream full-calculator base cases',async()=>{
  const bytes=await readFile(new URL('../game-data/official-scoring.json',import.meta.url));
@@ -102,7 +112,7 @@ test('Tacet windows agree with the independent hit core and explicit level-10 ki
 });
 
 
-test('locked Echo evidence rejects altered values even for unscored characters', {skip:!originals||!process.env.USER_BUILD_CARD_UID,timeout:60000},async()=>{
+test('locked Echo evidence rejects altered values and stores canonical source crops', {skip:!originals||!process.env.USER_BUILD_CARD_UID,timeout:60000},async()=>{
  const card=cards.find(c=>c.file.startsWith('Carlotta'));
  const source=await readFile(originals+'/'+card.file);
  const original=inputFor(card);
@@ -119,5 +129,13 @@ test('locked Echo evidence rejects altered values even for unscored characters',
   const unsupportedSource=await sharp(source).composite([{input:overlay,left:0,top:0}]).png().toBuffer();
   await assert.rejects(submit({...input,character:'TestRover',sourceImage:unsupportedSource},db,true),e=>e.status===400&&/Echo stats/.test(e.message));
   assert.equal((await listBuilds({pending:true},db)).builds.length,0);
+  // Even valid-looking client crops cannot replace the source's Echo artwork.
+  const saved=await submit({...input,...original,sourceImage:source},db,true);
+  const stored=(await db.execute({sql:'SELECT png FROM assets WHERE submission_id=? AND slot=1 AND kind=\'portrait\'',args:[saved.id]})).rows[0];
+  const expected=await sharp(source).extract({left:22,top:650,width:192,height:182}).png().toBuffer();
+  assert.deepEqual(Buffer.from(stored.png),expected);
+  const assessment=(await listBuilds({pending:true,id:saved.id},db)).builds[0].data.assessment;
+  assert.equal(assessment.cropEvidenceVersion,'source-crops/1');
+  assert.equal(assessment.maxMainStatsVerified,true);
  }finally{db.close();}
 });

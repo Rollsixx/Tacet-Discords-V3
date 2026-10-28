@@ -85,7 +85,7 @@ export function ModerationPanel() {
    const method=kind==='deleted'?'DELETE':kind==='verified'?'PATCH':'POST';
    await request('/api/moderation',{method,body:JSON.stringify({id:target?.id,uid:kind==='verified'?targetUid:undefined,action:kind,confirm:kind==='deleted',reviewer:reviewer.trim(),note,identityVerified:kind==='verified'?value:verified})});
    setConfirmation(null);setNote("");setVerified(false);
-   const label=kind==='approved'?`Approved ${target?.character}. The build is now public.`:kind==='rejected'?`Rejected and deleted ${target?.character}.` :kind==='deleted'?`Deleted ${target?.character} and its stored evidence.`:value?'Player verified. Eligible approved builds can now rank.':'Player verification revoked. Their builds no longer rank.';
+   const label=kind==='approved'?`Approved ${target?.character}. The build is now public.${target?.data.assessment?.eligible?'':' It remains unranked because scoring validation did not pass.'}`:kind==='rejected'?`Rejected and deleted ${target?.character}.` :kind==='deleted'?`Deleted ${target?.character} and its stored evidence.`:value?'Player verified. Eligible approved builds can now rank.':'Player verification revoked. Their builds no longer rank.';
    // The mutation succeeded even if a subsequent refresh fails: report it clearly.
    setMessage(label);
    if(view==='players'){await loadPlayers(page,search,character,targetUid);return;}
@@ -130,6 +130,7 @@ export function ModerationPanel() {
      </div>}
      {selected?<>
       <div className="bs-panel-heading"><div><span className="eyebrow">Selected submission</span><h2>{selected.character} · {selected.ign}</h2></div><span className="bs-pill">Stats locked</span></div>
+      {!selected.data.assessment?.eligible&&<p className="bs-action-help" role="status"><strong>Scoring blocked:</strong> {selected.data.assessment?.reason||'No validated scoring evidence.'} Approval makes this build visible in Profiles, but approval and UID verification cannot resolve this scoring issue.</p>}
       <div className="bs-review-fields"><label className="field"><span>Reviewer name (audit trail)</span><input ref={reviewerInput} value={reviewer} maxLength={64} onChange={e=>changeReviewer(e.target.value)} /></label><label className="field"><span>Review note</span><textarea value={note} maxLength={500} onChange={e=>setNote(e.target.value)} placeholder="Optional context for the audit history" /></label></div>
       {selected.status==='pending'&&selected.identityVerified&&<p className="bs-inherited">✓ Verified UID · Automatically inherited. Only build approval is needed.</p>}
       {selected.status==='pending'&&!selected.identityVerified&&<label className="publish-consent"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)} /><span>I manually matched this UID/IGN to the member outside the website.</span></label>}

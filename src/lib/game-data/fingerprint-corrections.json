@@ -1,0 +1,47 @@
+{
+  "version": "visual-reference-corrections/1",
+  "echoes": [
+    {
+      "key": "CuddleWuddle",
+      "cost": 3,
+      "sets": [
+        "FrostyResolve",
+        "MidnightVeil"
+      ],
+      "name": "Cuddle Wuddle",
+      "fingerprint": {
+        "hash": "714e174f6b333767",
+        "hist": [
+          0.3055555555555556,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.09722222222222222,
+          0.1111111111111111,
+          0.1111111111111111,
+          0.125,
+          0.08333333333333333,
+          0.3055555555555556,
+          0.05555555555555555,
+          0.125,
+          0.05555555555555555,
+          0.1388888888888889,
+          0.1527777777777778,
+          0.09722222222222222,
+          0.06944444444444445,
+          0.20833333333333334,
+          0.1527777777777778,
+          0.027777777777777776,
+          0.08333333333333333,
+          0.125,
+          0.20833333333333334,
+          0.1388888888888889,
+          0.05555555555555555
+        ]
+      },
+      "correction": "cuddle-wuddle-portrait/1",
+      "source": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_32030_UI.webp",
+      "note": "Pinned asset checkout CuddleWuddle.webp contains a different Echo. Use the matching MonsterHead portrait, also identified by the pinned optimizer scanner manifest.",
+      "referencePngSha256": "0ab915c750d38cffb826abcf94e31ea090efe94d5d174336b4668fa4ccc373bb"
+    }
+  ]
+}
