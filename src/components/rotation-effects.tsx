@@ -1,0 +1,40 @@
+"use client";
+import {useState} from 'react';
+export type Effect={id:string;isEnabled:boolean;stacks?:number};
+export type Modifier={id:string;category:string;key:string;label:string;displayLabel?:string;description:string;hasStacks:boolean;minStacks:number;maxStacks:number;scope?:string;echoCost?:number;automatic?:boolean;unavailableReason?:string|null};
+export type EchoOption={key:string;name:string;cost:number;effectCount:number};
+const categories=[
+ {id:'buffs',name:'Resonator',help:'Conditional effects for this resonator. Permanent bonuses are shown separately below.'},
+ {id:'weaponPassives',name:'Signature weapon',help:'Effects from the standardized signature weapon. Permanent passives apply automatically.'},
+ {id:'echoSetPassives',name:'Sonata · equipped sets',help:'Configure set conditions here. Each effect applies only to builds wearing the required Sonata set.'},
+ {id:'mainEchoBuff',name:'Main Echo · equipped only',help:'Browse the complete pinned Echo catalog by cost. An effect applies only when that Echo occupies the build’s main slot.'},
+];
+type Props={index:number;action:{effects?:Effect[]};modifiers:Modifier[];references:Modifier[];echoes:EchoOption[];onChange:(effects:Effect[])=>void};
+export function ActionEffects(props:Props){
+ const [open,setOpen]=useState(false);
+ return <details className="rotation-effects" onToggle={event=>setOpen(event.currentTarget.open)}><summary>Effects for action {props.index+1} · {props.action.effects?.length||0} configured</summary>{open&&<EffectPanel {...props}/>}</details>;
+}
+function EffectPanel({index,action,modifiers,references,echoes,onChange}:Props){
+ const [category,setCategory]=useState('buffs'),[selected,setSelected]=useState(''),[search,setSearch]=useState(''),[cost,setCost]=useState(4),[echo,setEcho]=useState(''),[set,setSet]=useState('');
+ const effects=action.effects||[],n=index+1,main=category==='mainEchoBuff',sonata=category==='echoSetPassives';
+ const configured=effects.filter(e=>modifiers.find(m=>m.id===e.id)?.category===category);
+ const matches=(m:Modifier)=>m.category===category&&(!main||m.scope===echo)&&(!sonata||!set||m.scope===set)&&(!search||(m.label+' '+m.description).toLowerCase().includes(search.toLowerCase()));
+ const available=modifiers.filter(m=>matches(m)&&!effects.some(e=>e.id===m.id));
+ const fixed=references.filter(matches),chosen=echoes.find(e=>e.key===echo);
+ const sets=[...new Set([...modifiers,...references].filter(m=>m.category==='echoSetPassives').map(m=>m.scope!))].sort();
+ const selectCategory=(id:string)=>{setCategory(id);setSelected('');setSearch('');};
+ return <div className="rotation-effect-workspace">
+  <p className="muted">Configure this action’s effects. Every repeat shares these settings; use separate action rows when conditions change.</p>
+  <div className="rotation-effect-categories" role="group" aria-label={'Effect category for action '+n}>{categories.map(c=><button type="button" key={c.id} className={category===c.id?'selected':''} aria-pressed={category===c.id} onClick={()=>selectCategory(c.id)}>{c.name}<small>{effects.filter(e=>modifiers.find(m=>m.id===e.id)?.category===c.id).length} configured</small></button>)}</div>
+  <p className="rotation-effect-help">{categories.find(c=>c.id===category)?.help}</p>
+  {main&&<><div className="rotation-echo-costs" role="group" aria-label={'Main Echo cost for action '+n}>{[4,3,1].map(value=><button type="button" key={value} aria-pressed={cost===value} className={cost===value?'selected':''} onClick={()=>{setCost(value);setEcho('');setSelected('');setSearch('');}}>{value} cost <small>{echoes.filter(e=>e.cost===value).length} Echoes</small></button>)}</div><label className="field"><span>Main Echo · {cost} cost</span><select aria-label={'Main Echo for action '+n} value={echo} onChange={event=>{setEcho(event.target.value);setSelected('');setSearch('');}}><option value="">Choose an Echo…</option>{echoes.filter(e=>e.cost===cost).map(e=><option key={e.key} value={e.key}>{e.name}{e.effectCount?'':' · no Main Echo buff'}</option>)}</select></label><p className="muted">{echoes.length} Echoes in the pinned catalog. Permanent effects remain visible even when they cannot be toggled.</p></>}
+  {sonata&&<label className="field"><span>Sonata set</span><select aria-label={'Sonata set for action '+n} value={set} onChange={event=>{setSet(event.target.value);setSelected('');}}><option value="">All defined sets</option>{sets.map(name=><option key={name}>{name}</option>)}</select></label>}
+  {(!main||echo)&&<><label className="field"><span>Search this category</span><input aria-label={'Search effects for action '+n} type="search" placeholder="Name or effect description…" value={search} onChange={event=>{setSearch(event.target.value);setSelected('');}}/></label><div className="rotation-add"><label className="field"><span>Conditional optimizer effect</span><select aria-label={'Optimizer effect for action '+n} value={selected} onChange={event=>setSelected(event.target.value)}><option value="">{available.length?'Choose an effect…':'No available conditional effects'}</option>{available.map(m=><option key={m.id} value={m.id}>{m.displayLabel||m.label}</option>)}</select></label><button type="button" className="outline-button" disabled={!selected||effects.length>=60} onClick={()=>{const d=available.find(m=>m.id===selected);if(d){onChange([...effects,{id:d.id,isEnabled:true,...(d.hasStacks?{stacks:d.minStacks}:{})}]);setSelected('');}}}>Add effect</button></div>
+  {selected&&<p className="rotation-effect-description">{available.find(m=>m.id===selected)?.description}</p>}
+  {main&&chosen?.effectCount===0&&<p className="rotation-effect-empty">This Echo has no Main Echo stat buff in the pinned engine. Its equipped stats and Sonata still apply. Echo attacks are separate from these effect controls.</p>}
+  {!available.length&&(!main||chosen?.effectCount!==0)&&<p className="muted">{search?'No conditional effects match this search.':fixed.length?'This selection has automatic or read-only effects shown below.':'No additional conditional effects are defined, or all have already been configured.'}</p>}
+  {!!fixed.length&&<details className="rotation-fixed-effects"><summary>Automatic and read-only effects · {fixed.length}</summary>{fixed.map(m=><article className="rotation-fixed-effect" key={m.id}><strong>{m.displayLabel||m.label}</strong><span className="bs-pill">{m.unavailableReason?'Unavailable for configuration':'Automatic'}</span><p>{m.description}</p><small>{m.unavailableReason||(main?'Applied automatically when this Echo is equipped as the main Echo.':sonata?'Applied automatically when the required Sonata is equipped.':'Included automatically by the standardized build.')}</small></article>)}</details>}</>}
+  <div className="rotation-configured-heading"><strong>{categories.find(c=>c.id===category)?.name} · {configured.length} configured</strong><small>{effects.length}/60 total for this action</small></div>
+  {configured.map(e=>{const d=modifiers.find(m=>m.id===e.id)!;return <article className="rotation-effect" key={e.id}><label><input type="checkbox" aria-label={'Enable '+(d.displayLabel||d.label)+' for action '+n} checked={e.isEnabled} onChange={event=>onChange(effects.map(x=>x.id===e.id?{...x,isEnabled:event.target.checked}:x))}/>{d.displayLabel||d.label}</label>{d.echoCost&&<span className="bs-pill">{d.echoCost} cost · main slot only</span>}<p>{d.description}</p>{d.hasStacks&&<label className="field"><span>Stacks ({d.minStacks}–{d.maxStacks})</span><input aria-label={'Stacks for '+(d.displayLabel||d.label)+' action '+n} type="number" min={d.minStacks} max={d.maxStacks} value={e.stacks??d.minStacks} onChange={event=>onChange(effects.map(x=>x.id===e.id?{...x,stacks:Number(event.target.value)}:x))}/></label>}<button type="button" className="text-link" aria-label={'Remove '+(d.displayLabel||d.label)+' from action '+n} onClick={()=>onChange(effects.filter(x=>x.id!==e.id))}>Remove effect</button></article>;})}
+ </div>;
+}

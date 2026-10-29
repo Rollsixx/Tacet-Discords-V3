@@ -1060,3 +1060,21 @@ input[readonly] { opacity: .75; cursor: default; }
 .scoring-readiness p,.scoring-readiness small {font-size:12px;line-height:1.7;overflow-wrap:anywhere}.identity-review {padding:18px;border:1px solid #9a845349;border-radius:12px;background:#c39f4610;margin:18px 0;min-width:0}
 .identity-review p,.identity-review small {font-size:12px;line-height:1.7;overflow-wrap:anywhere}.identity-slots {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,225px),1fr));gap:12px;margin:18px 0}.identity-slots article {padding:14px;background:#0b1520;border:1px solid #30465a;border-radius:10px;min-width:0}.identity-slots h4 {margin:0 0 10px}.identity-crops {display:flex;align-items:end;gap:8px;margin:14px 0}.identity-crops img:first-child {width:calc(100% - 48px);max-width:192px;aspect-ratio:192/182;object-fit:contain;border-radius:7px}.identity-crops img:last-child {width:40px;height:40px}.identity-reference {display:block;width:144px;max-width:100%;object-fit:contain}.identity-review textarea {width:100%;box-sizing:border-box;resize:vertical}.identity-review .field {display:grid;gap:7px;margin:12px 0}.identity-review select {width:100%;min-width:0}.identity-review details {margin:12px 0}.identity-review summary {cursor:pointer;font-size:12px}.unranked-consent {padding:14px;border:1px solid #a3854c;background:#ac8c3a12;border-radius:10px}
 @media(max-width:600px){.scoring-readiness dl{grid-template-columns:1fr}.identity-review,.scoring-readiness{padding:13px}}
+
+.rotation-effect-workspace {min-width:0;padding-top:12px}
+.rotation-effect-categories {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0}
+.rotation-effect-categories button,.rotation-echo-costs button {padding:11px 12px;border:1px solid #304960;border-radius:10px;background:#0c1825;color:#aec4da;text-align:left;font-size:12px;line-height:1.5;cursor:pointer;min-width:0;overflow-wrap:anywhere}
+.rotation-effect-categories button.selected,.rotation-echo-costs button.selected {background:#203d51;border-color:#8ac5fb;color:#e4f2ff}
+.rotation-effect-categories button small,.rotation-echo-costs button small {display:block;margin-top:3px;font-size:11px;color:#a3bbcf}
+.rotation-effect-categories button:focus-visible,.rotation-echo-costs button:focus-visible {outline:2px solid #9ad5ff;outline-offset:2px}
+.rotation-effect-workspace>.field,.rotation-effect-workspace .rotation-add .field {display:grid;gap:7px;margin:12px 0;min-width:0}
+.rotation-effect-workspace input[type=search] {width:100%;box-sizing:border-box}
+.rotation-effect-help,.rotation-effect-description,.rotation-effect-empty {font-size:12px;line-height:1.7;padding:12px;background:#132435;border:1px solid #2c4157;border-radius:8px;overflow-wrap:anywhere}
+.rotation-echo-costs {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+.rotation-configured-heading {display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:20px;padding-top:14px;border-top:1px solid #293c50;font-size:12px}
+.rotation-configured-heading small {font-size:11px}
+.rotation-fixed-effect {padding:12px 0;border-bottom:1px solid #293c50;font-size:12px;line-height:1.7}
+.rotation-fixed-effect strong {display:block;overflow-wrap:anywhere;margin-bottom:7px}
+.rotation-fixed-effect p {font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.rotation-fixed-effect small {font-size:11px}
+@media(max-width:480px){.rotation-effect-categories button,.rotation-echo-costs button {padding:10px 8px}.rotation-effect-workspace .rotation-effect {padding:11px}}

@@ -8,16 +8,30 @@ const plain=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const text=x=>String(x||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 export function echoBuffDefinitions(echo){
  const mods=echo?.modifiers||[];if(!mods.length)return [];
- return mods.every(m=>m.key)?mods.map(m=>({...m,alwaysEnabled:m.alwaysEnabled??echo.alwaysEnabled??false})):[{key:echo.key,details:echo.details,alwaysEnabled:echo.alwaysEnabled,hasStacks:echo.hasStacks,minStacks:echo.minStacks,maxStacks:echo.maxStacks}];
+ return mods.every(m=>m.key)?mods.map(m=>({...m,details:m.details||echo.details,alwaysEnabled:m.alwaysEnabled??echo.alwaysEnabled??false})):[{key:echo.key,details:echo.details,alwaysEnabled:echo.alwaysEnabled,hasStacks:echo.hasStacks,minStacks:echo.minStacks,maxStacks:echo.maxStacks}];
 }
-export async function modifierCatalog(character){
+export async function modifierCatalog(character,includeReferences=false){
  const c=await engine.getCharByName(character),w=await engine.getWeaponByName(c.basic.weapon,c.basic.signatureWeapon);const result=[];
- const add=(category,d,label,scope)=>{if(d.alwaysEnabled||d.key.startsWith('StatBonus')||d.inputBase)return;const min=d.hasStacks?Number(d.minStacks||0):0,max=d.hasStacks?Number(d.maxStacks):0;if(!Number.isInteger(min)||!Number.isInteger(max)||max<min)return;result.push({id:category+':'+(scope?scope+':':'')+d.key,category,key:d.key,label:label+' · '+(d.name||d.key),description:text(d.details),hasStacks:Boolean(d.hasStacks),minStacks:min,maxStacks:max,...(scope?{scope}:{})});};
+ const add=(category,d,label,scope)=>{
+  const automatic=Boolean(d.alwaysEnabled||d.key.startsWith('StatBonus'));
+  const min=d.hasStacks?Number(d.minStacks||0):0,max=d.hasStacks?Number(d.maxStacks):0;
+  const unavailableReason=d.inputBase?'Requires a runtime input not supported by this editor.':!Number.isInteger(min)||!Number.isInteger(max)||max<min?'Stack bounds are not defined in the pinned engine.':null;
+  if(!includeReferences&&(automatic||unavailableReason))return;
+  const echo=category==='mainEchoBuff'?engine.mainEchoesData[scope]:null;
+  const stats=[...new Set((d.effects||[d]).map(e=>e.modifier).filter(Boolean))].join(', ');
+  const effectName=d.name||d.label||stats||d.key;
+  const displayLabel=label+' · '+effectName.replace(/_/g,' ').replace(/([a-z0-9])([A-Z])/g,'$1 $2');
+  result.push({id:category+':'+(scope?scope+':':'')+d.key,category,key:d.key,label:label+' · '+(d.name||d.key),displayLabel,description:text(d.details),hasStacks:Boolean(d.hasStacks),minStacks:Number.isInteger(min)?min:0,maxStacks:Number.isInteger(max)?max:0,automatic,unavailableReason,...(scope?{scope}:{}),...(echo?{echoCost:({Calamity:4,Overlord:4,Elite:3,Common:1})[echo.class]}:{})});
+ };
  for(const d of c.buffs||[])add('buffs',d,'Resonator');
  for(const d of w?.info?.passiveData||[])add('weaponPassives',d,w.info.name);
  for(const group of [engine.sets.setBonusEffectsOnePiece,engine.sets.setBonusEffectsOne,engine.sets.setBonusEffectsTwo])for(const [label,set]of Object.entries(group))for(const d of set.passives||[])add('echoSetPassives',d,label,label);
  for(const [key,echo]of Object.entries(engine.mainEchoesData))for(const d of echoBuffDefinitions(echo))add('mainEchoBuff',d,echo.name||key,key);
  return result;
+}
+export async function modifierLibrary(character){
+ const all=await modifierCatalog(character,true);
+ return {referenceModifiers:all.filter(d=>d.automatic||d.unavailableReason),mainEchoes:Object.entries(engine.mainEchoesData).map(([key,e])=>({key,name:e.name||key,cost:({Calamity:4,Overlord:4,Elite:3,Common:1})[e.class],effectCount:echoBuffDefinitions(e).length})).sort((a,b)=>b.cost-a.cost||a.name.localeCompare(b.name))};
 }
 export function normalizeEffects(effects,catalog){
  if(effects===undefined)return [];

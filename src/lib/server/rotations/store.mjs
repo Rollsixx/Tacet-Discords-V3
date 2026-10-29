@@ -5,7 +5,7 @@ import {ROTATION_ROSTER,MECHANICS_MODELS} from '../../game-data/rotation-mechani
 import {scoringPreset} from '../../game-data/scoring-policies.mjs';
 import {calculateStandard,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from '../scoring.mjs';
 import {actionCatalog,normalizeSpec,validateSpec,simulate,specificationHash} from './mechanics.mjs';
-import {modifierCatalog,compileReviewed,REVIEWED_MODE,REVIEWED_VERSION} from './configuration.mjs';
+import {modifierLibrary,modifierCatalog,compileReviewed,REVIEWED_MODE,REVIEWED_VERSION} from './configuration.mjs';
 import {HttpError} from '../validation.ts';
 const now=()=>new Date().toISOString();
 const parse=row=>row?Object.fromEntries(Object.entries(row).map(([k,v])=>[k,['spec','validation'].includes(k)&&v?JSON.parse(String(v)):v])):null;
@@ -37,7 +37,7 @@ export async function rotationWorkspace(db,character,historyPage=1){
  const draft=(await db.execute({sql:'SELECT * FROM rotation_drafts WHERE character=?',args:[character]})).rows[0];
  const history=(await db.execute({sql:'SELECT v.id,v.number,v.kind,v.spec_hash,v.mechanics_version,v.policy_id,v.created_at,EXISTS(SELECT 1 FROM rotation_activations a WHERE a.version_id=v.id) AS published FROM rotation_versions v WHERE v.character=? ORDER BY v.number DESC LIMIT 51 OFFSET ?',args:[character,(historyPage-1)*50]})).rows;
  const runs=(await db.execute({sql:'SELECT * FROM rotation_runs WHERE character=? ORDER BY created_at DESC,id DESC LIMIT 10',args:[character]})).rows;
- return {characters:ROTATION_ROSTER,character,active:parse(current),draft:parse(draft),catalog:await actionCatalog(character),modifiers:await modifierCatalog(character),mechanics:MECHANICS_MODELS[character],history:history.slice(0,50),historyPage,historyHasMore:history.length>50,runs};
+ return {...await modifierLibrary(character),characters:ROTATION_ROSTER,character,active:parse(current),draft:parse(draft),catalog:await actionCatalog(character),modifiers:await modifierCatalog(character),mechanics:MECHANICS_MODELS[character],history:history.slice(0,50),historyPage,historyHasMore:history.length>50,runs};
 }
 export async function saveRotationDraft(db,character,input,revision){
  await initializeRotations(db);const spec=await normalizeSpec(character,input);must(Number.isInteger(revision)&&revision>=0,'Valid draft revision required.',400);
