@@ -244,5 +244,47 @@
       "Resonance Liberation DMG Bonus 7.9%",
       "ATK 9.4%"
     ]
+  },
+  {
+    "file": "suoming.jpeg",
+    "character": "Suoming",
+    "sha256": "1ace83b80e6c0a2bd93390295499ccdc771dffc080ed782bf6e7b75f213bd48b",
+    "fields": [
+      "4",
+      "Crit. DMG",
+      "Energy Regen 11.6%",
+      "ATK 50",
+      "Crit. DMG 12.6%",
+      "Heavy Attack DMG Bonus 10.9%",
+      "DEF 8.1%",
+      "3",
+      "Electro DMG Bonus",
+      "ATK 7.9%",
+      "Resonance Liberation DMG Bonus 7.9%",
+      "Crit. DMG 17.4%",
+      "Basic Attack DMG Bonus 9.4%",
+      "Resonance Skill DMG Bonus 10.1%",
+      "3",
+      "Electro DMG Bonus",
+      "Energy Regen 9.2%",
+      "Crit. DMG 12.6%",
+      "Crit. Rate 7.5%",
+      "DEF 60",
+      "Resonance Skill DMG Bonus 10.1%",
+      "1",
+      "ATK",
+      "Crit. Rate 6.9%",
+      "Heavy Attack DMG Bonus 10.1%",
+      "HP 9.4%",
+      "HP 390",
+      "ATK 7.9%",
+      "1",
+      "ATK",
+      "DEF 10.9%",
+      "Crit. Rate 7.5%",
+      "HP 540",
+      "ATK 40",
+      "HP 10.1%"
+    ]
   }
 ]

@@ -43,7 +43,7 @@ export async function assessSource(input){
   const header=await read(regionOf(CARD_HEADERS.character));
   if(parseCardIdentity(header,'','').character.toLowerCase()!==input.character.toLowerCase())throw sourceFailure('CHARACTER_UNREADABLE','Character name could not be confirmed in the screenshot header. Use the original 1920 × 1080 card.');
   const uidText=await read(regionOf(CARD_HEADERS.uid));
-  sourceUid=await recoverCardUid(uidText,async variant=>{await worker.setParameters({tessedit_char_whitelist:'0123456789'});return read(regionOf(CARD_HEADERS.uidDigits),{linear:true,scale:variant===0?3:4});});
+  sourceUid=await recoverCardUid(uidText,async variant=>{await worker.setParameters({tessedit_char_whitelist:'0123456789'});const r=await readResult(regionOf(CARD_HEADERS.uidDigits),{linear:true,scale:variant===0?3:4});return {text:r.text,confidence:r.confidence};});
   await worker.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
   if(sourceUid!==input.uid)throw sourceFailure('UID_MISMATCH','Screenshot UID could not be confirmed. Rescan the original card; UID stays locked.');
   const slots=[];let levelIssue;

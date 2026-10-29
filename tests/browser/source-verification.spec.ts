@@ -28,3 +28,16 @@ test('Hsin original verifies UID and every Echo before local submission',async({
  await page.screenshot({path:info.outputPath('hsin-source-verified.png'),fullPage:true});
  const cleanup=await request.post('/api/moderation',{headers:{Authorization:'Bearer browser-test-only-token-00000000000000000000'},data:{id:saved.id,action:'rejected',reviewer:'Hsin QA',note:'Remove isolated Hsin test',identityVerified:false}});expect(cleanup.status()).toBe(200);
 });
+
+for(const name of ['suoming.jpeg','Hsin(2).jpeg'])test('exact revised card has clean IGN, exact UID and source-verified stats: '+name,async({page,request},info)=>{
+ test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Private originals required; isolated local API only.');
+ await page.goto('/import');await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,name));
+ await expect(page.getByText('No structural warnings',{exact:true})).toBeVisible({timeout:60000});
+ await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).toHaveValue(process.env.USER_BUILD_CARD_UID!);await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).not.toBeEditable();
+ await expect(page.getByLabel('In-game name',{exact:true})).toHaveValue('Rollsixx');
+ await page.getByRole('checkbox').check();const pending=page.waitForResponse(r=>r.url().endsWith('/api/submissions')&&r.request().method()==='POST');await page.getByRole('button',{name:'Submit for moderation',exact:true}).click();
+ const response=await pending;expect(response.status(),await response.text()).toBe(201);const saved=await response.json();expect(saved.readiness.ready).toBe(true);
+ const forged=response.request().postDataJSON();forged.uid='1'+process.env.USER_BUILD_CARD_UID;const blocked=await request.post('/api/submissions',{data:forged});expect(blocked.status()).toBe(400);expect((await blocked.json()).error).toMatch(/UID/);
+ await page.screenshot({path:info.outputPath(name+'.png'),fullPage:true});
+ const cleanup=await request.post('/api/moderation',{headers:{Authorization:'Bearer browser-test-only-token-00000000000000000000'},data:{id:saved.id,action:'rejected',reviewer:'Card QA',note:'Remove isolated card test',identityVerified:false}});expect(cleanup.status()).toBe(200);
+});

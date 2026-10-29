@@ -1,4 +1,5 @@
-import {CARD_HEADERS,recoverCardUid} from "./card-layout";
+import {CARD_HEADERS,recoverCardUid,playerTextWidth} from "./card-layout";
+import {legalSubstatKey,mainStatKey,recoverStatReading} from "./ocr-readings";
 import { createWorker, PSM } from "tesseract.js";
 import { recoverEchoCost } from "./cost-recovery";
 import { parseCardIdentity, type CardIdentity } from "./card-identity";
@@ -216,17 +217,26 @@ export async function recognizeBuildCard(
 
     await worker.setParameters({ tessedit_char_whitelist: "" });
     const characterHeader = await read(CARD_HEADERS.character, "Character");
-    const playerHeader = await read(CARD_HEADERS.player, "In-game name");
+    const playerPixels=image.getContext("2d",{willReadFrequently:true})!.getImageData(CARD_HEADERS.player.x,CARD_HEADERS.player.y,CARD_HEADERS.player.width,CARD_HEADERS.player.height);
+    const playerRegion={...CARD_HEADERS.player,width:playerTextWidth(playerPixels.data,playerPixels.width,playerPixels.height)};
+    const playerHeader = await read(playerRegion, "In-game name");
     const uidHeader = await read(CARD_HEADERS.uid, "UID");
     const uid=await recoverCardUid(uidHeader.value,async variant=>{
       onProgress?.({completed,total,label:"Retrying UID from the screenshot"});
       await worker.setParameters({tessedit_char_whitelist:"0123456789",tessedit_pageseg_mode:PSM.SINGLE_LINE});
-      return (await worker.recognize(cropRegion(image,CARD_HEADERS.uidDigits,variant===0?3:4))).data.text;
+      const result=(await worker.recognize(cropRegion(image,CARD_HEADERS.uidDigits,variant===0?3:4))).data;
+      return {text:result.text,confidence:result.confidence};
     });
     identity = {...parseCardIdentity(characterHeader.value, playerHeader.value, uidHeader.value),uid};
     onProgress?.({ completed, total, label: "Player details scanned", identity, slots: [] });
     await worker.setParameters({ tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ " });
     const warnings: string[] = [];
+    let statRetries=0;
+    async function retryField(field:RecognizedField,region:Rectangle,key:(raw:string)=>string|null,label:string){
+      if(key(field.value)||statRetries>=12)return field;
+      statRetries+=2;onProgress?.({completed,total,label:"Retrying "+label,identity,slots:[...slots]});
+      return recoverStatReading(field,async variant=>(await worker.recognize(cropRegion(image,region,variant===0?4:5))).data.text,key);
+    }
 
     for (let index = 0; index < SLOT_COUNT; index += 1) {
       const regions = regionsForSlot(index);
@@ -237,19 +247,13 @@ export async function recognizeBuildCard(
         `Echo ${slotNumber}: cost`,
       );
 
-      const mainStat = await read(
-        regions.mainStat,
-        `Echo ${slotNumber}: main stat`,
-      );
+      const mainStat = await retryField(await read(regions.mainStat,`Echo ${slotNumber}: main stat`),regions.mainStat,mainStatKey,`Echo ${slotNumber} main stat`);
 
       const substats: RecognizedField[] = [];
 
       for (let line = 0; line < regions.substats.length; line += 1) {
         substats.push(
-          await read(
-            regions.substats[line],
-            `Echo ${slotNumber}: substat ${line + 1}`,
-          ),
+          await retryField(await read(regions.substats[line],`Echo ${slotNumber}: substat ${line + 1}`),regions.substats[line],legalSubstatKey,`Echo ${slotNumber} substat ${line + 1}`),
         );
       }
 

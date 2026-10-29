@@ -36,3 +36,11 @@ Errors distinguish an unreadable character, UID mismatch, Echo/field mismatch an
 Browser and server share `card-layout.ts`: the UID crop stops before character artwork. An unreadable UID can use two independent digit-only image reads at different scales; both must agree exactly on 8–12 digits. No manual UID change, character substitution or guessed number is permitted.
 
 Ten references absent from the older artwork checkout come from the pinned optimizer's scanner icon bundle at commit `17f931df068b0952413c558f569ddc9ef661de24`. `scanner-reference-supplement.json` retains source-image and decoded-icon hashes alongside perceptual features. Match thresholds remain unchanged. Prebuild now fails on missing Echo references, stale Sonata membership or missing Sonata references. Refresh from a local upstream bundle using `node scripts/sync-scanner-references.mjs <scanner-icons.json> <upstream-commit-sha>`. No external reference downloads occur during user scans. Calculator versions and official rotations are unchanged.
+
+## Confident UID isolation and browser stat retries
+
+UID verification always reads the isolated numeric area twice at different scales with confidence >=70; a plausible labelled-header string alone is insufficient. The numeric crop excludes the UID-label colon that was read as a leading 1 at confidence 0. No digit is trimmed, padded or substituted. A wide IGN header is cropped at the first large gap in gold text, preserving longer contiguous names while excluding separated artwork. IGN remains editable.
+
+Browser main/substat failures now have the same legal-reading keys as the server and up to 12 bounded extra reads. An invalid/unparseable primary needs two agreeing legal reads; a legal primary is never replaced and original raw OCR is retained. Server verification still independently checks the uploaded evidence and rejects conflicting numeric readings.
+
+The reviewed DommyMM/wuwabuild frontend at `42efb17e133fb1e5025738990686bdd3977ab524` posts images to a separate OCR API; its backend recognition implementation is not published in that repository. No code was copied from that repository and no user images were sent to its API.

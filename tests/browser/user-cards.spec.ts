@@ -17,7 +17,7 @@ for (const card of expectations) test('original uploaded card: '+card.file, asyn
   await expect(page.locator('img[alt^="Extracted Sonata icon"]')).toHaveCount(5);
   const values = await page.locator('input[aria-label^="Echo "],textarea[aria-label^="Echo "]').evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value));
   expect(values).toHaveLength(35);
-  await expect(page.locator(".import-character h2")).toHaveText(card.file.split("(")[0]);
+  await expect(page.locator(".import-character h2")).toHaveText((card.character||card.file.split("(")[0]));
   if(process.env.USER_BUILD_CARD_UID) await expect(page.getByLabel("Wuthering Waves UID",{exact:true})).toHaveValue(process.env.USER_BUILD_CARD_UID);
   const canonical = values.map((value, index) => {
     if(index % 7 < 2) return value;
