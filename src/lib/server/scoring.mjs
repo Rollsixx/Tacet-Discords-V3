@@ -2,6 +2,7 @@ import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import {echoBuffDefinitions} from './rotations/configuration.mjs';
 import catalog from '../game-data/fingerprints.json' with {type:'json'};
 import corrections from '../game-data/fingerprint-corrections.json' with {type:'json'};
+import supplement from '../game-data/scanner-reference-supplement.json' with {type:'json'};
 import {fingerprint,rankFingerprint} from './image-fingerprint.mjs';
 import {SCORING_CHARACTERS,scoringPreset} from '../game-data/scoring-policies.mjs';
 import {parseSubstat} from '../scanner/stat-validation.ts';
@@ -11,7 +12,7 @@ export const POLICY_VERSION='solo-permanent-s0-signature-r1/2';
 export const SUPPORTED=SCORING_CHARACTERS;
 const attributes={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Basic Attack DMG Bonus':'BasicAttackDMGBonus','Heavy Attack DMG Bonus':'HeavyAttackDMGBonus','Resonance Skill DMG Bonus':'ResonanceSkillDMGBonus','Resonance Liberation DMG Bonus':'ResonanceLiberationDMGBonus','Glacio DMG Bonus':'Glacio','Fusion DMG Bonus':'Fusion','Aero DMG Bonus':'Aero','Electro DMG Bonus':'Electro','Spectro DMG Bonus':'Spectro','Havoc DMG Bonus':'Havoc','Healing Bonus':'HealingBonus',ATK:'ATK',DEF:'DEF',HP:'HP'};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
-const echoReferences=catalog.echoes.map(e=>corrections.echoes.find(c=>c.key===e.key)||e);
+const echoReferences=[...catalog.echoes,...supplement.echoes].map(e=>corrections.echoes.find(c=>c.key===e.key)||e);
 export function matchVisual(f,references,maximum,margin,equivalent=false){
  const ranked=rankFingerprint(f,references);const best=ranked[0],next=ranked[1];
  if(!best||best.difference>maximum)return null;

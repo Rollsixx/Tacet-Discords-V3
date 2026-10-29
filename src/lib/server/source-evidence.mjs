@@ -2,6 +2,8 @@ import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import sharp from 'sharp';
 import {createWorker,PSM} from 'tesseract.js';
+import {CARD_HEADERS,recoverCardUid} from '../scanner/card-layout.ts';
+import {parseCardIdentity} from '../scanner/card-identity.ts';
 import {recoverEchoCost} from '../scanner/cost-recovery.ts';
 import {agreedReading,legalSubstatKey,mainStatKey,sourceFailure} from './ocr-agreement.mjs';
 import {validateEchoSlot} from '../scanner/stat-validation.ts';
@@ -37,10 +39,12 @@ export async function assessSource(input){
    if(agreed===null)throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo stats could not be verified: Echo ${slot}, ${field}. Independent image reads did not agree with the scan. Stats remain locked; retry with the original card.`,{slot,field});
    return agreed;
   }
-  const header=await read({left:65,top:18,width:640,height:65});
-  if(!header.toLowerCase().includes(input.character.toLowerCase()))throw sourceFailure('CHARACTER_UNREADABLE','Character name could not be confirmed in the screenshot header. Use the original 1920 × 1080 card.');
-  const uidText=await read({left:15,top:109,width:300,height:28});
-  sourceUid=uidText.replace(/[^0-9]/g,'');
+  const regionOf=({x,y,width,height})=>({left:x,top:y,width,height});
+  const header=await read(regionOf(CARD_HEADERS.character));
+  if(parseCardIdentity(header,'','').character.toLowerCase()!==input.character.toLowerCase())throw sourceFailure('CHARACTER_UNREADABLE','Character name could not be confirmed in the screenshot header. Use the original 1920 × 1080 card.');
+  const uidText=await read(regionOf(CARD_HEADERS.uid));
+  sourceUid=await recoverCardUid(uidText,async variant=>{await worker.setParameters({tessedit_char_whitelist:'0123456789'});return read(regionOf(CARD_HEADERS.uidDigits),{linear:true,scale:variant===0?3:4});});
+  await worker.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
   if(sourceUid!==input.uid)throw sourceFailure('UID_MISMATCH','Screenshot UID could not be confirmed. Rescan the original card; UID stays locked.');
   const slots=[];let levelIssue;
   for(let i=0;i<5;i++){

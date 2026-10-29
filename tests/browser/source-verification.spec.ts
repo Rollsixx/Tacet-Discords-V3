@@ -15,3 +15,16 @@ test('large screenshot scans and uploads one image, with matching preview crops 
  await page.screenshot({path:info.outputPath('large-image-verification.png'),fullPage:true});
  const cleanup=await request.post('/api/moderation',{headers:{Authorization:'Bearer browser-test-only-token-00000000000000000000'},data:{id:receipt.id,action:'rejected',reviewer:'Verification QA',note:'Remove isolated verification test',identityVerified:false}});expect(cleanup.status()).toBe(200);
 });
+
+test('Hsin original verifies UID and every Echo before local submission',async({page,request},info)=>{
+ test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Private original required; local tests only.');
+ await page.goto('/import');await page.getByLabel('Choose build screenshot').setInputFiles(join(directory!,'Hsin(1).jpeg'));
+ await expect(page.getByText('No structural warnings',{exact:true})).toBeVisible({timeout:60000});
+ await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).toHaveValue(process.env.USER_BUILD_CARD_UID!);await expect(page.getByLabel('Wuthering Waves UID',{exact:true})).not.toBeEditable();
+ await expect(page.getByLabel('Scoring readiness').first()).toContainText('5/5 confirmed');
+ await page.getByLabel('In-game name',{exact:true}).fill('Local Hsin QA '+info.project.name);await page.getByRole('checkbox').check();
+ const uploaded=page.waitForResponse(r=>r.url().endsWith('/api/submissions')&&r.request().method()==='POST');await page.getByRole('button',{name:'Submit for moderation',exact:true}).click();
+ const r=await uploaded;expect(r.status(),await r.text()).toBe(201);const saved=await r.json();expect(saved.readiness.ready).toBe(true);expect(saved.readiness.echoes).toBe(5);expect(saved.readiness.sonatas).toBe(5);
+ await page.screenshot({path:info.outputPath('hsin-source-verified.png'),fullPage:true});
+ const cleanup=await request.post('/api/moderation',{headers:{Authorization:'Bearer browser-test-only-token-00000000000000000000'},data:{id:saved.id,action:'rejected',reviewer:'Hsin QA',note:'Remove isolated Hsin test',identityVerified:false}});expect(cleanup.status()).toBe(200);
+});

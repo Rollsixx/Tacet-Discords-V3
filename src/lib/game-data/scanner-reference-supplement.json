@@ -1,0 +1,434 @@
+{
+  "version": "upstream-scanner-icons/1",
+  "sourceCommit": "17f931df068b0952413c558f569ddc9ef661de24",
+  "source": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/17f931df068b0952413c558f569ddc9ef661de24/src/scanner/scanner-icons.json",
+  "license": "GPL-3.0-or-later",
+  "echoes": [
+    {
+      "key": "BloomburstPuppet",
+      "cost": 1,
+      "sets": [
+        "HeartofSwornVigil"
+      ],
+      "name": "Bloomburst Puppet",
+      "fingerprint": {
+        "hash": "5b588b074ecb4b4b",
+        "hist": [
+          0.6111111111111112,
+          0.18055555555555555,
+          0.125,
+          0.013888888888888888,
+          0.027777777777777776,
+          0.027777777777777776,
+          0.013888888888888888,
+          0,
+          0.6111111111111112,
+          0.25,
+          0.09722222222222222,
+          0.041666666666666664,
+          0,
+          0,
+          0,
+          0,
+          0.5416666666666666,
+          0.2777777777777778,
+          0.125,
+          0.05555555555555555,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "source": {
+        "url": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_31104_UI.webp",
+        "sha256": "6cf3be2e359e7dbb67a0b030b423211eccdf47298467d86401eaacd45b72d2b2"
+      },
+      "iconSha256": "8a61e4cfb8f268e967899ded12931c7200abd2bf8667e1a127dad53120b37b2d"
+    },
+    {
+      "key": "Formrender",
+      "cost": 3,
+      "sets": [
+        "HeartofSwornVigil",
+        "FlowerofTingedYearning"
+      ],
+      "name": "Formrender",
+      "fingerprint": {
+        "hash": "377369556d4f4d33",
+        "hist": [
+          0.2222222222222222,
+          0.18055555555555555,
+          0.18055555555555555,
+          0.18055555555555555,
+          0.16666666666666666,
+          0.041666666666666664,
+          0.027777777777777776,
+          0,
+          0.125,
+          0.3472222222222222,
+          0.2222222222222222,
+          0.16666666666666666,
+          0.125,
+          0,
+          0.013888888888888888,
+          0,
+          0.1111111111111111,
+          0.4305555555555556,
+          0.20833333333333334,
+          0.16666666666666666,
+          0.06944444444444445,
+          0.013888888888888888,
+          0,
+          0
+        ]
+      },
+      "source": {
+        "url": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_32070_UI.webp",
+        "sha256": "253a4ed561cc875b32f12395bf747f603f0d02c9e7515e4dc06c53e79be6cc64"
+      },
+      "iconSha256": "86b5332abb9dc5ecd4915b31feb37580cd0c8053188d8250a0d4a05058661f5b"
+    },
+    {
+      "key": "JadeNetherSerpent",
+      "cost": 1,
+      "sets": [
+        "HeartofSwornVigil"
+      ],
+      "name": "Jade Nether Serpent",
+      "fingerprint": {
+        "hash": "2949c9195b763c7a",
+        "hist": [
+          0.4166666666666667,
+          0.2222222222222222,
+          0.20833333333333334,
+          0.06944444444444445,
+          0.08333333333333333,
+          0,
+          0,
+          0,
+          0.4166666666666667,
+          0.16666666666666666,
+          0.20833333333333334,
+          0.08333333333333333,
+          0.05555555555555555,
+          0.06944444444444445,
+          0,
+          0,
+          0.3611111111111111,
+          0.2361111111111111,
+          0.20833333333333334,
+          0.09722222222222222,
+          0.041666666666666664,
+          0.05555555555555555,
+          0,
+          0
+        ]
+      },
+      "source": {
+        "url": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_31103_UI.webp",
+        "sha256": "6da150e8fb24ba1efbb7c4fffb72f1b172153a8be64b0dc504b2c4da962b9554"
+      },
+      "iconSha256": "2838168df426435f1801bf66f605e3c59d58019a4352d38c14907e990a52f6d1"
+    },
+    {
+      "key": "Jué",
+      "cost": 4,
+      "sets": [
+        "CelestialLight"
+      ],
+      "name": "Jué",
+      "fingerprint": {
+        "hash": "b2ccec7171558e4d",
+        "hist": [
+          0.19444444444444445,
+          0.06944444444444445,
+          0.1388888888888889,
+          0.16666666666666666,
+          0.08333333333333333,
+          0.2361111111111111,
+          0.08333333333333333,
+          0.027777777777777776,
+          0.19444444444444445,
+          0.1111111111111111,
+          0.1527777777777778,
+          0.1111111111111111,
+          0.08333333333333333,
+          0.20833333333333334,
+          0.1111111111111111,
+          0.027777777777777776,
+          0.16666666666666666,
+          0.125,
+          0.19444444444444445,
+          0.16666666666666666,
+          0.06944444444444445,
+          0.19444444444444445,
+          0.08333333333333333,
+          0
+        ]
+      },
+      "source": {
+        "url": "https://ryanbenson.github.io/wuthering-waves-assets/images/echoes/Jue.png",
+        "sha256": "b94973ba45b1f1cbc95599c0a34c24b7b2f5f3361822a88b58be0c3b0ed1d8c5"
+      },
+      "iconSha256": "21eb9fff8cfdb257ee441aa11244134327d8df0ca50a376d93b6d7412610e084"
+    },
+    {
+      "key": "PhantomSkywatchLancer",
+      "cost": 3,
+      "sets": [
+        "FlashofElectricReflection",
+        "FlowerofTingedYearning"
+      ],
+      "name": "Phantom: Skywatch Lancer",
+      "fingerprint": {
+        "hash": "cc4c4d0f4fce4f5d",
+        "hist": [
+          0.4027777777777778,
+          0.06944444444444445,
+          0.027777777777777776,
+          0.16666666666666666,
+          0.125,
+          0.09722222222222222,
+          0.041666666666666664,
+          0.06944444444444445,
+          0.4166666666666667,
+          0.05555555555555555,
+          0.1111111111111111,
+          0.125,
+          0.1527777777777778,
+          0.041666666666666664,
+          0.041666666666666664,
+          0.05555555555555555,
+          0.3611111111111111,
+          0.1111111111111111,
+          0.05555555555555555,
+          0.16666666666666666,
+          0.1527777777777778,
+          0.041666666666666664,
+          0.05555555555555555,
+          0.05555555555555555
+        ]
+      },
+      "source": {
+        "url": "https://api.encore.moe/resource/Data/Game/Aki/UI/UIResources/Common/Image/IconMonsterGoods/T_IconMonsterGoods_SG_32069_UI.webp",
+        "sha256": "6df679f3d657af94d7742d06d6c8b6500e2b2b506cb11571f584aabfe4239359"
+      },
+      "iconSha256": "0999b4e423b0cd6df3ee1bdcb28b43091620194295f85f769c911eb03949a91e"
+    },
+    {
+      "key": "PhantomSmolder",
+      "cost": 1,
+      "sets": [
+        "SongofFeatheredTrace"
+      ],
+      "name": "Phantom: Smolder",
+      "fingerprint": {
+        "hash": "4d9e3b0f4dcc6869",
+        "hist": [
+          0.2777777777777778,
+          0.1527777777777778,
+          0.19444444444444445,
+          0.1111111111111111,
+          0.1111111111111111,
+          0.05555555555555555,
+          0.05555555555555555,
+          0.041666666666666664,
+          0.3055555555555556,
+          0.20833333333333334,
+          0.19444444444444445,
+          0.1388888888888889,
+          0.041666666666666664,
+          0.08333333333333333,
+          0.027777777777777776,
+          0,
+          0.3888888888888889,
+          0.19444444444444445,
+          0.25,
+          0.1527777777777778,
+          0.013888888888888888,
+          0,
+          0,
+          0
+        ]
+      },
+      "source": {
+        "url": "https://api.encore.moe/resource/Data/Game/Aki/UI/UIResources/Common/Image/IconMonsterGoods/T_IconMonsterGoods_SG_31102_UI.webp",
+        "sha256": "e38f183133028d91a0af018a0eb93f60b3bdbd061f36a1b80c921f3a6ea7fa71"
+      },
+      "iconSha256": "4ed7393873d163068090f70b9db1536bda05710fd0e762a96da2b534f4ad8be5"
+    },
+    {
+      "key": "ReminiscenceSuhsintheInevitable",
+      "cost": 4,
+      "sets": [
+        "HeartofSwornVigil",
+        "FlashofElectricReflection"
+      ],
+      "name": "Reminiscence: Suhsin the Inevitable",
+      "fingerprint": {
+        "hash": "0a76aece4d0884b3",
+        "hist": [
+          0.5833333333333334,
+          0.2361111111111111,
+          0.125,
+          0.027777777777777776,
+          0.013888888888888888,
+          0,
+          0.013888888888888888,
+          0,
+          0.625,
+          0.20833333333333334,
+          0.1388888888888889,
+          0.027777777777777776,
+          0,
+          0,
+          0,
+          0,
+          0.4722222222222222,
+          0.3472222222222222,
+          0.18055555555555555,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "source": {
+        "url": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_34033_2_UI.webp",
+        "sha256": "1e2e156b01f4b9a14708aee3b367feffb182f0d4553d9171985d5027ca184da5"
+      },
+      "iconSha256": "2c531f9c797715d4b5f49310eef17a02708225b1d21ef1eca9796f6b5516cf6c"
+    },
+    {
+      "key": "SkywatchLancer",
+      "cost": 3,
+      "sets": [
+        "FlashofElectricReflection",
+        "FlowerofTingedYearning"
+      ],
+      "name": "Skywatch Lancer",
+      "fingerprint": {
+        "hash": "8ecc5d0f4ece4e5e",
+        "hist": [
+          0.4166666666666667,
+          0.06944444444444445,
+          0.125,
+          0.1388888888888889,
+          0.1111111111111111,
+          0.05555555555555555,
+          0.027777777777777776,
+          0.05555555555555555,
+          0.4166666666666667,
+          0.08333333333333333,
+          0.08333333333333333,
+          0.1388888888888889,
+          0.1527777777777778,
+          0.027777777777777776,
+          0.041666666666666664,
+          0.05555555555555555,
+          0.4027777777777778,
+          0.08333333333333333,
+          0.125,
+          0.08333333333333333,
+          0.18055555555555555,
+          0.027777777777777776,
+          0.06944444444444445,
+          0.027777777777777776
+        ]
+      },
+      "source": {
+        "url": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_32069_UI.webp",
+        "sha256": "5c16e1d5276d8f796a31c4cf69ed4c66c90a40a5adba54984069ee33f6e72bfd"
+      },
+      "iconSha256": "b8618ade872a02790cbbd609e52417e70a2a704e08e5b84d2a918320f3ac1747"
+    },
+    {
+      "key": "Soulfrayer",
+      "cost": 3,
+      "sets": [
+        "HeartofSwornVigil",
+        "FlashofElectricReflection"
+      ],
+      "name": "Soulfrayer",
+      "fingerprint": {
+        "hash": "0f3317ce4fcc2b2b",
+        "hist": [
+          0.4027777777777778,
+          0.25,
+          0.125,
+          0.09722222222222222,
+          0.013888888888888888,
+          0,
+          0.09722222222222222,
+          0.013888888888888888,
+          0.4166666666666667,
+          0.19444444444444445,
+          0.1111111111111111,
+          0.06944444444444445,
+          0.08333333333333333,
+          0.027777777777777776,
+          0.027777777777777776,
+          0.06944444444444445,
+          0.3333333333333333,
+          0.1388888888888889,
+          0.1527777777777778,
+          0.09722222222222222,
+          0.08333333333333333,
+          0.09722222222222222,
+          0.013888888888888888,
+          0.08333333333333333
+        ]
+      },
+      "source": {
+        "url": "https://static.nanoka.cc/assets/ww/UIResources/Common/Image/IconMonsterHead/T_IconMonsterHead_32071_UI.webp",
+        "sha256": "b3d6dfcca85f83c5a7550f41b0f9bd5129fe43412e2450144b399a83b10258d9"
+      },
+      "iconSha256": "660c8c86ebd28ade0157589b5190911fd456c8ef169c8124944b1137450e54ae"
+    },
+    {
+      "key": "YoungRoseshroom",
+      "cost": 1,
+      "sets": [
+        "SierraGale",
+        "HavocEclipse"
+      ],
+      "name": "Baby Roseshroom",
+      "fingerprint": {
+        "hash": "96960b291b0fc68e",
+        "hist": [
+          0.4305555555555556,
+          0.05555555555555555,
+          0.20833333333333334,
+          0.18055555555555555,
+          0.09722222222222222,
+          0.013888888888888888,
+          0.013888888888888888,
+          0,
+          0.4444444444444444,
+          0.2916666666666667,
+          0.16666666666666666,
+          0.06944444444444445,
+          0.027777777777777776,
+          0,
+          0,
+          0,
+          0.3888888888888889,
+          0.1111111111111111,
+          0.1111111111111111,
+          0.1388888888888889,
+          0.041666666666666664,
+          0.05555555555555555,
+          0.1111111111111111,
+          0.041666666666666664
+        ]
+      },
+      "source": {
+        "url": "https://ryanbenson.github.io/wuthering-waves-assets/images/echoes/BabyRoseshroom.webp",
+        "sha256": "5b6056fa13f74a6d647dcb9bbc30299da6a49de13aa5764710534cf975f870ef"
+      },
+      "iconSha256": "540a9daf59993960508e7779bbd9f8e42030eed8ef99d8b2e3dcf9fc65e74570"
+    }
+  ]
+}

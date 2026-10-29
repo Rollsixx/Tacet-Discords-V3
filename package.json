@@ -10,7 +10,7 @@
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mts",
     "test": "node --test src/lib/scanner/*.test.mjs src/lib/server/*.test.mjs src/lib/leaderboards/*.test.mjs",
     "predev": "node scripts/build-scoring-engine.mjs && node scripts/prepare-ocr.mjs",
-    "prebuild": "node scripts/build-scoring-engine.mjs && node scripts/prepare-ocr.mjs",
+    "prebuild": "node scripts/build-scoring-engine.mjs && node scripts/check-scanner-coverage.mjs && node scripts/prepare-ocr.mjs",
     "test:browser": "npm run build && playwright test",
     "test:reference": "node scripts/fetch-reference-fixture.mjs && npm run test:browser",
     "pretest": "node scripts/build-scoring-engine.mjs",

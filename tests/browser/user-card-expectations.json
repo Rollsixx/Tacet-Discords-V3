@@ -203,5 +203,46 @@
       "Crit. DMG 17.4%",
       "Energy Regen 6.8%"
     ]
+  },
+  {
+    "file": "Hsin(1).jpeg",
+    "sha256": "fb5dd40c6b49456852e4fbc08f0e2f5b74e2d3fc6e45e4e341271340fdad2a59",
+    "fields": [
+      "4",
+      "Crit. DMG",
+      "Crit. DMG 13.8%",
+      "Heavy Attack DMG Bonus 9.4%",
+      "ATK 6.4%",
+      "Resonance Skill DMG Bonus 10.1%",
+      "Crit. Rate 7.5%",
+      "3",
+      "Electro DMG Bonus",
+      "Resonance Liberation DMG Bonus 9.4%",
+      "Crit. DMG 18.6%",
+      "ATK 10.1%",
+      "HP 8.6%",
+      "Energy Regen 10%",
+      "3",
+      "Electro DMG Bonus",
+      "Basic Attack DMG Bonus 9.4%",
+      "Crit. Rate 9.3%",
+      "Crit. DMG 15%",
+      "ATK 7.9%",
+      "Resonance Liberation DMG Bonus 7.9%",
+      "1",
+      "ATK",
+      "Crit. DMG 13.8%",
+      "Energy Regen 9.2%",
+      "Resonance Skill DMG Bonus 8.6%",
+      "Crit. Rate 7.5%",
+      "Heavy Attack DMG Bonus 7.1%",
+      "1",
+      "ATK",
+      "Crit. DMG 18.6%",
+      "Crit. Rate 6.9%",
+      "HP 8.6%",
+      "Resonance Liberation DMG Bonus 7.9%",
+      "ATK 9.4%"
+    ]
   }
 ]

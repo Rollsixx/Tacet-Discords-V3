@@ -1,3 +1,4 @@
+import {CARD_HEADERS,recoverCardUid} from "./card-layout";
 import { createWorker, PSM } from "tesseract.js";
 import { recoverEchoCost } from "./cost-recovery";
 import { parseCardIdentity, type CardIdentity } from "./card-identity";
@@ -75,11 +76,11 @@ function regionsForSlot(index: number) {
 function cropRegion(
   source: HTMLCanvasElement,
   region: Rectangle,
+  scale = 3,
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
 
   // Upscaling small regions can improve OCR legibility.
-  const scale = 3;
   canvas.width = region.width * scale;
   canvas.height = region.height * scale;
 
@@ -214,10 +215,15 @@ export async function recognizeBuildCard(
     }
 
     await worker.setParameters({ tessedit_char_whitelist: "" });
-    const characterHeader = await read({ x: 65, y: 18, width: 640, height: 65 }, "Character");
-    const playerHeader = await read({ x: 15, y: 85, width: 300, height: 27 }, "In-game name");
-    const uidHeader = await read({ x: 15, y: 109, width: 300, height: 28 }, "UID");
-    identity = parseCardIdentity(characterHeader.value, playerHeader.value, uidHeader.value);
+    const characterHeader = await read(CARD_HEADERS.character, "Character");
+    const playerHeader = await read(CARD_HEADERS.player, "In-game name");
+    const uidHeader = await read(CARD_HEADERS.uid, "UID");
+    const uid=await recoverCardUid(uidHeader.value,async variant=>{
+      onProgress?.({completed,total,label:"Retrying UID from the screenshot"});
+      await worker.setParameters({tessedit_char_whitelist:"0123456789",tessedit_pageseg_mode:PSM.SINGLE_LINE});
+      return (await worker.recognize(cropRegion(image,CARD_HEADERS.uidDigits,variant===0?3:4))).data.text;
+    });
+    identity = {...parseCardIdentity(characterHeader.value, playerHeader.value, uidHeader.value),uid};
     onProgress?.({ completed, total, label: "Player details scanned", identity, slots: [] });
     await worker.setParameters({ tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ " });
     const warnings: string[] = [];
