@@ -8,7 +8,7 @@ export function SubstatCorrection({id,slots,token,reviewer,onUpdated}:{id:string
  const options=SUBSTAT_OPTIONS.find(x=>x.key===type)?.values||[];
  const selectedValue=options.includes(value)?value:(options[0]||"");
  const expected=slots[slot-1]?.substats[position-1]?.value||"";
- const sameType=expected.replace(/[-+]?\\d+(?:\\.\\d+)?%?\\s*$/,"").trim()===selectedValue.replace(/[-+]?\\d+(?:\\.\\d+)?%?\\s*$/,"").trim()&&expected.includes("%")===selectedValue.includes("%");
+ const sameType=expected.replace(/[-+]?[0-9]+(?:[.][0-9]+)?%?[ ]*$/,"").trim()===selectedValue.replace(/[-+]?[0-9]+(?:[.][0-9]+)?%?[ ]*$/,"").trim()&&expected.includes("%")===selectedValue.includes("%");
  async function save(){setBusy(true);setError("");try{
   const response=await fetch('/api/moderation',{method:'PUT',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({id,slot,position,expected,replacement:selectedValue,reviewer,note})});
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Correction failed.');
