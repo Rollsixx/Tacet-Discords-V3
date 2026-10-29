@@ -8,7 +8,7 @@ import { database } from "./database.ts";
 import { HttpError, type SubmissionInput } from "./validation.ts";
 import { DAMAGE_CORE_VERSION } from "./damage-core.ts";
 import { assessSource } from "./source-evidence.mjs";
-import { ENGINE_VERSION, DATA_VERSION, POLICY_VERSION, SUPPORTED } from "./scoring.mjs";
+import { ENGINE_VERSION, DATA_VERSION, POLICY_VERSION, SUPPORTED, assessEquipment, identitiesFromReport } from "./scoring.mjs";
 import sharp from "sharp";
 import {OWNER_ROTATION_REQUIRED,AWAITING_ROTATION_POLICY} from "../game-data/scoring-policies.mjs";
 import {scoreActiveRotation,recordRotationScore,applyPublishedRotation} from "./rotations/store.mjs";
@@ -283,31 +283,72 @@ export async function adminPlayerBuilds(uid:string,page=1,db:Client=database()){
  return {...await listBuilds({uid,page,includePending:true},db),player:{uid:String(row.uid),ign:String(row.ign),identityVerified:Boolean(row.identity_verified),verifiedAt:row.verified_at,pending:Number(row.pending),approved:Number(row.approved)}};
 }
 
-/** Restricted correction of a single OCR substat. Never grants scoring eligibility. */
+/** A moderator attests the corrected numeric OCR value. Original OCR remains in the audit ledger. */
 export async function correctEchoSubstat(id:string, slot:number, position:number, expected:string, replacement:string, reviewer:string, note:string, db:Client=database()){
  if(!Number.isInteger(slot)||slot<1||slot>5||!Number.isInteger(position)||position<1||position>5)throw new HttpError(400,'Invalid Echo or substat position.');
  if(!allowedSubstatCorrection(replacement))throw new HttpError(400,'Replacement must be a pinned legal Echo substat roll.');
- if(reviewer.trim().length<2||reviewer.length>64||note.trim().length<20||note.length>500)throw new HttpError(400,'Reviewer and detailed in-game evidence note required (at least 20 characters).');
+ if(reviewer.trim().length<2||reviewer.length>64||!note.trim()||note.length>500)throw new HttpError(400,'Reviewer and correction reason required.');
  const tx=await db.transaction('write');
  try{
-  const found=await tx.execute({sql:'SELECT data,status FROM submissions WHERE id=?',args:[id]});
+  const found=await tx.execute({sql:'SELECT uid,character,data,status,identity_verified FROM submissions WHERE id=?',args:[id]});
   if(!found.rows.length)throw new HttpError(404,'Submission not found.');
-  if(String(found.rows[0].status)!=='pending')throw new HttpError(409,'Only pending submissions may receive corrections.');
-  const data=JSON.parse(String(found.rows[0].data));
-  const target=data.slots?.[slot-1];const field=target?.substats?.[position-1];
+  const row=found.rows[0];
+  if(String(row.status)!=='pending')throw new HttpError(409,'Only pending submissions may receive corrections.');
+  const data=JSON.parse(String(row.data));
+  const target=data.slots?.[slot-1],field=target?.substats?.[position-1];
   if(!field||field.value!==expected)throw new HttpError(409,'Stored reading changed. Refresh before correcting.');
   if(expected===replacement)throw new HttpError(400,'Choose a different roll value.');
+  const oldType=String(expected).replace(/[-+]?\d+(?:\.\d+)?%?\s*$/,'').trim();
+  const newType=String(replacement).replace(/[-+]?\d+(?:\.\d+)?%?\s*$/,'').trim();
+  if(oldType!==newType||expected.includes('%')!==replacement.includes('%'))throw new HttpError(422,'Correction must retain the original substat type and unit.');
   const revised=structuredClone(data);
   revised.slots[slot-1].substats[position-1]={...field,value:replacement};
-  const issues=revised.slots.flatMap((s: Parameters<typeof validateEchoSlot>[0])=>validateEchoSlot(s));
-  if(issues.some((issue: {code:string;message:string})=>issue.code!=='UNSUPPORTED_ROLL'))throw new HttpError(422,'Correction creates an invalid Echo combination: '+issues.find((issue: {code:string;message:string})=>issue.code!=='UNSUPPORTED_ROLL')?.message);
-  // Preserve the OCR source separately; do not falsely assert the source image matches.
-  revised.assessment={...revised.assessment,eligible:false,rollsVerified:false,catalogReview:true,calculation:undefined,
-    reason:'Moderator-corrected substat requires independent in-game evidence verification before ranked scoring.'};
-  revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,replacement,reviewer:reviewer.trim(),note:note.trim(),at:new Date().toISOString()}];
-  await tx.execute({sql:"UPDATE submissions SET data=? WHERE id=? AND status='pending'",args:[JSON.stringify(revised),id]});
+  const issues=revised.slots.flatMap((s:Parameters<typeof validateEchoSlot>[0])=>validateEchoSlot(s));
+  const invalid=issues.find((issue:{code:string;message:string})=>issue.code!=='UNSUPPORTED_ROLL');
+  if(invalid)throw new HttpError(422,'Invalid Echo combination: '+invalid.message);
+  const at=new Date().toISOString();
+  revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,replacement,reviewer:reviewer.trim(),note:note.trim(),at,adminVerifiedSubstat:true}];
+  const originalSourceField=revised.assessment?.sourceSlots?.[slot-1]?.substats?.[position-1];
+  if(!originalSourceField||originalSourceField.value!==expected||revised.assessment?.statsVerified!==true||!revised.assessment.sourceHash||revised.assessment.sourceUid!==String(row.uid))throw new HttpError(422,'Original server-verified source evidence is missing or inconsistent.');
+  const scoringSlots=structuredClone(revised.assessment.sourceSlots);
+  scoringSlots[slot-1].substats[position-1]={...originalSourceField,value:replacement};
+  revised.slots=scoringSlots;
+  revised.assessment={...revised.assessment,sourceSlots:scoringSlots,rollsVerified:issues.length===0,catalogReview:issues.length>0,eligible:false,awaitingRotation:false,calculation:undefined};
+  let reason='Another Echo substat still has an unsupported roll.';
+  if(issues.length===0){
+   if(revised.assessment.maxMainStatsVerified!==true)reason='Max-level main stats are not verified.';
+   else if(!SUPPORTED.includes(String(row.character)))reason='This character has no supported scoring policy.';
+   else {
+    try{
+     const identities=identitiesFromReport(revised.assessment.visualReport||[]);
+     const equipment=await assessEquipment(String(row.character),scoringSlots,identities);
+     revised.assessment={...revised.assessment,...equipment,sourceSlots:scoringSlots,rollsVerified:true,catalogReview:false};
+     const prepared=await applyPublishedRotation(tx,String(row.character),revised);
+     revised.assessment=prepared.assessment;
+     reason=revised.assessment.reason||'Admin-confirmed legal roll; equipment verified.';
+    }catch(error){reason=error instanceof Error?error.message:'Echo identities or scoring inputs remain unverified.';}
+   }
+  }
+  let calculation=null;
+  if(revised.assessment.eligible===true){
+   try{calculation=await scoreActiveRotation(tx,String(row.character),revised)||revised.assessment.calculation||null;}
+   catch(error){reason=error instanceof Error?error.message:'Score calculation failed.';}
+  }
+  const validScore=calculation&&calculation.engineVersion===ENGINE_VERSION&&calculation.dataVersion===DATA_VERSION&&(calculation.policyId===POLICY_VERSION||calculation.rotationVersion)&&Number.isFinite(calculation.score)&&calculation.score>0;
+  const verified=Number(row.identity_verified)===1;
+  const ranked=Boolean(validScore&&verified);
+  if(!ranked){
+   revised.assessment={...revised.assessment,reason:!verified&&validScore?'UID verification is still required before ranking.':!validScore&&revised.assessment.eligible===true?'A valid published scoring result is still required.':reason};
+  }
+  await tx.execute({sql:"UPDATE submissions SET data=?,status=?,reviewed_at=CASE WHEN ?='approved' THEN ? ELSE reviewed_at END WHERE id=? AND status='pending'",args:[JSON.stringify(revised),ranked?'approved':'pending',ranked?'approved':'pending',at,id]});
   await tx.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[id]});
-  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),`Echo ${slot}, substat ${position}: ${expected} -> ${replacement}. ${note.trim()}`,new Date().toISOString()]});
-  await tx.commit();return {slot,position,original:expected,replacement,ranked:false};
+  if(ranked){
+   await tx.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[id,calculation.score,ENGINE_VERSION,DATA_VERSION,calculation.referenceCaseVersion,at,calculation.policyId,JSON.stringify(calculation)]});
+   await recordRotationScore(tx,id,String(row.character),revised,calculation,at);
+   await tx.execute({sql:'INSERT INTO moderation_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'approved',reviewer.trim(),'Auto-approved after administrator-confirmed legal substat correction. '+note.trim(),at]});
+  }
+  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),'Echo '+slot+', substat '+position+': '+expected+' -> '+replacement+'. '+note.trim(),at]});
+  await tx.commit();
+  return {slot,position,original:expected,replacement,ranked,reason:ranked?'Approved and ranked automatically.':revised.assessment.reason};
  }finally{tx.close();}
 }
