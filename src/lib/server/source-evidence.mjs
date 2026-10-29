@@ -1,6 +1,7 @@
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import sharp from 'sharp';
+import {decodeFingerprintSource} from './image-fingerprint.mjs';
 import {createWorker,PSM} from 'tesseract.js';
 import {CARD_HEADERS,recoverCardUid} from '../scanner/card-layout.ts';
 import {parseCardIdentity} from '../scanner/card-identity.ts';
@@ -19,12 +20,13 @@ export async function assessSource(input){
   const image=input.sourceImage;
   const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
   if(metadata.width!==1920||metadata.height!==1080)throw sourceFailure('IMAGE_DIMENSIONS','Use an original 1920 × 1080 build card.');
+  const decoded=await decodeFingerprintSource(image);
   stage='worker';
   worker=await createWorker('eng',1,{langPath:languagePath,gzip:true,cacheMethod:'none',errorHandler:()=>{}});
   await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
   stage='verify';
   async function readResult(region,{scale=3,linear=false,padded=false}={}){
-   const {data,info}=await sharp(image).extract(region).resize(region.width*scale,region.height*scale,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+   const {data,info}=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).extract(region).resize(region.width*scale,region.height*scale,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
    for(let i=0;i<data.length;i+=4){const gray=Math.round(.299*data[i]+.587*data[i+1]+.114*data[i+2]);const value=Math.max(0,Math.min(255,(gray-128)*1.5+128));data[i]=data[i+1]=data[i+2]=value;}
    let png=await sharp(data,{raw:{width:info.width,height:info.height,channels:4}}).png().toBuffer();
    if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:info.width+32,height:info.height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
@@ -75,7 +77,7 @@ export async function assessSource(input){
   statsVerified=true;sourceSlots=slots;
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
-  visualReport=await diagnoseSlots(image,slots.map(x=>Number(x.cost.value)));
+  visualReport=await diagnoseSlots(decoded,slots.map(x=>Number(x.cost.value)));
   if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
   if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:levelIssue};
   const identities=identitiesFromReport(visualReport);

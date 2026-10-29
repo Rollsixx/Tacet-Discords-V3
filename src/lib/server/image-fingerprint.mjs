@@ -1,7 +1,11 @@
 import sharp from 'sharp';
+export async function decodeFingerprintSource(bytes){
+ if(bytes?.info&&Buffer.isBuffer(bytes.data))return bytes;
+ return sharp(bytes,{limitInputPixels:5000000}).toColourspace('srgb').ensureAlpha().raw().toBuffer({resolveWithObject:true});
+}
 export async function fingerprint(bytes, region) {
- let image=sharp(bytes,{limitInputPixels:5000000}); if(region)image=image.extract(region);
- const rgb=await image.resize(9,8,{fit:'fill'}).flatten({background:'#100d18'}).removeAlpha().raw().toBuffer();
+ let image=bytes?.info&&Buffer.isBuffer(bytes.data)?sharp(bytes.data,{raw:{width:bytes.info.width,height:bytes.info.height,channels:bytes.info.channels}}):sharp(bytes,{limitInputPixels:5000000}); if(region)image=image.extract(region);
+ const rgb=await image.toColourspace('srgb').resize(9,8,{fit:'fill'}).flatten({background:'#100d18'}).removeAlpha().raw().toBuffer();
  let bits=0n;
  const hist=Array(24).fill(0);
  for(let y=0;y<8;y++)for(let x=0;x<9;x++){
