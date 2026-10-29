@@ -5,7 +5,7 @@ import {ROTATION_ROSTER,MECHANICS_MODELS} from '../../game-data/rotation-mechani
 import {scoringPreset,AWAITING_ROTATION_POLICY} from '../../game-data/scoring-policies.mjs';
 import {calculateStandard,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from '../scoring.mjs';
 import {actionCatalog,normalizeSpec,validateSpec,simulate,specificationHash} from './mechanics.mjs';
-import {modifierLibrary,modifierCatalog,compileReviewed,REVIEWED_MODE,REVIEWED_VERSION} from './configuration.mjs';
+import {modifierLibrary,modifierCatalog,compileReviewed,REVIEWED_MODE} from './configuration.mjs';
 import {validateEchoSlot} from '../../scanner/stat-validation.ts';
 import {HttpError} from '../validation.ts';
 const now=()=>new Date().toISOString();
@@ -73,7 +73,7 @@ export async function evaluateVersion(character,data,version,{allowProvisional=f
   const validation=await validateSpec(character,spec);must(validation.valid||allowProvisional,'Benchmark configuration is incomplete.',422);
   must(!spec.actions.some(a=>a.mainEcho),'A universal benchmark cannot use a fixed main Echo attack.',422);
   const compiled=compileReviewed(validation.spec,await modifierCatalog(character),source.identities);
-  return calculateStandard(character,data.slots,source.identities,{name:spec.name,actions:compiled.actions,policyId:version.policy_id,versionId:version.id,mechanicsVersion:REVIEWED_VERSION,trace:compiled.trace,configuredEffects:true,provenance:'Owner-reviewed benchmark using pinned optimizer effects. Combat timing and resource legality are manually reviewed, not automatically simulated.',startState:spec.conditions});
+  return calculateStandard(character,data.slots,source.identities,{name:spec.name,actions:compiled.actions,baseConfig:compiled.baseConfig,sharedDefaults:spec.defaults!==undefined,policyId:version.policy_id,versionId:version.id,mechanicsVersion:validation.mechanicsVersion,trace:compiled.trace,configuredEffects:true,provenance:'Owner-reviewed benchmark using pinned optimizer effects. Combat timing and resource legality are manually reviewed, not automatically simulated.',startState:spec.conditions});
  }
  const baseline=await calculateStandard(character,data.slots,source.identities);
  const validation=simulate(spec,MECHANICS_MODELS[character],{stats:baseline.finalStats});

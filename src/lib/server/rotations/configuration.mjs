@@ -4,6 +4,8 @@ import * as engine from '../../../../vendor/wuthering-tools/dist/index.mjs';
 import {HttpError} from '../validation.ts';
 export const REVIEWED_MODE='admin-reviewed';
 export const REVIEWED_VERSION='owner-configured-benchmark/1';
+export const SHARED_REVIEWED_VERSION='owner-configured-benchmark/2';
+export const reviewedVersion=spec=>spec.defaults===undefined?REVIEWED_VERSION:SHARED_REVIEWED_VERSION;
 const plain=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const text=x=>String(x||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 export function echoBuffDefinitions(echo){
@@ -36,18 +38,40 @@ export async function modifierLibrary(character){
  const sonatas=Object.entries(engine.echoSetLabelMap).map(([key,name])=>({key,name,tiers:bonuses.filter(([,d])=>d.name===name).map(([label,d])=>({label,pieces:Number(label.match(/(\d+) Set$/)?.[1]),description:text(d.details),effectCount:d.passives?.length||0})).sort((a,b)=>a.pieces-b.pieces)})).sort((a,b)=>a.name.localeCompare(b.name));
  return {referenceModifiers:all.filter(d=>d.automatic||d.unavailableReason),sonatas,mainEchoes:Object.entries(engine.mainEchoesData).map(([key,e])=>({key,name:e.name||key,cost:({Calamity:4,Overlord:4,Elite:3,Common:1})[e.class],effectCount:echoBuffDefinitions(e).length,description:text(e.details),sets:e.sets.map(key=>({key,name:engine.echoSetLabelMap[key]})),attacks:(e.actions||[]).map(a=>a.label||a.key)})).sort((a,b)=>b.cost-a.cost||a.name.localeCompare(b.name))};
 }
-export function normalizeEffects(effects,catalog){
+export function normalizeEffects(effects,catalog,limit=60){
  if(effects===undefined)return [];
- if(!Array.isArray(effects)||effects.length>60)throw new HttpError(400,'At most 60 defined effects per action are supported.');
+ if(!Array.isArray(effects)||effects.length>limit)throw new HttpError(400,`At most ${limit} defined effects are supported here.`);
  const seen=new Set();return effects.map(e=>{const d=plain(e)&&catalog.find(d=>d.id===e.id);if(!d||Object.keys(e).some(k=>!['id','isEnabled','stacks'].includes(k))||typeof e.isEnabled!=='boolean'||seen.has(e.id))throw new HttpError(400,'Unknown, duplicate or unsupported optimizer effect.');seen.add(e.id);if(d.hasStacks&&(!Number.isInteger(e.stacks)||e.stacks<d.minStacks||e.stacks>d.maxStacks))throw new HttpError(400,'Effect stacks are outside the pinned game-data range.');if(!d.hasStacks&&e.stacks!==undefined)throw new HttpError(400,'This effect does not support stacks.');return {id:e.id,isEnabled:e.isEnabled,...(d.hasStacks?{stacks:e.stacks}:{})};});
 }
 export function compileReviewed(spec,catalog,identities){
- const bonuses=engine.sets.getSetBonusEffects(identities.map(i=>i.set));const equipped=new Set(Object.values(bonuses));
- const main=engine.getEchoData(identities[0].echo);const mainBuffs=Object.fromEntries(echoBuffDefinitions(main).map(d=>[d.key,{isEnabled:Boolean(d.alwaysEnabled),stacks:d.alwaysEnabled?d.maxStacks||0:0}]));
+ const equipped=new Set(Object.values(engine.sets.getSetBonusEffects(identities.map(i=>i.set))));
+ const main=engine.getEchoData(identities[0].echo);
+ const automaticMain=Object.fromEntries(echoBuffDefinitions(main).map(d=>[d.key,{isEnabled:Boolean(d.alwaysEnabled),stacks:d.alwaysEnabled?d.maxStacks||0:0}]));
+ const definitions=new Map(catalog.map(d=>[d.id,d]));
+ function compile(effects,mainBuffs=automaticMain){
+  const advancedConfig={},applied=[],inactive=[];
+  for(const e of effects){
+   const d=definitions.get(e.id);if(!d)throw new HttpError(400,'Unknown optimizer effect.');
+   const config={isEnabled:e.isEnabled,...(d.hasStacks?{stacks:e.stacks}:{})};
+   if((d.category==='echoSetPassives'&&!equipped.has(d.scope))||(d.category==='mainEchoBuff'&&d.scope!==identities[0].echo)){inactive.push(d.label);continue;}
+   if(d.category==='mainEchoBuff'){advancedConfig.mainEchoBuff||={buffs:structuredClone(mainBuffs)};advancedConfig.mainEchoBuff.buffs[d.key]=config;}
+   else(advancedConfig[d.category]||={})[d.key]=config;
+   applied.push({effect:d.label,...config,...(e.source?{source:e.source}:{})});
+  }
+  return {advancedConfig,applied,inactive};
+ }
+ const shared=spec.defaults!==undefined;
+ const base=compile((spec.defaults||[]).map(e=>({...e,source:'rotation default'}))).advancedConfig;
  const trace=[];
- const actions=spec.actions.map((a,i)=>{const advancedConfig={},applied=[],inactive=[];
-  for(const e of a.effects||[]){const d=catalog.find(d=>d.id===e.id);const config={isEnabled:e.isEnabled,...(d.hasStacks?{stacks:e.stacks}:{})};if((d.category==='echoSetPassives'&&!equipped.has(d.scope))||(d.category==='mainEchoBuff'&&d.scope!==identities[0].echo)){inactive.push(d.label);continue;}if(d.category==='mainEchoBuff'){advancedConfig.mainEchoBuff||={buffs:structuredClone(mainBuffs)};advancedConfig.mainEchoBuff.buffs[d.key]=config;}else(advancedConfig[d.category]||={})[d.key]=config;applied.push({effect:d.label,...config});}
-  trace.push({index:i+1,key:a.key,count:a.count,applied,inactive,note:'Owner-configured effects for every repeat; resource availability and timing require owner review.'});
+ const actions=spec.actions.map((a,i)=>{
+  const resolved=new Map((spec.defaults||[]).map(e=>[e.id,{...e,source:'rotation default'}]));
+  for(const e of a.effects||[])resolved.set(e.id,{...e,...(shared?{source:'move override'}:{})});
+  const full=compile([...resolved.values()]);
+  // Synced moves use the optimizer's shared-context fast path. Rebuild a
+  // context only for real per-move overrides; preserve all Main Echo buffs.
+  const advancedConfig=shared?compile(a.effects||[],base.mainEchoBuff?.buffs||automaticMain).advancedConfig:full.advancedConfig;
+  trace.push({index:i+1,key:a.key,count:a.count,applied:full.applied,inactive:full.inactive,note:shared?'Rotation defaults with move overrides; equipment-gated per build. Every repeat shares these assumptions; timing and resources require owner review.':'Owner-configured effects for every repeat; resource availability and timing require owner review.'});
   return {type:a.type,key:a.key,count:a.count,...(a.mainEcho?{mainEcho:a.mainEcho}:{}),advancedConfig};
- });return {actions,trace};
+ });
+ return {actions,trace,...(shared?{baseConfig:base}:{})};
 }
