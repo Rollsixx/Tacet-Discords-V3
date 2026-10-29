@@ -11,6 +11,15 @@ if(process.env.IDENTITY_RECOVERY_BROWSER_FIXTURE==='true'){
  const {seedIdentityFixture}=await import('../tests/fixtures/identity-recovery.mjs');
  await seedIdentityFixture(db,'822222222',false);await seedIdentityFixture(db,'822222223',true);
 }
+if(process.env.FIRST_ROTATION_BROWSER_FIXTURE==='true'){
+ const {seedIdentityFixture}=await import('../tests/fixtures/identity-recovery.mjs');
+ const {assessEquipment}=await import('../src/lib/server/scoring.mjs');
+ for(const [character,uid]of [['Lucilla','833333333'],['Lucy','833333334']]){
+ const f=await seedIdentityFixture(db,uid,false);f.data.character=character;
+ f.data.assessment={...f.data.assessment,...await assessEquipment(character,f.data.slots,f.identities),rollsVerified:true};
+ await db.execute({sql:'UPDATE submissions SET character=?,data=? WHERE id=?',args:[character,JSON.stringify(f.data),f.id]});
+ }
+}
 db.close();
 const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", "3100", "--hostname", "127.0.0.1"], {
   stdio: "inherit",

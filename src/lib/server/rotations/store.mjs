@@ -81,17 +81,27 @@ export async function evaluateVersion(character,data,version,{allowProvisional=f
  must(validation.valid||allowProvisional,'Strict combat validation failed. No official score can be produced.',422);
  return calculateStandard(character,data.slots,source.identities,{name:spec.name,actions:validation.valid?validation.actions:spec.actions,policyId:version.policy_id,versionId:version.id,mechanicsVersion:validation.mechanicsVersion,trace:validation.trace,verifiedMechanics:validation.valid,provenance:validation.valid?'Tacet managed, mechanics-validated full rotation.':'Provisional attack damage only; combat mechanics NOT validated.',startState:validation.valid?JSON.stringify(MECHANICS_MODELS[character].initial):'Unverified: current permanent-passive damage assumptions only.'});
 }
+async function firstRotation(db,versionId){
+ return (await db.execute({sql:'SELECT policy_id FROM rotation_versions WHERE id=?',args:[versionId]})).rows[0]?.policy_id===AWAITING_ROTATION_POLICY;
+}
+async function testedInputs(db,run){
+ const pending=await firstRotation(db,run.base_version_id);
+ const rows=(await db.execute({sql:"SELECT s.data,s.status FROM rotation_run_scores r JOIN submissions s ON s.id=r.submission_id AND s.data=r.input_data WHERE r.run_id=? AND (s.status='approved' OR (?=1 AND s.status='pending'))",args:[run.id,pending?1:0]})).rows;
+ const valid=rows.filter(r=>sourceCalculation(JSON.parse(String(r.data))));
+ return {approved:valid.filter(r=>r.status==='approved').length,pending:valid.filter(r=>r.status==='pending').length,total:valid.length};
+}
 export async function sampleRotationDraft(db,character,revision){
  const row=(await db.execute({sql:'SELECT * FROM rotation_drafts WHERE character=?',args:[character]})).rows[0];must(row&&Number(row.revision)===revision,'Save the current draft first.');
  const validation=await validateSpec(character,JSON.parse(row.spec));
  if(!validation.spec.actions.length)return {validation,provisional:true,builds:[],limit:12,note:'Add at least one attack before testing damage.'};
- const rows=(await db.execute({sql:"SELECT s.id,s.uid,s.ign,s.data,c.score FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE s.character=? AND s.status='approved' ORDER BY s.id LIMIT 12",args:[character]})).rows;
+ const includePending=await firstRotation(db,(await active(db,character)).id);
+ const rows=(await db.execute({sql:"SELECT s.id,s.uid,s.ign,s.status,s.data,c.score FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE s.character=? AND (s.status='approved' OR (?=1 AND s.status='pending')) ORDER BY s.id LIMIT 200",args:[character,includePending?1:0]})).rows;
  const builds=[];
  for(const r of rows){const data=JSON.parse(String(r.data));if(!sourceCalculation(data))continue;
   const calculation=await evaluateVersion(character,data,{id:'draft-'+character,kind:'official',spec:row.spec,engine_version:ENGINE_VERSION,data_version:DATA_VERSION,policy_id:'provisional-'+row.spec_hash},{allowProvisional:true});
-  builds.push({id:r.id,uid:r.uid,ign:r.ign,currentScore:r.score,score:calculation.score,delta:r.score==null?null:calculation.score-Number(r.score),actions:calculation.actions,trace:calculation.combatTrace||validation.trace});
+  builds.push({status:r.status,id:r.id,uid:r.uid,ign:r.ign,currentScore:r.score,score:calculation.score,delta:r.score==null?null:calculation.score-Number(r.score),actions:calculation.actions,trace:calculation.combatTrace||validation.trace});if(builds.length===12)break;
  }
- return {validation,provisional:!validation.valid,builds,limit:12,note:'Sample of up to 12 approved builds. This is not a publication preview; every eligible approved build is staged separately before activation.'};
+ return {validation,provisional:!validation.valid,builds,limit:12,note:includePending?'First-rotation test: source-verified pending builds can be tested privately. Pending builds are not approved or ranked by publication. Up to 12 usable inputs from 200 inspected records.':'Sample of up to 12 approved builds. This is not a publication preview; every eligible approved build is staged separately before activation.'};
 }
 /**
  * @param {import('@libsql/client').Client} db
@@ -122,7 +132,8 @@ export async function startRotationPreview(db,character,revision,rollbackVersion
 export async function stepRotationPreview(db,id){
  const run=(await db.execute({sql:'SELECT * FROM rotation_runs WHERE id=?',args:[id]})).rows[0];must(run,'Preview not found.',404);if(run.state!=='building')return rotationPreview(db,id);
  const version=(await db.execute({sql:'SELECT * FROM rotation_versions WHERE id=?',args:[run.version_id]})).rows[0];
- const rows=(await db.execute({sql:"SELECT id,data FROM submissions WHERE character=? AND status='approved' AND id>? ORDER BY id LIMIT 8",args:[run.character,run.cursor]})).rows;
+ const includePending=await firstRotation(db,run.base_version_id);
+ const rows=(await db.execute({sql:"SELECT id,data FROM submissions WHERE character=? AND (status='approved' OR (?=1 AND status='pending')) AND id>? ORDER BY id LIMIT 8",args:[run.character,includePending?1:0,run.cursor]})).rows;
  const calculated=[];let skipped=0;
  try{for(const row of rows){const data=JSON.parse(row.data);if(!sourceCalculation(data)){skipped++;continue;}calculated.push({id:row.id,input:row.data,calculation:await evaluateVersion(run.character,data,version)});}}
  catch(e){await db.execute({sql:"UPDATE rotation_runs SET state='failed',error=?,updated_at=? WHERE id=? AND state='building'",args:[String(e.message).slice(0,500),now(),id]});return rotationPreview(db,id);}
@@ -150,7 +161,7 @@ export async function rotationPreview(db,id){
  FROM rotation_run_scores r JOIN submissions s ON s.id=r.submission_id WHERE r.run_id=? AND s.status='approved' AND s.identity_verified=1 AND s.data=r.input_data),
  ranked AS (SELECT *,row_number() OVER(ORDER BY score DESC,id) rank FROM best WHERE pick=1)
  SELECT ranked.*,old_ranked.score old_score,old_ranked.old_rank FROM ranked LEFT JOIN old_ranked ON old_ranked.uid=ranked.uid ORDER BY rank LIMIT 50`,args:[run.character,ENGINE_VERSION,DATA_VERSION,id]})).rows;
- return {run,version,ranking,confirmation:`PUBLISH ${run.character} ${String(version.spec_hash).slice(0,12)}`,stale:await clock(db,run.character)!==Number(run.source_revision),rankingLimit:50};
+ return {run,version,ranking,testInputs:await testedInputs(db,run),confirmation:`PUBLISH ${run.character} ${String(version.spec_hash).slice(0,12)}`,stale:await clock(db,run.character)!==Number(run.source_revision),rankingLimit:50};
 }
 export async function activateRotation(db,id,confirmation,ownerReviewed=false){
  const tx=await db.transaction('write');try{
@@ -162,7 +173,7 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
   if(run.draft_revision!==null){const d=(await tx.execute({sql:'SELECT * FROM rotation_drafts WHERE character=?',args:[run.character]})).rows[0];must(d&&Number(d.revision)===Number(run.draft_revision)&&d.spec_hash===version.spec_hash,'Draft changed. Revalidate and preview the new revision.');}
   if(JSON.parse(version.spec).mode===REVIEWED_MODE)must(ownerReviewed===true,'Confirm owner review of combat legality and benchmark assumptions.',400);
   if(version.kind==='official'){const v=await validateSpec(run.character,JSON.parse(version.spec));must(v.valid&&v.mechanicsVersion===version.mechanics_version,'The pinned rotation validation no longer passes.',422);}
-  if(version.kind==='official'){const tested=(await tx.execute({sql:'SELECT COUNT(*) n FROM rotation_run_scores WHERE run_id=?',args:[id]})).rows[0];must(Number(tested.n)>0,'Test this benchmark against at least one approved build with verified scoring inputs before publishing.',422);}
+  if(version.kind==='official'){const tested=await testedInputs(tx,run);must(tested.total>0,'No current build with verified scoring inputs was tested. For a first rotation, import a complete card or resolve its source evidence, then create a fresh preview. A source-verified pending build can be used privately; disputed stat rolls cannot.',422);}
   // Independent coverage check, in addition to the approved-build clock.
   const missing=(await tx.execute({sql:`SELECT COUNT(*) n FROM submissions s WHERE s.character=? AND s.status='approved'
    AND (json_extract(s.data,'$.assessment.eligible')=1 OR json_extract(s.data,'$.assessment.awaitingRotation')=1) AND json_extract(s.data,'$.assessment.calculation.dataVersion')=?
@@ -183,8 +194,10 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
    SELECT r.submission_id,r.score,?,?,'managed-rotations/1',?,?,r.details
    FROM rotation_run_scores r JOIN submissions s ON s.id=r.submission_id AND s.data=r.input_data WHERE r.run_id=? AND s.status='approved'
    ON CONFLICT(submission_id) DO UPDATE SET score=excluded.score,engine_version=excluded.engine_version,data_version=excluded.data_version,reference_case_version=excluded.reference_case_version,verified_at=excluded.verified_at,policy_id=excluded.policy_id,details=excluded.details`,args:[version.engine_version,version.data_version,at,version.policy_id,id]});
-  // Promote only source-verified waiting builds covered by this exact staging input.
-  await tx.execute({sql:`UPDATE submissions SET data=json_set(data,'$.assessment.eligible',json('true'),'$.assessment.awaitingRotation',json('false'),'$.assessment.calculation',json((SELECT r.details FROM rotation_run_scores r WHERE r.run_id=? AND r.submission_id=submissions.id)),'$.assessment.reason','Source equipment verified; scored under the owner-published rotation.') WHERE character=? AND status='approved' AND json_extract(data,'$.assessment.awaitingRotation')=1 AND EXISTS(SELECT 1 FROM rotation_run_scores r WHERE r.run_id=? AND r.submission_id=submissions.id AND r.input_data=submissions.data)`,args:[id,run.character,id]});
+  // Mark tested source-verified waiting inputs ready for moderation. Pending
+  // records receive private assessment data only; result/history inserts above
+  // remain approved-only and neither status nor UID verification is changed.
+  await tx.execute({sql:`UPDATE submissions SET data=json_set(data,'$.assessment.eligible',json('true'),'$.assessment.awaitingRotation',json('false'),'$.assessment.calculation',json((SELECT r.details FROM rotation_run_scores r WHERE r.run_id=? AND r.submission_id=submissions.id)),'$.assessment.reason','Source equipment verified; scored under the owner-published rotation.') WHERE character=? AND status IN ('approved','pending') AND json_extract(data,'$.assessment.awaitingRotation')=1 AND EXISTS(SELECT 1 FROM rotation_run_scores r WHERE r.run_id=? AND r.submission_id=submissions.id AND r.input_data=submissions.data)`,args:[id,run.character,id]});
   await tx.execute({sql:'UPDATE rotation_active SET version_id=?,activated_at=? WHERE character=?',args:[version.id,at,run.character]});
   await tx.execute({sql:'INSERT INTO rotation_activations VALUES (?,?,?,?,?,?)',args:[randomUUID(),run.character,run.base_version_id,version.id,id,at]});
   await tx.execute({sql:"UPDATE rotation_runs SET state='activated',updated_at=? WHERE id=?",args:[at,id]});

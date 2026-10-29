@@ -73,3 +73,14 @@ The adapter compiles applicable shared settings into the build context once; mov
 The shared format is `owner-configured-benchmark/2`; specs without `defaults` retain `/1` semantics and historical hashes. Existing saved drafts show an explicit enable-shared-defaults action, preserving their effects as move overrides. New drafts from published versions start with equivalent settings; no live publication pointer or score is changed by editing or deployment. Defaults are included in the immutable specification hash, validation, sample, staging, confirmation and rollback pipeline.
 
 Moves can be searched or pasted one per line, with a category prefix to disambiguate names and xN/×N for repeats. Large pasted counts split into rows of at most 20 without changing total repeats. Every line must resolve, and the 100-row/200-total-repeat limits remain enforced. Range tools copy explicit move overrides (matching IDs replace, other overrides remain) or reset a range to shared defaults. They do not infer buff duration or combat legality.
+
+
+### Publishing a resonator's first official rotation
+
+When the active policy is the unranked awaiting-owner placeholder, sampling and preview staging can use source-verified pending imports as private test inputs. This removes the dependency on approving an unranked build before creating its first scoring rotation. It applies to every future integrated resonator initialized with the same placeholder, without a character-specific list.
+
+Pending test inputs require the same verified source UID, hash, unchanged source slots, legal rolls, maximum main stats, current pinned data and compatible Echo/Sonata identities as waiting approved inputs. Missing proof and catalog discrepancies remain excluded. The preview displays approved/pending test counts and blocks confirmation before opening the dialog when no valid input was staged. Existing empty previews must be recreated.
+
+Only the first rotation may use pending inputs to authorize publication. Later updates still require approved test inputs. Publication rechecks exact current input snapshots. It does not approve pending submissions, make their builds public, insert their leaderboard results or change their UID verification. Later moderator approval calculates them using the active official rotation. Owner review, typed confirmation, approved-build coverage checks, atomic activation, score history and rollback remain in place.
+
+Tested pending inputs receive a private scoring-ready assessment at activation so the moderation UI can show normal approval immediately. Their numeric source fields, pending status and UID verification remain unchanged, and no public calculation result is inserted until approval.
