@@ -307,14 +307,14 @@ export async function correctEchoSubstat(id:string, slot:number, position:number
   const invalid=issues.find((issue:{code:string;message:string})=>issue.code!=='UNSUPPORTED_ROLL');
   if(invalid)throw new HttpError(422,'Invalid Echo combination: '+invalid.message);
   const at=new Date().toISOString();
-  revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,replacement,reviewer:reviewer.trim(),note:note.trim()||'Moderator confirmed the correct in-game roll.',at,adminVerifiedSubstat:true}];
+  revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,serverOriginal:revised.assessment?.sourceSlots?.[slot-1]?.substats?.[position-1]?.value,replacement,reviewer:reviewer.trim(),note:note.trim()||'Moderator confirmed the correct in-game roll.',at,adminVerifiedSubstat:true}];
   const originalSourceField=revised.assessment?.sourceSlots?.[slot-1]?.substats?.[position-1];
   if(revised.assessment?.statsVerified!==true)throw new HttpError(422,'The original screenshot numeric fields were not server-verified. This submission cannot be ranked through a stat correction.');
   if(!originalSourceField)throw new HttpError(422,'The original server-verified Echo substat is missing from the submission.');
-  if(originalSourceField.value!==expected)throw new HttpError(409,'The original OCR reading differs from the selected value. Refresh the submission.');
+  // The displayed, locked submission value can differ from the server's retained raw OCR value.\n  // Both readings are preserved; the moderator explicitly attests the replacement.\n  if(typeof originalSourceField.value!=='string'||!originalSourceField.value.trim())throw new HttpError(422,'The original server OCR reading is unavailable.');
   if(!/^[a-f0-9]{64}$/.test(String(revised.assessment.sourceHash||'')))throw new HttpError(422,'Original screenshot verification hash is missing. The submission needs verified source evidence before ranking.');
   if(String(revised.assessment.sourceUid)!==String(row.uid))throw new HttpError(422,'Original screenshot UID does not match the submitted UID.');
-  const scoringSlots=structuredClone(revised.assessment.sourceSlots);
+  revised.assessment.originalSourceSlots=structuredClone(revised.assessment.originalSourceSlots||revised.assessment.sourceSlots);\n  const scoringSlots=structuredClone(revised.assessment.sourceSlots);
   scoringSlots[slot-1].substats[position-1]={...originalSourceField,value:replacement};
   revised.slots=scoringSlots;
   revised.assessment={...revised.assessment,sourceSlots:scoringSlots,rollsVerified:issues.length===0,catalogReview:issues.length>0,eligible:false,awaitingRotation:false,calculation:undefined};
@@ -353,7 +353,7 @@ export async function correctEchoSubstat(id:string, slot:number, position:number
    await recordRotationScore(tx,id,String(row.character),revised,calculation,at);
    await tx.execute({sql:'INSERT INTO moderation_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'approved',reviewer.trim(),'Auto-approved after moderator-confirmed legal substat correction. '+(note.trim()||'Verified against the in-game roll.'),at]});
   }
-  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),'Echo '+slot+', substat '+position+': '+expected+' -> '+replacement+'. '+(note.trim()||'Moderator confirmed the correct in-game roll.'),at]});
+  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),'Echo '+slot+', substat '+position+': displayed '+expected+', server OCR '+originalSourceField.value+' -> '+replacement+'. '+(note.trim()||'Moderator confirmed the correct in-game roll.'),at]});
   await tx.commit();
   return {slot,position,original:expected,replacement,ranked,reason:ranked?'Approved and ranked automatically.':revised.assessment.reason};
  }finally{tx.close();}
