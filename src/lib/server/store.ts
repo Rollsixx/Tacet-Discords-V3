@@ -334,11 +334,13 @@ export async function correctEchoSubstat(id:string, slot:number, position:number
    try{calculation=await scoreActiveRotation(tx,String(row.character),revised)||revised.assessment.calculation||null;}
    catch(error){reason=error instanceof Error?error.message:'Score calculation failed.';}
   }
-  const validScore=calculation&&calculation.engineVersion===ENGINE_VERSION&&calculation.dataVersion===DATA_VERSION&&(calculation.policyId===POLICY_VERSION||calculation.rotationVersion)&&Number.isFinite(calculation.score)&&calculation.score>0;
+  const activePolicy=(await tx.execute({sql:'SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[String(row.character)]})).rows[0];
+  const requiredPolicy=activePolicy?String(activePolicy.policy_id):POLICY_VERSION;
+  const validScore=calculation&&calculation.engineVersion===ENGINE_VERSION&&calculation.dataVersion===DATA_VERSION&&calculation.policyId===requiredPolicy&&Number.isFinite(calculation.score)&&calculation.score>0;
   const verified=Number(row.identity_verified)===1;
   const ranked=Boolean(validScore&&verified);
   if(!ranked){
-   revised.assessment={...revised.assessment,reason:!verified&&validScore?'UID verification is still required before ranking.':!validScore&&revised.assessment.eligible===true?'A valid published scoring result is still required.':reason};
+   revised.assessment={...revised.assessment,reason:!verified&&validScore?'UID verification is still required before ranking.':!validScore&&revised.assessment.eligible===true?'A score matching the currently published rotation policy is required.':reason};
   }
   await tx.execute({sql:"UPDATE submissions SET data=?,status=?,reviewed_at=CASE WHEN ?='approved' THEN ? ELSE reviewed_at END WHERE id=? AND status='pending'",args:[JSON.stringify(revised),ranked?'approved':'pending',ranked?'approved':'pending',at,id]});
   await tx.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[id]});
