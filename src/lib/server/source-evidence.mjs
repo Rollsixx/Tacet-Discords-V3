@@ -9,7 +9,7 @@ import {recoverEchoCost} from '../scanner/cost-recovery.ts';
 import {agreedReading,legalSubstatKey,mainStatKey,sourceFailure} from './ocr-agreement.mjs';
 import {validateEchoSlot} from '../scanner/stat-validation.ts';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
-import {SUPPORTED,diagnoseSlots,identitiesFromReport,calculateStandard} from './scoring.mjs';
+import {SUPPORTED,diagnoseSlots,identitiesFromReport,assessEquipment} from './scoring.mjs';
 const languagePath=resolve(process.cwd(),'node_modules/@tesseract.js-data/eng/4.0.0');
 let active=false;
 export async function assessSource(input){
@@ -81,8 +81,8 @@ export async function assessSource(input){
   if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
   if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:levelIssue};
   const identities=identitiesFromReport(visualReport);
-  const calculation=await calculateStandard(input.character,slots,identities);
-  return {eligible:true,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash,calculation};
+  const equipment=await assessEquipment(input.character,slots,identities);
+  return {...equipment,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:equipment.reason||'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash};
  }catch(error){
   const failure=error?.sourceFailure||(statsVerified?{code:'SCORING_BLOCKED',message:error instanceof Error?error.message:'Scoring validation failed.'}:stage==='worker'?{code:'OCR_SERVICE_UNAVAILABLE',message:'Screenshot verification could not start. Please try again shortly.'}:{code:'SOURCE_UNREADABLE',message:'Echo stats could not be verified from this image. Retry with the original 1920 × 1080 card; stats remain locked.'});
   console.warn('Source verification failed',JSON.stringify({code:failure.code,slot:failure.slot,field:failure.field}));

@@ -8,7 +8,8 @@ import { DAMAGE_CORE_VERSION } from "./damage-core.ts";
 import { assessSource } from "./source-evidence.mjs";
 import { ENGINE_VERSION, DATA_VERSION, POLICY_VERSION, SUPPORTED } from "./scoring.mjs";
 import sharp from "sharp";
-import {scoreActiveRotation,recordRotationScore} from "./rotations/store.mjs";
+import {OWNER_ROTATION_REQUIRED,AWAITING_ROTATION_POLICY} from "../game-data/scoring-policies.mjs";
+import {scoreActiveRotation,recordRotationScore,applyPublishedRotation} from "./rotations/store.mjs";
 
 export async function rateLimit(key: string, max: number, db: Client = database()) {
   const window = Math.floor(Date.now() / 60000);
@@ -38,19 +39,20 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     portrait:await sharp(input.sourceImage).extract({left:22+index*374,top:650,width:192,height:182}).png().toBuffer(),
     sonata:await sharp(input.sourceImage).extract({left:264+index*374,top:660,width:56,height:56}).png().toBuffer(),
   }))) : input.slots;
-  const data = {
+  let data = {
     assessment,
     character: input.character,
     slots: requireSourceUid ? assessment.sourceSlots : input.slots.map(({ slot, cost, mainStat, substats }) => ({ slot, cost, mainStat, substats })),
     recognition: "unverified",
   };
+  data=await applyPublishedRotation(db,input.character,data);
   const hash = createHash("sha256").update(input.uid).update(input.character.toLowerCase());
   for (const slot of sourceCrops) {
     hash.update(JSON.stringify([slot.cost.value, slot.mainStat.value, slot.substats.map(x => x.value)]));
     hash.update(slot.portrait).update(slot.sonata);
   }
   // A new scoring policy/evidence can be resubmitted; duplicates within it cannot.
-  hash.update(assessment.eligible ? POLICY_VERSION : "unscored");
+  hash.update(data.assessment.eligible ? POLICY_VERSION : "unscored");
   const fingerprint = hash.digest("hex");
   const id = randomUUID();
   const createdAt = new Date().toISOString();
@@ -68,7 +70,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
       }
     }
     await tx.commit();
-    return { ok: true, id, status: "pending", createdAt, readiness:{...visualReadiness(assessment.visualReport||[],assessment.statsVerified===true),rolls:assessment.rollsVerified??(assessment.eligible?true:null),ready:assessment.eligible,reason:assessment.reason} };
+    return { ok: true, id, status: "pending", createdAt, readiness:{...visualReadiness(assessment.visualReport||[],assessment.statsVerified===true),rolls:assessment.rollsVerified??(assessment.eligible?true:null),ready:data.assessment.eligible,reason:data.assessment.reason} };
   } finally { tx.close(); }
 }
 export async function moderate(id: string, action: "approved" | "rejected", reviewer: string, note: string, identityVerified: boolean, db: Client = database(), allowUnranked = false) {
@@ -87,9 +89,12 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
       await tx.commit();
       return;
     }
-    const pending=await tx.execute({sql:"SELECT uid,data FROM submissions WHERE id=? AND status='pending'",args:[id]});
+    const pending=await tx.execute({sql:"SELECT uid,character,data FROM submissions WHERE id=? AND status='pending'",args:[id]});
     if(!pending.rows.length)throw new HttpError(409,"Submission is missing or has already been reviewed.");
-    const assessed=JSON.parse(String(pending.rows[0].data)).assessment;
+    const pendingData=JSON.parse(String(pending.rows[0].data));
+    const prepared=await applyPublishedRotation(tx,String(pending.rows[0].character),pendingData);
+    if(prepared!==pendingData)await tx.execute({sql:"UPDATE submissions SET data=? WHERE id=? AND status='pending'",args:[JSON.stringify(prepared),id]});
+    const assessed=prepared.assessment;
     if(!assessed?.eligible&&allowUnranked!==true)throw new HttpError(422,'Scoring is blocked. Resolve the Echo identities first, or explicitly approve this build as unranked.');
     if(!assessed?.eligible&&note.trim().length<10)throw new HttpError(400,'Explain why this build is being approved as unranked (at least 10 characters).');
     const uid=String(pending.rows[0].uid);
@@ -114,7 +119,7 @@ export const scoringReadiness = {
   enabled: true,
   reason: "Versioned permanent-passive S0/signature-R1 damage benchmark. Only approved, identity-verified builds with source-validated inputs are ranked.",
   engineVersion: ENGINE_VERSION, numericCoreVersion: DAMAGE_CORE_VERSION,
-  dataVersion: DATA_VERSION, policyId: POLICY_VERSION, supportedCharacters: SUPPORTED,
+  dataVersion: DATA_VERSION, policyId: POLICY_VERSION, supportedCharacters: SUPPORTED, ownerRotationRequired: OWNER_ROTATION_REQUIRED,
   metric: "Expected standardized benchmark damage (not DPS)",
   missing: [],
 };
@@ -150,8 +155,10 @@ function publicBuild(row: Row) {
 export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
   const character = options.character || SUPPORTED[0];
   const page = Number.isFinite(options.page) ? Math.min(10000,Math.max(1,Math.floor(options.page || 1))) : 1;
-  if (!SUPPORTED.includes(character)) return {builds: [],page,hasMore:false,scoring:scoringReadiness};
+  if (!SUPPORTED.includes(character)) return {builds: [],page,hasMore:false,scoring:scoringReadiness,rotationReady:false};
   const search = (options.search || "").slice(0,64).trim();
+  const policy=(await db.execute({sql:'SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];
+  const rotationReady=!OWNER_ROTATION_REQUIRED.includes(character)||Boolean(policy&&policy.policy_id!==AWAITING_ROTATION_POLICY);
   const result = await db.execute({sql: `WITH candidates AS (
     SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,c.details AS current_calculation,c.score AS verified_score,
     row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
@@ -161,7 +168,7 @@ export async function listLeaderboard(options: {character?: string;search?: stri
     SELECT *,row_number() OVER (ORDER BY verified_score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1
   ) SELECT * FROM ranked WHERE (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
     ORDER BY global_rank ASC LIMIT 21 OFFSET ?`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,search,search,search,(page-1)*20]});
-  return {builds:result.rows.slice(0,20).map(publicBuild),page,hasMore:result.rows.length>20,scoring:scoringReadiness};
+  return {builds:result.rows.slice(0,20).map(publicBuild),page,hasMore:result.rows.length>20,scoring:scoringReadiness,rotationReady};
 }
 
 async function applyUidVerification(tx: Awaited<ReturnType<Client['transaction']>>, uid:string, verified:boolean, reviewer:string, note:string, now:string) {

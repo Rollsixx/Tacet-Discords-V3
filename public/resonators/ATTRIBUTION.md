@@ -21,3 +21,10 @@ Jingran.png: 540579a9c94720b6d1ca75c2b1ef8182fa9983e8
 Hsin.png: 9825ed22dd1d4b7136e0612125174f4eca0213db
 Qingxiao.png: 6a8568f8c97c233fe7934a4d9b37097d4cf18aa8
 Suisui.png: ba9b6cc3e4f513fe0df0f91d5018be3564a8ec31
+
+Additional supported portraits, same upstream asset repository:
+Lucy.png: a955f78e483deba31b9b72873f29a33d4a0e6555
+Lucilla.png: e57480f7deec9638e6821f9292e13e2fa7bb5186
+Rebecca.png: ed567973e16f2205723e1627e7c29b17dfb9857f
+Denia.png: ca5228bb50fbb8b967cb732a50443af5e50af505
+Sigrika.png: 57288daa19dc5670e5605370768e93ddb889c6cc

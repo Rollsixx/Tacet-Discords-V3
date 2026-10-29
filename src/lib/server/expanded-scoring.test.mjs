@@ -12,7 +12,7 @@ import {listLeaderboard,listBuilds,moderate} from './store.ts';
 import {parseCardIdentity} from '../scanner/card-identity.ts';
 import cards from '../../../tests/browser/user-card-expectations.json' with {type:'json'};
 import cases from '../game-data/scoring-cases.json' with {type:'json'};
-const names=['Suoming','Jingran','Hsin','Qingxiao','Suisui'];
+const names=['Suoming','Jingran','Hsin','Qingxiao','Suisui','Denia','Sigrika'];
 const card=cards.find(c=>c.file.startsWith('Carlotta'));
 // Synthetic equipment combination, not a real player or an OCR accuracy claim.
 const slots=Array.from({length:5},(_,i)=>({slot:i+1,cost:{value:card.fields[i*7]},mainStat:{value:card.fields[i*7+1]},substats:card.fields.slice(i*7+2,i*7+7).map(value=>({value}))}));
@@ -24,7 +24,7 @@ test('expanded roster resolves canonical card names including the Souming alias'
 test('new benchmarks preserve pinned damage action counts and exclude healing, Echo and status-proc damage',async()=>{
  for(const name of names){
   const c=await engine.getCharByName(name),p=scoringPreset(name,c);
-  const tables={basic:c.basicAttacks,skill:c.skillAttacks,forteCircuit:c.forteCircuitAttacks,liberation:c.liberationAttacks,intro:c.introAttacks,outro:c.outroAttacks};
+  const tables={basic:c.basicAttacks,skill:c.skillAttacks,forteCircuit:c.forteCircuitAttacks,liberation:c.liberationAttacks,intro:c.introAttacks,outro:c.outroAttacks,tuneBreak:c.tuneBreakAttacks};
   const allowed=c.rotations[0].data.actions.filter(a=>!a.isDisabled&&a.type!=='echoAttacks'&&tables[a.type]?.attacks?.some(t=>t.key===a.key&&!['Healing','Shield','ElementalEffect'].includes(t.type)));
   const totals=actions=>actions.reduce((m,a)=>(m[a.type+':'+a.key]=(m[a.type+':'+a.key]||0)+a.count,m),{});
   assert.deepEqual(totals(p.data.actions),totals(allowed),name);

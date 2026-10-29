@@ -2,6 +2,7 @@
 import {verificationImageData} from "@/lib/scanner/verification-image";
 import {ScoringReadinessCard} from "./scoring-readiness";
 import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
+import {featuredResonators} from "@/lib/resonators";
 import { LockIcon } from "./ui";
 import { useState } from "react";
 import type { RecognitionResult } from "@/lib/scanner/build-card-ocr";
@@ -62,6 +63,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   return <section className="player-details-card" aria-busy={busy} aria-labelledby="player-details-title">
     <div className="player-details-heading"><div><span className="eyebrow">Finish your import</span><h2 id="player-details-title">Player details</h2><p className="muted">Check your name, confirm your card, then send it for review.</p></div><span className="scan-chip passed"><LockIcon /> Echo stats locked</span></div>
     <div className="player-build-summary"><span className="player-character-mark" aria-hidden="true">{character.slice(0,2).toUpperCase() || "?"}</span><div><strong>{character || "Character unreadable"}</strong><span>5 Echo slots · Screenshot import</span></div><span className="player-summary-state">{!scanValid ? "Rescan required" : ready ? "Ready for confirmation" : "Add your in-game name"}</span></div>
+    {featuredResonators.find(r=>r.name===character)?.ownerRotationRequired&&<p className="import-blocked">Imports and approval are available for {character}. Ranking requires an owner-published rotation; verified equipment is retained so you will not need to reimport when it is published.</p>}
     {issues.length > 0 && <p className="import-blocked" role="status">{issues.length} stat issue(s) need a new scan. Stats are locked to your screenshot; choose a clearer original card to try again.</p>}
     {!uid && <p className="field-error" role="alert">UID could not be read. Upload a clear original card; UID cannot be entered manually.</p>}
     {readiness&&!readiness.ready&&<p className="import-blocked" role="status">{readiness.reason} You can send this scan for moderator review, but it cannot rank until its equipment identities and scoring checks pass.</p>}

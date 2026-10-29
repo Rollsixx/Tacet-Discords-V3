@@ -5,7 +5,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  expect((await request.get('/api/admin/rotations')).status()).toBe(401);
  await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();await expect(page.getByText('Optimizer connected · Owner-reviewed benchmark',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(10);
+ await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(15);
  await page.getByLabel('Evaluation mode').selectOption('admin-reviewed');await page.getByLabel('Starting conditions & combat review notes').fill('');
  await page.getByLabel('Rotation name',{exact:true}).fill('Browser draft '+info.project.name);
  await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
@@ -30,7 +30,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
 
 test('expanded leaderboard categories load with local portraits',async({page},info)=>{
  await page.goto('/leaderboards');
- for(const name of ['Suoming','Jingran','Hsin','Qingxiao','Suisui']){
+ for(const name of ['Suoming','Jingran','Hsin','Qingxiao','Suisui','Lucy','Lucilla','Rebecca','Denia','Sigrika']){
   const response=page.waitForResponse(r=>r.url().includes('/api/public/leaderboards?')&&new URL(r.url()).searchParams.get('character')===name);
   await page.locator('.lb-character-tabs button').filter({hasText:name}).click();expect((await response).status()).toBe(200);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
@@ -69,4 +69,17 @@ test('effect editor separates categories, groups every Echo by cost and preserve
  const saved=await(await request.get('/api/admin/rotations?character=Carlotta',{headers})).json();expect(saved.draft.spec.actions[0].effects.some((e:{id:string})=>e.id===modifier.id)).toBe(true);
  // Remove the local fixture effect so another viewport can exercise the same picker.
  await effects.locator('.rotation-effect').getByRole('button',{name:/^Remove /}).click();await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
+});
+
+test('owner-first resonators expose clear unranked categories and editable empty rotation workspaces',async({page,request},info)=>{
+ for(const name of ['Lucy','Lucilla','Rebecca']){
+  await page.goto('/leaderboards?character='+name);await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();await expect(page.getByRole('status').filter({hasText:'Rankings are awaiting'})).toBeVisible();
+  const data=await(await request.get('/api/public/leaderboards?character='+name)).json();expect(data.rotationReady).toBe(false);expect(data.builds).toHaveLength(0);
+ }
+ await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();
+ for(const name of ['Lucy','Lucilla','Rebecca']){
+  await page.getByLabel('Resonator',{exact:true}).selectOption(name);await expect(page.getByText('Official rotation required',{exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Awaiting owner rotation · '+name,exact:true})).toBeVisible();
+  const data=await(await request.get('/api/admin/rotations?character='+name,{headers})).json();expect(data.active.policy_id).toBe('awaiting-owner-rotation/1');expect(data.active.spec.actions).toHaveLength(0);expect(data.catalog.length).toBeGreaterThan(0);
+ }
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('owner-first-rotation.png'),fullPage:true});
 });

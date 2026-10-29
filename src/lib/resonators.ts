@@ -5,6 +5,7 @@ export type ResonatorPreview = {
   tone: string;
   monogram: string;
   releaseDate: string;
+  ownerRotationRequired?: boolean;
 };
 
 export const featuredResonators: ResonatorPreview[] = [
@@ -19,6 +20,11 @@ export const featuredResonators: ResonatorPreview[] = [
   { releaseDate: "", name: "Hsin", element: "Electro", weapon: "Rectifier", tone: "electro", monogram: "HS" },
   { releaseDate: "", name: "Qingxiao", element: "Aero", weapon: "Sword", tone: "aero", monogram: "QX" },
   { releaseDate: "", name: "Suisui", element: "Glacio", weapon: "Rectifier", tone: "glacio", monogram: "SS" },
+  { releaseDate: "", name: "Lucy", element: "Spectro", weapon: "Pistols", tone: "spectro", monogram: "LY", ownerRotationRequired: true },
+  { releaseDate: "", name: "Lucilla", element: "Glacio", weapon: "Rectifier", tone: "glacio", monogram: "LC", ownerRotationRequired: true },
+  { releaseDate: "", name: "Rebecca", element: "Electro", weapon: "Pistols", tone: "electro", monogram: "RB", ownerRotationRequired: true },
+  { releaseDate: "", name: "Denia", element: "Fusion", weapon: "Rectifier", tone: "fusion", monogram: "DN" },
+  { releaseDate: "", name: "Sigrika", element: "Aero", weapon: "Gauntlets", tone: "aero", monogram: "SG" },
 ];
 
 // Original releases, not rerun banners. Limited to the supported scoring roster.

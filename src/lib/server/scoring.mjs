@@ -6,7 +6,7 @@ import supplement from '../game-data/scanner-reference-supplement.json' with {ty
 import variants from '../game-data/scanner-reference-variants.json' with {type:'json'};
 import {fingerprint,rankFingerprint,decodeFingerprintSource,spatialDistance} from './image-fingerprint.mjs';
 import {SCORING_CHARACTERS,scoringPreset} from '../game-data/scoring-policies.mjs';
-import {parseSubstat} from '../scanner/stat-validation.ts';
+import {validateEchoSlot,parseSubstat} from '../scanner/stat-validation.ts';
 export const ENGINE_VERSION='wuthering-tools-b32cdbd+tacet/2.0';
 export const DATA_VERSION='b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5';
 export const POLICY_VERSION='solo-permanent-s0-signature-r1/2';
@@ -118,4 +118,13 @@ export async function calculateStandard(character,slots,identities,managed=null)
  const score=result.damageAggregation.avgDamage;
  if(typeof score!=='number'||!Number.isFinite(score)||score<=0)throw Error('Invalid calculation result.');
  return {score,character,policyId,rotationVersion:managed?.versionId||null,benchmarkMode:managed?.configuredEffects?'admin-reviewed':managed?.verifiedMechanics?'mechanics-validated':'legacy',mechanicsVersion:managed?.mechanicsVersion||null,combatTrace:managed?.trace||null,engineVersion:ENGINE_VERSION,dataVersion:DATA_VERSION,referenceCaseVersion:'reference-cases/2',metric:'Expected standardized benchmark damage',rotation:preset.name,rotationOrigin:preset.provenance||'First pinned upstream rotation preset.',startState:preset.startState||'Resource availability assumed by the pinned upstream rotation preset.',weapon,enemy,conditions:managed?.configuredEffects?'Level 90; talents 10; S0; signature weapon level 90 R1; max-level five-star Echoes; owner-configured per-action effects; combat legality manually reviewed; no team buffs; average expected TOTAL rotation damage, not DPS.':managed?.verifiedMechanics?'Level 90; talents 10; S0; signature weapon level 90 R1; max-level five-star Echoes; verified automatic rotation-state effects; no team buffs; average expected TOTAL rotation damage, not DPS.':'Level 90; talents 10; S0; signature weapon level 90 R1; max-level five-star Echoes; permanent passives only; no team buffs; not DPS.',identities,finalStats:context.finalStats,actions:result.attacks.map(a=>({key:a.key,count:a.count,damage:{normal:a.damage?.totalDamage,expected:a.damage?.avgDamage,critical:a.damage?.critDamage}})),normalDamage:result.damageAggregation.normalDamage,criticalDamage:result.damageAggregation.critDamage};
+}
+
+// Retain verified equipment even when an owner rotation has not been published.
+export async function assessEquipment(character,slots,identities){
+ const c=await engine.getCharByName(character);
+ if(scoringPreset(character,c))return {eligible:true,awaitingRotation:false,calculation:await calculateStandard(character,slots,identities)};
+ if(!SUPPORTED.includes(character)||slots.length!==5||identities.length!==5||slots.some(s=>validateEchoSlot(s).length))throw Error('Verified scoring inputs are incomplete.');
+ for(let i=0;i<5;i++){const e=engine.getEchoData(identities[i].echo);if(!e||costByClass[e.class]!==Number(slots[i].cost.value)||!e.sets.includes(identities[i].set))throw Error('Echo/Sonata catalog mismatch.');}
+ return {eligible:false,awaitingRotation:true,calculation:{character,score:null,engineVersion:ENGINE_VERSION,dataVersion:DATA_VERSION,identities},reason:'Equipment verified. Awaiting the owner’s first published rotation; this build remains unranked.'};
 }

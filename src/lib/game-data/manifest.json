@@ -1,7 +1,7 @@
 {
   "version": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
-  "sha256": "1e1b04e2e167f51b23884effb2a164ca2abc1a8eede749183212bb9480d21720",
-  "characters": 10,
+  "sha256": "ca6aa3da8567778f588d58628b5b23a5fdd303c30418fe2b40ad8f7510a2e278",
+  "characters": 15,
   "echoes": 230,
   "sets": 37,
   "supported": [
@@ -14,7 +14,17 @@
     "Jingran",
     "Hsin",
     "Qingxiao",
-    "Suisui"
+    "Suisui",
+    "Lucy",
+    "Lucilla",
+    "Rebecca",
+    "Denia",
+    "Sigrika"
+  ],
+  "ownerRotationRequired": [
+    "Lucy",
+    "Lucilla",
+    "Rebecca"
   ],
   "unsupported": {}
 }

@@ -24,7 +24,7 @@ export const TACET_WINDOWS={
   data:{actions:[action('liberation','MomentofNihilityDMG'),action('skill','SerratedLoopDMG'),action('forteCircuit','SawringBlitzStage2DMG'),action('forteCircuit','SawringBlitzStage3DMG'),action('forteCircuit','SawringEradicationDMG')]},
  },
 };
-const EXPANDED_ROSTER=new Set(['Suoming','Jingran','Hsin','Qingxiao','Suisui']);
+const EXPANDED_ROSTER=new Set(['Suoming','Jingran','Hsin','Qingxiao','Suisui','Denia','Sigrika']);
 export function scoringPreset(character,data){
  const preset=data.rotations[0]||TACET_WINDOWS[character];
  if(!preset||!EXPANDED_ROSTER.has(character))return preset;
@@ -36,3 +36,7 @@ export function scoringPreset(character,data){
  });
  return {...preset,name:'Standardized '+preset.name,data:{...preset.data,actions},provenance:'Tacet adaptation of pinned upstream preset by '+preset.author+'. Fixed Echo attacks, healing, shielding and status-proc damage excluded; original remaining action order and repeat counts retained.',startState:'Resource availability assumed by the pinned upstream preset. Level 90, S0, signature R1, permanent passives only; no team buffs. This is a damage benchmark, not an automatic combat simulation.'};
 }
+
+// Kits are integrated, but no upstream rotation preset exists.
+export const OWNER_ROTATION_REQUIRED=['Lucy','Lucilla','Rebecca'];
+export const AWAITING_ROTATION_POLICY='awaiting-owner-rotation/1';

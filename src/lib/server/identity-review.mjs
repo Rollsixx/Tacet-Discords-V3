@@ -2,7 +2,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import sharp from 'sharp';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
-import {calculateStandard,diagnoseCrops,identitiesFromReport,DATA_VERSION,ENGINE_VERSION,SUPPORTED} from './scoring.mjs';
+import {assessEquipment,diagnoseCrops,identitiesFromReport,DATA_VERSION,ENGINE_VERSION,SUPPORTED} from './scoring.mjs';
 import {HttpError} from './validation.ts';
 import {validateEchoSlot} from '../scanner/stat-validation.ts';
 import {scoreActiveRotation,recordRotationScore} from './rotations/store.mjs';
@@ -41,22 +41,22 @@ export async function repairIdentities(db,id,input){
  let identities;
  if(input.operation==='confirm'){must(input.confirmed===true,'Confirm visual comparison of all five Echoes and Sonatas.',400);identities=validateIdentities(input.identities,data.slots);}
  else{try{identities=identitiesFromReport(report);}catch(e){throw new HttpError(422,e.message+' Compare the retained crops and confirm their identities, or reimport a clearer screenshot.');}}
- let baseline;try{baseline=await calculateStandard(String(row.character),data.slots,identities);}catch(e){throw new HttpError(422,String(e.message)+'. Reimport a clearer original card; retained stats cannot be edited.');}const at=new Date().toISOString();
+ let baseline;try{baseline=await assessEquipment(String(row.character),data.slots,identities);}catch(e){throw new HttpError(422,String(e.message)+'. Reimport a clearer original card; retained stats cannot be edited.');}const at=new Date().toISOString();
  const before=data.assessment?.calculation?.identities||report.map(s=>({echo:s.echo,set:s.set}));
  const proof={version:'moderator-identity-review/1',sourceHash:data.assessment.sourceHash,cropHash:retained.cropHash,confirmedAt:at,method:input.operation};
- const next={...data,assessment:{...data.assessment,eligible:true,rollsVerified:true,calculation:baseline,visualReport:identities.map((s,i)=>({...report[i],echo:s.echo,set:s.set,problem:null,manuallyConfirmed:input.operation==='confirm'})),identityReview:proof,reason:input.operation==='confirm'?'Source-verified stats and moderator-confirmed equipment identities validated.':'Equipment identities recovered from retained canonical crops using current strict references.'}};
+ const next={...data,assessment:{...data.assessment,...baseline,rollsVerified:true,visualReport:identities.map((s,i)=>({...report[i],echo:s.echo,set:s.set,problem:null,manuallyConfirmed:input.operation==='confirm'})),identityReview:proof,reason:baseline.reason||(input.operation==='confirm'?'Source-verified stats and moderator-confirmed equipment identities validated.':'Equipment identities recovered from retained canonical crops using current strict references.')}};
  const tx=await db.transaction('write');try{
   const fresh=(await tx.execute({sql:'SELECT data,status,identity_verified FROM submissions WHERE id=?',args:[id]})).rows[0];must(fresh&&fresh.data===row.data&&fresh.status===row.status&&Number(fresh.identity_verified)===Number(row.identity_verified),'Build changed during identity review. Reload before confirming.',409);
-  const active=await scoreActiveRotation(tx,String(row.character),next);const calculation=active||baseline;
+  const active=await scoreActiveRotation(tx,String(row.character),next);const calculation=active||baseline.calculation;if(active){next.assessment.eligible=true;next.assessment.awaitingRotation=false;next.assessment.calculation=active;next.assessment.reason='Source equipment verified; scored under the owner-published rotation.';}
   if(row.status==='approved'){const old=(await tx.execute({sql:'SELECT details FROM calculation_results WHERE submission_id=?',args:[id]})).rows[0];if(old)await recordRotationScore(tx,id,String(row.character),data,JSON.parse(String(old.details)),at);}
   await tx.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(next),id]});
-  if(row.status==='approved'){
+  if(row.status==='approved'&&next.assessment.eligible){
    await tx.execute({sql:'INSERT INTO calculation_results VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(submission_id) DO UPDATE SET score=excluded.score,engine_version=excluded.engine_version,data_version=excluded.data_version,reference_case_version=excluded.reference_case_version,verified_at=excluded.verified_at,policy_id=excluded.policy_id,details=excluded.details',args:[id,calculation.score,ENGINE_VERSION,DATA_VERSION,calculation.referenceCaseVersion,at,calculation.policyId,JSON.stringify(calculation)]});
    await recordRotationScore(tx,id,String(row.character),next,calculation,at);
   }
   const audit=JSON.stringify({note:input.note.trim(),method:input.operation,before,after:identities,sourceHash:proof.sourceHash,cropHash:proof.cropHash});
   await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,input.operation==='confirm'?'echo_identities_confirmed':'echo_recognition_retried',input.reviewer.trim(),audit,at]});
-  await tx.execute({sql:'INSERT INTO build_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'rescore',input.reviewer.trim(),'Identity recovery; '+input.operation+'; '+calculation.policyId,at]});
-  await tx.commit();return {ok:true,id,score:row.status==='approved'&&Number(row.identity_verified)===1?calculation.score:null,status:row.status,eligible:true};
+  await tx.execute({sql:'INSERT INTO build_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'rescore',input.reviewer.trim(),'Identity recovery; '+input.operation+'; '+(calculation.policyId||'awaiting-owner-rotation/1'),at]});
+  await tx.commit();return {ok:true,id,score:row.status==='approved'&&Number(row.identity_verified)===1?calculation.score:null,status:row.status,eligible:next.assessment.eligible};
  }finally{tx.close();}
 }

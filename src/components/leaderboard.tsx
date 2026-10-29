@@ -66,6 +66,7 @@ export function Leaderboard(){
    })}</tbody></table></div>}
    <div className="lb-bottom"><span>Highest score first · Select a player to view Echoes</span><div className="lb-pagination"><button className="outline-button" disabled={loading||page<=1} onClick={()=>setPage(value=>value-1)}>Previous</button><span>Page {page}</span><button className="outline-button" disabled={loading||!result?.hasMore||Boolean(error)} onClick={()=>setPage(value=>value+1)}>Next</button></div></div>
   </section>
+  {result?.rotationReady===false&&<p className="import-blocked" role="status">Imports are open for {character}. Rankings are awaiting the owner’s first published rotation.</p>}
   <details className="lb-rules"><summary>How these rankings work</summary><p>Expected standardized benchmark damage, not DPS. Level 90, talents 10, S0, signature weapon R1, permanent passives only, no team buffs; level 90 enemy with 10% resistance. Only approved, manually identity-verified builds with current scoring evidence are ranked. One best build per player.</p><p>Hiyuki and Chisa use explicitly defined Tacet damage windows with normalized starting resources.</p><p>Echo CV counts substats only: 2 × Crit. Rate + Crit. DMG. ATK, crit and Energy Regen values come from the standardized calculation.</p></details>
  </div>;
 }

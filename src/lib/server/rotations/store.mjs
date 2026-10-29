@@ -2,10 +2,11 @@
 import {randomUUID} from 'node:crypto';
 import * as engine from '../../../../vendor/wuthering-tools/dist/index.mjs';
 import {ROTATION_ROSTER,MECHANICS_MODELS} from '../../game-data/rotation-mechanics.mjs';
-import {scoringPreset} from '../../game-data/scoring-policies.mjs';
+import {scoringPreset,AWAITING_ROTATION_POLICY} from '../../game-data/scoring-policies.mjs';
 import {calculateStandard,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from '../scoring.mjs';
 import {actionCatalog,normalizeSpec,validateSpec,simulate,specificationHash} from './mechanics.mjs';
 import {modifierLibrary,modifierCatalog,compileReviewed,REVIEWED_MODE,REVIEWED_VERSION} from './configuration.mjs';
+import {validateEchoSlot} from '../../scanner/stat-validation.ts';
 import {HttpError} from '../validation.ts';
 const now=()=>new Date().toISOString();
 const parse=row=>row?Object.fromEntries(Object.entries(row).map(([k,v])=>[k,['spec','validation'].includes(k)&&v?JSON.parse(String(v)):v])):null;
@@ -17,12 +18,13 @@ export async function initializeRotations(db){
  for(const character of ROTATION_ROSTER){
   if(await active(db,character))continue;
   const data=await engine.getCharByName(character),preset=scoringPreset(character,data);
-  if(!preset)continue;
-  const spec={name:preset.name,actions:preset.data.actions.filter(a=>!a.isDisabled).map(a=>({type:a.type,key:a.key,count:Number(a.count||1),...(a.mainEcho?{mainEcho:a.mainEcho}:{})}))};
+  const waiting=!preset;
+  const selected=preset||{name:'Awaiting owner rotation · '+character,data:{actions:[]}};
+  const spec={name:selected.name,actions:selected.data.actions.filter(a=>!a.isDisabled).map(a=>({type:a.type,key:a.key,count:Number(a.count||1),...(a.mainEcho?{mainEcho:a.mainEcho}:{})}))};
   const tx=await db.transaction('write');try{
    if(!await active(tx,character)){
     const id='baseline-'+character;
-    await tx.execute({sql:"INSERT OR IGNORE INTO rotation_versions VALUES (?,?,1,'baseline',?,?,?,?,?,?,?)",args:[id,character,JSON.stringify(spec),specificationHash(spec),ENGINE_VERSION,DATA_VERSION,'legacy-damage-window',POLICY_VERSION,now()]});
+    await tx.execute({sql:"INSERT OR IGNORE INTO rotation_versions VALUES (?,?,1,'baseline',?,?,?,?,?,?,?)",args:[id,character,JSON.stringify(spec),specificationHash(spec),ENGINE_VERSION,DATA_VERSION,waiting?'awaiting-owner-rotation':'legacy-damage-window',waiting?AWAITING_ROTATION_POLICY:POLICY_VERSION,now()]});
     await tx.execute({sql:'INSERT OR IGNORE INTO rotation_active VALUES (?,?,?)',args:[character,id,now()]});
     await tx.execute({sql:`INSERT OR IGNORE INTO rotation_score_history SELECT lower(hex(randomblob(16))),?,s.id,'legacy-existing-result',c.score,c.details,? FROM submissions s JOIN calculation_results c ON c.submission_id=s.id WHERE s.character=?`,args:[id,now(),character]});
    }
@@ -53,7 +55,15 @@ export async function validateRotationDraft(db,character,revision){
  const result=await validateSpec(character,JSON.parse(row.spec));
  const updated=await db.execute({sql:'UPDATE rotation_drafts SET validation=? WHERE character=? AND revision=?',args:[JSON.stringify(result),character,revision]});must(updated.rowsAffected===1,'Draft changed during validation.');return result;
 }
-function sourceCalculation(data){const a=data.assessment,c=a?.calculation;return a?.eligible===true&&c?.dataVersion===DATA_VERSION&&c.identities?.length===5?c:null;}
+function sourceCalculation(data){
+ const a=data.assessment,c=a?.calculation;
+ if(c?.dataVersion!==DATA_VERSION||c.identities?.length!==5)return null;
+ if(a.eligible===true)return c;
+ const verified=a.awaitingRotation===true&&a.statsVerified===true&&a.rollsVerified===true&&a.maxMainStatsVerified===true&&/^[a-f0-9]{64}$/.test(a.sourceHash||'')&&typeof a.sourceUid==='string'&&JSON.stringify(a.sourceSlots)===JSON.stringify(data.slots)&&data.slots?.length===5&&data.slots.every(s=>!validateEchoSlot(s).length);
+ if(!verified)return null;
+ for(let i=0;i<5;i++){const e=engine.getEchoData(c.identities[i].echo);if(!e||({Calamity:4,Overlord:4,Elite:3,Common:1})[e.class]!==Number(data.slots[i].cost.value)||!e.sets.includes(c.identities[i].set))return null;}
+ return c;
+}
 export async function evaluateVersion(character,data,version,{allowProvisional=false}={}){
  const source=sourceCalculation(data);must(source,'This build lacks verified scoring inputs.',422);
  must(version.engine_version===ENGINE_VERSION&&version.data_version===DATA_VERSION,'Pinned engine/data version is unavailable.',422);
@@ -103,6 +113,7 @@ export async function startRotationPreview(db,character,revision,rollbackVersion
   }finally{tx.close();}
   version=(await db.execute({sql:'SELECT * FROM rotation_versions WHERE id=?',args:[id]})).rows[0];
  }
+ must(version.policy_id!==AWAITING_ROTATION_POLICY,'The unranked placeholder cannot be published or used for rollback.',422);
  must(version.id!==current.id,'This rotation is already active.');
  if(version.kind==='official'){const v=await validateSpec(character,JSON.parse(version.spec));must(v.valid&&v.mechanicsVersion===version.mechanics_version,'Historical mechanics adapter is unavailable or changed.',422);}
  const id=randomUUID(),at=now();await db.execute({sql:"INSERT INTO rotation_runs(id,character,version_id,draft_revision,base_version_id,state,source_revision,created_at,updated_at) VALUES (?,?,?,?,?,'building',?,?,?)",args:[id,character,version.id,rollbackVersionId?null:revision,current.id,await clock(db,character),at,at]});
@@ -154,7 +165,7 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
   if(version.kind==='official'){const tested=(await tx.execute({sql:'SELECT COUNT(*) n FROM rotation_run_scores WHERE run_id=?',args:[id]})).rows[0];must(Number(tested.n)>0,'Test this benchmark against at least one approved build with verified scoring inputs before publishing.',422);}
   // Independent coverage check, in addition to the approved-build clock.
   const missing=(await tx.execute({sql:`SELECT COUNT(*) n FROM submissions s WHERE s.character=? AND s.status='approved'
-   AND json_extract(s.data,'$.assessment.eligible')=1 AND json_extract(s.data,'$.assessment.calculation.dataVersion')=?
+   AND (json_extract(s.data,'$.assessment.eligible')=1 OR json_extract(s.data,'$.assessment.awaitingRotation')=1) AND json_extract(s.data,'$.assessment.calculation.dataVersion')=?
    AND json_array_length(json_extract(s.data,'$.assessment.calculation.identities'))=5
    AND NOT EXISTS (SELECT 1 FROM rotation_run_scores r WHERE r.run_id=? AND r.submission_id=s.id AND r.input_data=s.data)`,args:[run.character,DATA_VERSION,id]})).rows[0];
   must(Number(missing.n)===0,'A build is missing from this preview. Recalculate before publishing.');
@@ -172,6 +183,8 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
    SELECT r.submission_id,r.score,?,?,'managed-rotations/1',?,?,r.details
    FROM rotation_run_scores r JOIN submissions s ON s.id=r.submission_id AND s.data=r.input_data WHERE r.run_id=? AND s.status='approved'
    ON CONFLICT(submission_id) DO UPDATE SET score=excluded.score,engine_version=excluded.engine_version,data_version=excluded.data_version,reference_case_version=excluded.reference_case_version,verified_at=excluded.verified_at,policy_id=excluded.policy_id,details=excluded.details`,args:[version.engine_version,version.data_version,at,version.policy_id,id]});
+  // Promote only source-verified waiting builds covered by this exact staging input.
+  await tx.execute({sql:`UPDATE submissions SET data=json_set(data,'$.assessment.eligible',json('true'),'$.assessment.awaitingRotation',json('false'),'$.assessment.calculation',json((SELECT r.details FROM rotation_run_scores r WHERE r.run_id=? AND r.submission_id=submissions.id)),'$.assessment.reason','Source equipment verified; scored under the owner-published rotation.') WHERE character=? AND status='approved' AND json_extract(data,'$.assessment.awaitingRotation')=1 AND EXISTS(SELECT 1 FROM rotation_run_scores r WHERE r.run_id=? AND r.submission_id=submissions.id AND r.input_data=submissions.data)`,args:[id,run.character,id]});
   await tx.execute({sql:'UPDATE rotation_active SET version_id=?,activated_at=? WHERE character=?',args:[version.id,at,run.character]});
   await tx.execute({sql:'INSERT INTO rotation_activations VALUES (?,?,?,?,?,?)',args:[randomUUID(),run.character,run.base_version_id,version.id,id,at]});
   await tx.execute({sql:"UPDATE rotation_runs SET state='activated',updated_at=? WHERE id=?",args:[at,id]});
@@ -187,4 +200,10 @@ export async function scoreActiveRotation(db,character,data){
 export async function recordRotationScore(db,id,character,data,calculation,at){
  const version=await active(db,character);if(!version)return;
  await db.execute({sql:'INSERT OR IGNORE INTO rotation_score_history VALUES (?,?,?,?,?,?,?)',args:[randomUUID(),version.id,id,specificationHash(data),calculation.score,JSON.stringify(calculation),at]});
+}
+
+export async function applyPublishedRotation(db,character,data){
+ if(!data.assessment?.awaitingRotation)return data;
+ const calculation=await scoreActiveRotation(db,character,data);if(!calculation)return data;
+ return {...data,assessment:{...data.assessment,eligible:true,awaitingRotation:false,calculation,reason:'Source equipment verified; scored under the owner-published rotation.'}};
 }
