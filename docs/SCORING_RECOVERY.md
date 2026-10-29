@@ -48,3 +48,13 @@ The reviewed DommyMM/wuwabuild frontend at `42efb17e133fb1e5025738990686bdd3977a
 ## Shared Echo pipeline efficiency
 
 Card verification decodes screenshot pixels once per request and reuses that buffer for OCR crops and equipment fingerprints. No screenshot buffer is cached across requests. Portrait/Sonata crops can run in parallel; Echo candidates are indexed by cost and each portrait/icon is ranked once, with those rankings reused for strict selection and diagnostics. Equivalent-effect signatures are precomputed from pinned game definitions. Match distances, ambiguity margins, equipment legality and all scoring policies remain unchanged. RGB channel normalization also prevents invalid fingerprint arithmetic on grayscale or transparent inputs. Tests compare crop fingerprints exactly and check compressed/softened originals for correct identities or explicit review requirements. Local visual-matching benchmarks cover seven cards and measure the visual stage only, not total OCR/import latency.
+
+### Equipment verified, official rotation pending
+
+Lucy, Lucilla and Rebecca intentionally have no provisional scoring rotation. An assessment with verified source stats, valid rolls, five confirmed identities and `awaitingRotation: true` now displays an awaiting-rotation state, rather than asking moderators to repair already-confirmed equipment. The admin shortcut opens that resonator's rotation editor. Unranked approval remains explicit; official publication still requires owner confirmation. Retained approved builds participate in the first rotation preview.
+
+Strict identity recognition can be retried without a typed note; a default audit explanation is recorded. Manual identity confirmation still requires the comparison checkbox, five compatible identities, reviewer name and a 10–500 character audit note. The UI explains these requirements beside the buttons, and a successful repair clears its stale workspace revision.
+
+UID extraction measures the gold digit line before OCR in both browser and server. It does not assume a nine-digit UID or substitute, truncate or pad recognized digits. Two independently scaled reads must still agree at the existing confidence threshold.
+
+A visible number absent from the pinned optimizer roll table is a source-data discrepancy, not necessarily unreadable OCR. For example, the supplied Rebecca card displays DEF 11.9%, while the pinned and upstream `src/echoes/stats.ts` tables contain 11.8%. The scanner preserves 11.9% and blocks scoring; it must not snap that value to 11.8% or recommend endless rescans. Resolve the verified source discrepancy before changing accepted roll data.

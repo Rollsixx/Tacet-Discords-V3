@@ -8,6 +8,11 @@ test('identity recovery is private, guarded and preserves an approved player bui
  await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();await page.getByRole('button',{name:'Players & builds',exact:true}).click();await page.getByRole('button',{name:'Open player Identity Review QA UID '+uid,exact:true}).click();
  if(before.status==='pending'){await expect(page.getByRole('button',{name:'Approve as unranked Carlotta',exact:true})).toBeDisabled();const denied=await request.post('/api/moderation',{headers,data:{id:before.id,action:'approved',reviewer:'Browser QA',note:'No explicit unranked consent',identityVerified:true}});expect(denied.status()).toBe(422);}
  await page.getByRole('button',{name:'Review Echo identities',exact:true}).click();await expect(page.getByLabel('Echo 1 identity',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Retry strict recognition',exact:true})).toBeEnabled();
+ await expect(page.getByText('To confirm, enter an audit note',{exact:false})).toBeVisible();
+ const retryResponse=page.waitForResponse(r=>r.url().endsWith('/api/admin/identities')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Retry strict recognition',exact:true}).click();
+ expect((await retryResponse).status()).toBe(422);await expect(page.getByLabel('Equipment identity recovery').getByRole('alert')).toContainText('retained crops');
  const pairs=[['SentryConstruct','FrostyResolve'],['QuestlessKnight','FrostyResolve'],['AbyssalMercator','FrostyResolve'],['ChopChopLeftless','FrostyResolve'],['GoldenJunrock','FrostyResolve']];
  for(let i=0;i<5;i++){await page.getByLabel('Echo '+(i+1)+' identity',{exact:true}).selectOption(pairs[i][0]);await page.getByLabel('Echo '+(i+1)+' Sonata',{exact:true}).selectOption(pairs[i][1]);}
  const save=page.getByRole('button',{name:'Confirm identities & recalculate',exact:true});await expect(save).toBeDisabled();await page.getByLabel('Identity review note (required)',{exact:true}).fill('Compared all five source portraits and Sonata icons with the equipment catalog.');await page.getByLabel('I compared all five retained portraits',{exact:false}).check();await expect(save).toBeEnabled();

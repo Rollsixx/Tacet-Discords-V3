@@ -23,3 +23,14 @@ test('IGN text segmentation retains long contiguous names and stops before separ
  pixels.fill(0);for(let x=5;x<150;x++)if(x%8<6)ink(x);for(let x=200;x<260;x++)ink(x);
  assert.ok(playerTextWidth(pixels,300,27)<175);
 });
+
+test('UID text bounds follow the whole digit run and exclude separated artwork',async()=>{
+ const {uidTextWidth}=await import('./card-layout.ts');
+ for(const end of [83,95,126]){
+ const pixels=new Uint8ClampedArray(160*20*4);
+ for(let x=0;x<=end;x++)if(x%10<7){let i=(5*160+x)*4;pixels[i]=190;pixels[i+1]=170;pixels[i+2]=80;}
+ for(let x=end+18;x<160;x++){let i=(5*160+x)*4;pixels[i]=190;pixels[i+1]=170;pixels[i+2]=80;}
+ const width=uidTextWidth(pixels,160,20);assert.ok(width>end-4&&width<end+10);
+ }
+ assert.equal(uidTextWidth(new Uint8ClampedArray(160*20*4),160,20),160);
+});

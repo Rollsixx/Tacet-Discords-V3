@@ -1,4 +1,4 @@
-import {CARD_HEADERS,recoverCardUid,playerTextWidth} from "./card-layout";
+import {CARD_HEADERS,recoverCardUid,playerTextWidth,uidTextWidth} from "./card-layout";
 import {legalSubstatKey,mainStatKey,recoverStatReading} from "./ocr-readings";
 import { createWorker, PSM } from "tesseract.js";
 import { recoverEchoCost } from "./cost-recovery";
@@ -221,10 +221,12 @@ export async function recognizeBuildCard(
     const playerRegion={...CARD_HEADERS.player,width:playerTextWidth(playerPixels.data,playerPixels.width,playerPixels.height)};
     const playerHeader = await read(playerRegion, "In-game name");
     const uidHeader = await read(CARD_HEADERS.uid, "UID");
+    const uidPixels=image.getContext("2d",{willReadFrequently:true})!.getImageData(CARD_HEADERS.uidDigits.x,CARD_HEADERS.uidDigits.y,CARD_HEADERS.uidDigits.width,CARD_HEADERS.uidDigits.height);
+    const uidRegion={...CARD_HEADERS.uidDigits,width:uidTextWidth(uidPixels.data,uidPixels.width,uidPixels.height)};
     const uid=await recoverCardUid(uidHeader.value,async variant=>{
       onProgress?.({completed,total,label:"Retrying UID from the screenshot"});
       await worker.setParameters({tessedit_char_whitelist:"0123456789",tessedit_pageseg_mode:PSM.SINGLE_LINE});
-      const result=(await worker.recognize(cropRegion(image,CARD_HEADERS.uidDigits,variant===0?3:4))).data;
+      const result=(await worker.recognize(cropRegion(image,uidRegion,variant===0?3:4))).data;
       return {text:result.text,confidence:result.confidence};
     });
     identity = {...parseCardIdentity(characterHeader.value, playerHeader.value, uidHeader.value),uid};

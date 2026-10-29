@@ -155,7 +155,7 @@ export function validateEchoSlot(
 
     const statKey = parsed.name + (parsed.percent ? ":percent" : ":flat");
     const allowedRolls=(rollTable.values as Record<string,number[]>)[statKey];
-    if(!allowedRolls?.some(v=>Math.abs(v-parsed.amount)<1e-6))issues.push({code:"UNSUPPORTED_ROLL",message:`Substat ${position}: ${field.value} is not an allowed five-star Echo roll. Reimport a clear original card; stats stay locked.`});
+    if(!allowedRolls?.some(v=>Math.abs(v-parsed.amount)<1e-6))issues.push({code:"UNSUPPORTED_ROLL",message:`Substat ${position}: ${field.value} does not match the pinned optimizer’s five-star Echo roll table. Compare it with the original card. If the card shows this exact value, it needs source-data review; rescanning will not resolve a catalog mismatch. Stats stay locked.`});
     if (seen.has(statKey)) {
       issues.push({
         code: "DUPLICATE_SUBSTAT",
