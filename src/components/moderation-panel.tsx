@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import {SubstatCorrection} from "./substat-correction";
 import {IdentityReview} from "./identity-review";
 import {ScoringReadinessCard} from "./scoring-readiness";
 import {assessmentReadiness} from "@/lib/scanner/scoring-readiness";
@@ -158,6 +159,7 @@ export function ModerationPanel() {
       <ScoringReadinessCard value={assessmentReadiness(selected.data.assessment)}/>
       {assessmentReadiness(selected.data.assessment).awaitingRotation&&<section className="identity-review" aria-label="Official rotation required"><h3>Equipment verified · awaiting official rotation</h3><p>All five Echoes and Sonata sets are confirmed. Identity recognition does not need to be repeated. You can approve this build as unranked now; it will be included in the first rotation preview and scored after you confirm publication.</p><button className="outline-button" disabled={busy} onClick={()=>{setRotationCharacter(selected.character);void navigate('rotations');}}>Open {selected.character} rotation</button></section>}
       {!selected.data.assessment?.eligible&&selected.data.assessment?.rollsVerified===false&&<section className="identity-review" aria-label="Original screenshot required"><h3>Review original numbers and source data</h3><p>The saved numeric reading does not match the pinned optimizer roll table. Echo and Sonata identity confirmation cannot repair a numeric or catalog discrepancy. The retained portraits do not include the stat text.</p><p>Compare the original 1920 × 1080 card first. If the reading differs, reimport the original. If the card shows that exact value, the source roll table needs review; repeatedly rescanning the same card will not fix it. This record, its approval and UID verification are preserved.</p><Link className="outline-button" href="/import" target="_blank" rel="noopener noreferrer">Open Import in a new tab</Link></section>}
+      {selected.status==='pending'&&selected.data.assessment?.rollsVerified===false&&<SubstatCorrection id={selected.id} slots={selected.data.slots} token={token.trim()} reviewer={reviewer} onUpdated={refreshRecovered}/>}
       {!selected.data.assessment?.eligible&&!assessmentReadiness(selected.data.assessment).awaitingRotation&&selected.data.assessment?.rollsVerified!==false&&<IdentityReview id={selected.id} token={token.trim()} reviewer={reviewer} onUpdated={refreshRecovered} onWorking={setBusy}/>}
       <div className="bs-review-fields"><label className="field"><span>Reviewer name (audit trail)</span><input ref={reviewerInput} value={reviewer} maxLength={64} onChange={e=>changeReviewer(e.target.value)} /></label><label className="field"><span>Review note</span><textarea aria-label="Review note" value={note} maxLength={500} onChange={e=>setNote(e.target.value)} placeholder="Optional context for the audit history" /></label></div>
       {selected.status==='pending'&&selected.identityVerified&&<p className="bs-inherited">✓ Verified UID · Automatically inherited. Build approval and scoring readiness are still required.</p>}

@@ -1,3 +1,5 @@
+import {validateEchoSlot} from "../scanner/stat-validation.ts";
+import {allowedSubstatCorrection} from "../scanner/substat-options.ts";
 import {visualReadiness,assessmentReadiness} from "../scanner/scoring-readiness.ts";
 import { latestResonators } from "../resonators.ts";
 import { createHash, randomUUID } from "node:crypto";
@@ -279,4 +281,33 @@ export async function adminPlayerBuilds(uid:string,page=1,db:Client=database()){
  if(!player.rows.length)throw new HttpError(404,'Player UID not found.');
  const row=player.rows[0];
  return {...await listBuilds({uid,page,includePending:true},db),player:{uid:String(row.uid),ign:String(row.ign),identityVerified:Boolean(row.identity_verified),verifiedAt:row.verified_at,pending:Number(row.pending),approved:Number(row.approved)}};
+}
+
+/** Restricted correction of a single OCR substat. Never grants scoring eligibility. */
+export async function correctEchoSubstat(id:string, slot:number, position:number, expected:string, replacement:string, reviewer:string, note:string, db:Client=database()){
+ if(!Number.isInteger(slot)||slot<1||slot>5||!Number.isInteger(position)||position<1||position>5)throw new HttpError(400,'Invalid Echo or substat position.');
+ if(!allowedSubstatCorrection(replacement))throw new HttpError(400,'Replacement must be a pinned legal Echo substat roll.');
+ if(reviewer.trim().length<2||reviewer.length>64||note.trim().length<20||note.length>500)throw new HttpError(400,'Reviewer and detailed in-game evidence note required (at least 20 characters).');
+ const tx=await db.transaction('write');
+ try{
+  const found=await tx.execute({sql:'SELECT data,status FROM submissions WHERE id=?',args:[id]});
+  if(!found.rows.length)throw new HttpError(404,'Submission not found.');
+  if(String(found.rows[0].status)!=='pending')throw new HttpError(409,'Only pending submissions may receive corrections.');
+  const data=JSON.parse(String(found.rows[0].data));
+  const target=data.slots?.[slot-1];const field=target?.substats?.[position-1];
+  if(!field||field.value!==expected)throw new HttpError(409,'Stored reading changed. Refresh before correcting.');
+  if(expected===replacement)throw new HttpError(400,'Choose a different roll value.');
+  const revised=structuredClone(data);
+  revised.slots[slot-1].substats[position-1]={...field,value:replacement};
+  const issues=revised.slots.flatMap((s: Parameters<typeof validateEchoSlot>[0])=>validateEchoSlot(s));
+  if(issues.some((issue: {code:string;message:string})=>issue.code!=='UNSUPPORTED_ROLL'))throw new HttpError(422,'Correction creates an invalid Echo combination: '+issues.find((issue: {code:string;message:string})=>issue.code!=='UNSUPPORTED_ROLL')?.message);
+  // Preserve the OCR source separately; do not falsely assert the source image matches.
+  revised.assessment={...revised.assessment,eligible:false,rollsVerified:false,catalogReview:true,calculation:undefined,
+    reason:'Moderator-corrected substat requires independent in-game evidence verification before ranked scoring.'};
+  revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,replacement,reviewer:reviewer.trim(),note:note.trim(),at:new Date().toISOString()}];
+  await tx.execute({sql:"UPDATE submissions SET data=? WHERE id=? AND status='pending'",args:[JSON.stringify(revised),id]});
+  await tx.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[id]});
+  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),`Echo ${slot}, substat ${position}: ${expected} -> ${replacement}. ${note.trim()}`,new Date().toISOString()]});
+  await tx.commit();return {slot,position,original:expected,replacement,ranked:false};
+ }finally{tx.close();}
 }
