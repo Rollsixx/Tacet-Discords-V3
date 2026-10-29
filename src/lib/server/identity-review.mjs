@@ -34,7 +34,8 @@ export function validateIdentities(input,slots){
 export async function repairIdentities(db,id,input){
  must(input&&['retry','confirm'].includes(input.operation),'Choose retry or confirm.',400);
  must(typeof input.reviewer==='string'&&input.reviewer.trim().length>=2&&input.reviewer.length<=64,'Reviewer name required.',400);
- must(typeof input.note==='string'&&input.note.length<=500&&(input.operation==='retry'||input.note.trim().length>=10),'Provide an audit note of 10–500 characters for identity confirmation.',400);
+ input={...input,note:input.note??''};
+ must(typeof input.note==='string'&&input.note.length<=500,'Optional note must contain at most 500 characters.',400);
  const auditNote=input.note.trim()||'Retried strict equipment recognition from retained source evidence.';
  const {row,data}=await snapshot(db,id);must(input.revision===hash(String(row.data)),'This build changed. Reload its identity review.',409);
  must(repairEvidence(row,data),'Source evidence is incomplete. Reimport the original screenshot.');must(SUPPORTED.includes(String(row.character)),'This resonator does not have an integrated scoring policy.');
@@ -58,6 +59,6 @@ export async function repairIdentities(db,id,input){
   const audit=JSON.stringify({note:auditNote,method:input.operation,before,after:identities,sourceHash:proof.sourceHash,cropHash:proof.cropHash});
   await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,input.operation==='confirm'?'echo_identities_confirmed':'echo_recognition_retried',input.reviewer.trim(),audit,at]});
   await tx.execute({sql:'INSERT INTO build_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'rescore',input.reviewer.trim(),'Identity recovery; '+input.operation+'; '+(calculation.policyId||'awaiting-owner-rotation/1'),at]});
-  await tx.commit();return {ok:true,id,score:row.status==='approved'&&Number(row.identity_verified)===1?calculation.score:null,status:row.status,eligible:next.assessment.eligible};
+  await tx.commit();if(next.substatCorrections?.length){const {revalidateCorrectedBuilds}=await import('./correction-workflow.mjs');await revalidateCorrectedBuilds(db,{uid:String(row.uid)});}return {ok:true,id,score:row.status==='approved'&&Number(row.identity_verified)===1?calculation.score:null,status:row.status,eligible:next.assessment.eligible};
  }finally{tx.close();}
 }

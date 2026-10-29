@@ -92,4 +92,8 @@ export const migrations = [
     `CREATE TRIGGER rotation_approved_update AFTER UPDATE OF data,status,identity_verified ON submissions WHEN OLD.status='approved' OR NEW.status='approved' BEGIN INSERT INTO rotation_clock VALUES(NEW.character,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1; END`,
     `CREATE TRIGGER rotation_approved_delete AFTER DELETE ON submissions WHEN OLD.status='approved' BEGIN INSERT INTO rotation_clock VALUES(OLD.character,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1; END`,
   ]},
+  {version:8,statements:[
+    `CREATE TABLE submission_source_evidence (submission_id TEXT PRIMARY KEY REFERENCES submissions(id) ON DELETE CASCADE, image BLOB NOT NULL CHECK(length(image)<=1500000), source_hash TEXT NOT NULL, original_ocr TEXT NOT NULL, original_slots TEXT NOT NULL, displayed_slots TEXT NOT NULL, created_at TEXT NOT NULL)`,
+    `CREATE TRIGGER immutable_source_evidence BEFORE UPDATE ON submission_source_evidence BEGIN SELECT RAISE(ABORT,'Original screenshot and OCR evidence are immutable'); END`,
+  ]},
 ];

@@ -20,6 +20,10 @@ if(process.env.FIRST_ROTATION_BROWSER_FIXTURE==='true'){
  await db.execute({sql:'UPDATE submissions SET character=?,data=? WHERE id=?',args:[character,JSON.stringify(f.data),f.id]});
  }
 }
+if(process.env.CORRECTION_BROWSER_FIXTURE==='true'){
+ const {seedCorrection,ensureTestRotation}=await import('../tests/fixtures/corrected-build.mjs');
+ for(const [character,uid]of [['Carlotta','833333335'],['Rebecca','833333337']]){await ensureTestRotation(db,character);await seedCorrection(db,character,{uid});}
+}
 db.close();
 const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", "3100", "--hostname", "127.0.0.1"], {
   stdio: "inherit",

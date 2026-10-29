@@ -139,3 +139,9 @@ test('locked Echo evidence rejects altered values and stores canonical source cr
   assert.equal(assessment.maxMainStatsVerified,true);
  }finally{db.close();}
 });
+
+
+test('accepted original screenshots and full OCR traces are retained immutably',{skip:!originals||!process.env.USER_BUILD_CARD_UID,timeout:60000},async()=>{
+ const card=cards.find(c=>c.file.startsWith('Carlotta')),image=await readFile(originals+'/'+card.file),db=createClient({url:'file::memory:'});
+ try{await migrate(db);const body=fixture(process.env.USER_BUILD_CARD_UID);const fields=inputFor(card);body.character='Carlotta';body.slots=body.slots.map((s,i)=>({...s,...fields.slots[i]}));body.sourceImage='data:image/png;base64,'+image.toString('base64');const saved=await submit(validateSubmission(body),db,true);const evidence=(await db.execute({sql:'SELECT * FROM submission_source_evidence WHERE submission_id=?',args:[saved.id]})).rows[0];assert.deepEqual(Buffer.from(evidence.image),image);assert.ok(JSON.parse(evidence.original_ocr).length>35);assert.deepEqual(JSON.parse(evidence.original_slots),JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[saved.id]})).rows[0].data).assessment.sourceSlots);await assert.rejects(db.execute({sql:"UPDATE submission_source_evidence SET source_hash='changed' WHERE submission_id=?",args:[saved.id]}),/immutable/);}finally{db.close();}
+});

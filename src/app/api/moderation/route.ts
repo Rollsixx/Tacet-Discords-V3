@@ -24,11 +24,12 @@ export async function POST(request: Request) {
   try {
     authorize(request);
     const input = await readJson(request, 4096);
+    if(record(input)&&input.note===undefined)input.note="";
     if (!record(input) || typeof input.id !== "string" || !/^[a-f0-9-]{36}$/.test(input.id) ||
       !["approved", "rejected"].includes(String(input.action)) || typeof input.reviewer !== "string" ||
       input.reviewer.trim().length < 2 || input.reviewer.length > 64 ||
       typeof input.note !== "string" || input.note.length > 500 || typeof input.identityVerified !== "boolean") {
-      throw new HttpError(400, "Valid review action, reviewer and note required.");
+      throw new HttpError(400, "Valid review action and moderator name required; note is optional.");
     }
     await moderate(input.id, input.action as "approved" | "rejected", input.reviewer.trim(), input.note, input.identityVerified, undefined, input.allowUnranked===true);
     return json({ ok: true });
@@ -37,8 +38,8 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
  try {
-  authorize(request);const input=await readJson(request,4096);
-  if(!record(input)||typeof input.identityVerified!=="boolean"||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Valid player verification, reviewer and note required.");
+  authorize(request);const input=await readJson(request,4096);if(record(input)&&input.note===undefined)input.note="";
+  if(!record(input)||typeof input.identityVerified!=="boolean"||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Valid player verification and moderator name required; note is optional.");
   if(typeof input.uid==='string'&&/^\d{8,12}$/.test(input.uid))return json({ok:true,...await setUidVerification(input.uid,input.identityVerified,input.reviewer.trim(),input.note)});
   if(typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id))throw new HttpError(400,'Valid player UID or approved build ID required.');
   return json({ok:true,...await setPlayerVerification(input.id,input.identityVerified,input.reviewer.trim(),input.note)});
@@ -47,7 +48,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
  try {
-  authorize(request);const input=await readJson(request,4096);
+  authorize(request);const input=await readJson(request,4096);if(record(input)&&input.note===undefined)input.note="";
   if(!record(input)||typeof input.id!=="string"||!/^[a-f0-9-]{36}$/.test(input.id)||input.confirm!==true||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Confirm deletion and provide a reviewer name and note.");
   return json({ok:true,...await deleteBuild(input.id,input.reviewer.trim(),input.note)});
  }catch(error){return failure(error);}
@@ -55,7 +56,7 @@ export async function DELETE(request: Request) {
 
 export async function PUT(request:Request){
  try{
-  authorize(request);const input=await readJson(request,4096);
+  authorize(request);const input=await readJson(request,4096);if(record(input)&&input.note===undefined)input.note="";
   if(!record(input)||typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id)||typeof input.slot!=='number'||typeof input.position!=='number'||typeof input.expected!=='string'||typeof input.replacement!=='string'||typeof input.reviewer!=='string'||typeof input.note!=='string')throw new HttpError(400,'Invalid Echo substat correction.');
   return json({ok:true,...await correctEchoSubstat(input.id,input.slot,input.position,input.expected,input.replacement,input.reviewer,input.note)});
  }catch(error){return failure(error);}

@@ -67,3 +67,13 @@ Out-of-table values that match three independent server reads can be retained wi
 The observed Suisuli OCR spelling maps explicitly to Suisui in the shared browser/server header parser. Other unknown names are not guessed.
 
 The admin header identifies its compiled release. A visible-tab/60-second health check detects a newer server release and offers an explicit reload, preserving unsaved work until the owner chooses to reload. Existing tabs opened before this guard was installed must be reloaded once. Repeated note typing and consent changes are covered by desktop/mobile tests that assert exactly one identity panel for unresolved equipment and zero for verified waiting builds.
+
+## Authenticated moderator correction and automatic ranking
+
+Corrections now share one workflow for every supported resonator. The moderator chooses an exact pinned legal roll of the same stat type and unit; notes are optional. The workflow checks the original server verification hash/UID, validates the full canonical server slot array after correction, verifies all Echo/Sonata identities and max main stats, calculates the active policy, and checks the authoritative player verification flag. Passing builds are approved and their calculation persisted atomically, with no second approval. Approved builds can also be corrected. Existing calculation details and correction audit records are preserved.
+
+Unknown identities, unsupported data, unverified UIDs, invalid remaining rolls and missing official rotations are real blockers. Corrections are retained without a fabricated score. Corrected builds are revalidated when identities are resolved, a UID is verified, an owner publishes a rotation, and during production maintenance. Preview deployments never run production database maintenance.
+
+Migration 8 retains future original screenshot bytes, source hash, every server OCR read (including retries/confidence/regions), canonical original slots and the original displayed slots in an immutable private evidence table. Moderator corrections never replace this evidence. Older submissions retain their available raw readings, snapshots and audit history; missing historical full screenshots cannot be recreated. The private evidence API requires moderator authentication. Explicit build deletion removes the retained evidence along with the build.
+
+The separately stored `scripts/maintenance/authorized-corrections.json` contains explicit owner requests, rather than character-specific validation rules. Its requested Rebecca DEF correction is applied through the same workflow, checks ambiguity, records the owner request in the audit ledger and is idempotent. A blocked request reports the exact missing requirement and never claims leaderboard membership.
