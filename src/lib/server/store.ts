@@ -309,7 +309,11 @@ export async function correctEchoSubstat(id:string, slot:number, position:number
   const at=new Date().toISOString();
   revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,replacement,reviewer:reviewer.trim(),note:note.trim()||'Moderator confirmed the correct in-game roll.',at,adminVerifiedSubstat:true}];
   const originalSourceField=revised.assessment?.sourceSlots?.[slot-1]?.substats?.[position-1];
-  if(!originalSourceField||originalSourceField.value!==expected||revised.assessment?.statsVerified!==true||!revised.assessment.sourceHash||revised.assessment.sourceUid!==String(row.uid))throw new HttpError(422,'Original server-verified source evidence is missing or inconsistent.');
+  if(revised.assessment?.statsVerified!==true)throw new HttpError(422,'The original screenshot numeric fields were not server-verified. This submission cannot be ranked through a stat correction.');
+  if(!originalSourceField)throw new HttpError(422,'The original server-verified Echo substat is missing from the submission.');
+  if(originalSourceField.value!==expected)throw new HttpError(409,'The original OCR reading differs from the selected value. Refresh the submission.');
+  if(!/^[a-f0-9]{64}$/.test(String(revised.assessment.sourceHash||'')))throw new HttpError(422,'Original screenshot verification hash is missing. The submission needs verified source evidence before ranking.');
+  if(String(revised.assessment.sourceUid)!==String(row.uid))throw new HttpError(422,'Original screenshot UID does not match the submitted UID.');
   const scoringSlots=structuredClone(revised.assessment.sourceSlots);
   scoringSlots[slot-1].substats[position-1]={...originalSourceField,value:replacement};
   revised.slots=scoringSlots;
