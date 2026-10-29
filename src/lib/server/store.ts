@@ -287,7 +287,7 @@ export async function adminPlayerBuilds(uid:string,page=1,db:Client=database()){
 export async function correctEchoSubstat(id:string, slot:number, position:number, expected:string, replacement:string, reviewer:string, note:string, db:Client=database()){
  if(!Number.isInteger(slot)||slot<1||slot>5||!Number.isInteger(position)||position<1||position>5)throw new HttpError(400,'Invalid Echo or substat position.');
  if(!allowedSubstatCorrection(replacement))throw new HttpError(400,'Replacement must be a pinned legal Echo substat roll.');
- if(reviewer.trim().length<2||reviewer.length>64||!note.trim()||note.length>500)throw new HttpError(400,'Reviewer and correction reason required.');
+ if(reviewer.trim().length<2||reviewer.length>64||note.length>500)throw new HttpError(400,'Valid reviewer and correction note required.');
  const tx=await db.transaction('write');
  try{
   const found=await tx.execute({sql:'SELECT uid,character,data,status,identity_verified FROM submissions WHERE id=?',args:[id]});
@@ -307,7 +307,7 @@ export async function correctEchoSubstat(id:string, slot:number, position:number
   const invalid=issues.find((issue:{code:string;message:string})=>issue.code!=='UNSUPPORTED_ROLL');
   if(invalid)throw new HttpError(422,'Invalid Echo combination: '+invalid.message);
   const at=new Date().toISOString();
-  revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,replacement,reviewer:reviewer.trim(),note:note.trim(),at,adminVerifiedSubstat:true}];
+  revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,replacement,reviewer:reviewer.trim(),note:note.trim()||'Moderator confirmed the correct in-game roll.',at,adminVerifiedSubstat:true}];
   const originalSourceField=revised.assessment?.sourceSlots?.[slot-1]?.substats?.[position-1];
   if(!originalSourceField||originalSourceField.value!==expected||revised.assessment?.statsVerified!==true||!revised.assessment.sourceHash||revised.assessment.sourceUid!==String(row.uid))throw new HttpError(422,'Original server-verified source evidence is missing or inconsistent.');
   const scoringSlots=structuredClone(revised.assessment.sourceSlots);
@@ -345,9 +345,9 @@ export async function correctEchoSubstat(id:string, slot:number, position:number
   if(ranked){
    await tx.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[id,calculation.score,ENGINE_VERSION,DATA_VERSION,calculation.referenceCaseVersion,at,calculation.policyId,JSON.stringify(calculation)]});
    await recordRotationScore(tx,id,String(row.character),revised,calculation,at);
-   await tx.execute({sql:'INSERT INTO moderation_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'approved',reviewer.trim(),'Auto-approved after administrator-confirmed legal substat correction. '+note.trim(),at]});
+   await tx.execute({sql:'INSERT INTO moderation_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'approved',reviewer.trim(),'Auto-approved after moderator-confirmed legal substat correction. '+(note.trim()||'Verified against the in-game roll.'),at]});
   }
-  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),'Echo '+slot+', substat '+position+': '+expected+' -> '+replacement+'. '+note.trim(),at]});
+  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),'Echo '+slot+', substat '+position+': '+expected+' -> '+replacement+'. '+(note.trim()||'Moderator confirmed the correct in-game roll.'),at]});
   await tx.commit();
   return {slot,position,original:expected,replacement,ranked,reason:ranked?'Approved and ranked automatically.':revised.assessment.reason};
  }finally{tx.close();}
