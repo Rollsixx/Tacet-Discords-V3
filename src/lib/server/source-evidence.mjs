@@ -7,7 +7,7 @@ import {CARD_HEADERS,recoverCardUid,uidTextWidth} from '../scanner/card-layout.t
 import {parseCardIdentity} from '../scanner/card-identity.ts';
 import {recoverEchoCost} from '../scanner/cost-recovery.ts';
 import {agreedReading,legalSubstatKey,mainStatKey,sourceFailure} from './ocr-agreement.mjs';
-import {validateEchoSlot} from '../scanner/stat-validation.ts';
+import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import {SUPPORTED,diagnoseSlots,identitiesFromReport,assessEquipment} from './scoring.mjs';
 const languagePath=resolve(process.cwd(),'node_modules/@tesseract.js-data/eng/4.0.0');
@@ -71,18 +71,29 @@ export async function assessSource(input){
    const substats=[];
    for(const [j,top] of [880,918,950,984,1019].entries()){
     const region={left:64+offset,top,width:320,height:28};
-    const raw=await confirm(await read(region),region,client.substats[j].value,legalSubstatKey,i+1,'substat '+(j+1));
+    let raw;
+    if(legalSubstatKey(client.substats[j].value))raw=await confirm(await read(region),region,client.substats[j].value,legalSubstatKey,i+1,'substat '+(j+1));
+    else{
+     // Out-of-table values may be retained for unranked review only. All three
+     // server image reads must exactly match the locked client reading.
+     const key=v=>{const s=parseSubstat(v);return s?JSON.stringify(s):null;};
+     const wanted=key(client.substats[j].value),reads=[await read(region),await read(region,{linear:true}),await read(region,{linear:true,scale:4})];
+     if(!wanted||!reads.every(v=>key(v)===wanted))throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo ${i+1}, substat ${j+1}: source reads do not agree. Retry the original card; stats stay locked.`,{slot:i+1,field:'substat '+(j+1)});
+     raw=reads[0];
+    }
     substats.push({raw,value:raw});
    }
    slots.push({slot:i+1,cost:{raw:cost,value:cost},mainStat:{raw:main,value:client.mainStat.value},substats});
   }
-  for(const slot of slots){const issue=validateEchoSlot(slot)[0];if(issue)throw Error('Echo '+slot.slot+': '+issue.message);}
+  const rollIssues=slots.flatMap(slot=>validateEchoSlot(slot).map(issue=>({...issue,slot:slot.slot})));
+  const invalid=rollIssues.find(issue=>issue.code!=='UNSUPPORTED_ROLL');if(invalid)throw Error('Echo '+invalid.slot+': '+invalid.message);
   statsVerified=true;sourceSlots=slots;
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
   visualReport=await diagnoseSlots(decoded,slots.map(x=>Number(x.cost.value)));
   if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
   if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:levelIssue};
+  if(rollIssues.length)return {eligible:false,catalogReview:true,sourceUid,statsVerified,rollsVerified:false,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:'Source numbers verified; optimizer roll-table review required. This build can be approved as unranked, but cannot score. '+rollIssues.map(i=>'Echo '+i.slot+': '+i.message).join(' ')};
   const identities=identitiesFromReport(visualReport);
   const equipment=await assessEquipment(input.character,slots,identities);
   return {...equipment,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:equipment.reason||'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash};

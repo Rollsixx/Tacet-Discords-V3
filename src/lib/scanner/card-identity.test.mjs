@@ -9,3 +9,9 @@ test('card headers extract editable IGN and exact UID without character level', 
  assert.equal(parseCardIdentity('Aemeath LV.90','Player ID:Name','UID:123').uid,'');
  assert.equal(parseCardIdentity('Cartethyia LV.90','Player ID:Name','UID:900445927 LV90').uid,'');
 });
+
+test('specific observed Suisui OCR confusion resolves to the canonical supported name',()=>{
+ assert.equal(parseCardIdentity('Suisuli LV.90','','').character,'Suisui');
+ assert.equal(parseCardIdentity('Suisui LV.90','','').character,'Suisui');
+ assert.equal(parseCardIdentity('Unknown','','').character,'Unknown');
+});

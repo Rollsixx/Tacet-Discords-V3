@@ -19,9 +19,11 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   const [serverReadiness,setServerReadiness]=useState<ScoringReadiness|null>(null);
   const [copyStatus, setCopyStatus] = useState("");
   const issues = result.slots.flatMap(validateEchoSlot);
+  const structuralIssues=issues.filter(issue=>issue.code!=="UNSUPPORTED_ROLL");
+  const catalogReview=issues.length>0&&structuralIssues.length===0;
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy || checking || id || issues.length || !uid || !character || !confirmed) return;
+    if (busy || checking || id || structuralIssues.length || !uid || !character || !confirmed) return;
     setBusy(true); setError("");
     try {
       const bitmap = await createImageBitmap(file);
@@ -58,12 +60,13 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
       {onReset && <button type="button" className="action" onClick={onReset}>Import another build</button>}
     </div>
   </section>;
-  const scanValid = !issues.length && Boolean(uid && character);
+  const scanValid = !structuralIssues.length && Boolean(uid && character);
   const ready = scanValid && ign.trim().length >= 2;
   return <section className="player-details-card" aria-busy={busy} aria-labelledby="player-details-title">
     <div className="player-details-heading"><div><span className="eyebrow">Finish your import</span><h2 id="player-details-title">Player details</h2><p className="muted">Check your name, confirm your card, then send it for review.</p></div><span className="scan-chip passed"><LockIcon /> Echo stats locked</span></div>
     <div className="player-build-summary"><span className="player-character-mark" aria-hidden="true">{character.slice(0,2).toUpperCase() || "?"}</span><div><strong>{character || "Character unreadable"}</strong><span>5 Echo slots · Screenshot import</span></div><span className="player-summary-state">{!scanValid ? "Rescan required" : ready ? "Ready for confirmation" : "Add your in-game name"}</span></div>
     {featuredResonators.find(r=>r.name===character)?.ownerRotationRequired&&<p className="import-blocked">Imports and approval are available for {character}. Ranking requires an owner-published rotation; verified equipment is retained so you will not need to reimport when it is published.</p>}
+    {catalogReview&&<p className="import-blocked">Only a roll-table discrepancy remains. You may submit this card for unranked moderator review. The server must independently confirm every number from the original; no score is granted.</p>}
     {issues.length > 0 && <p className="import-blocked" role="status">{issues.length} stat issue(s) need review. Compare the marked fields with the original card. Retry unreadable text; if an exact visible value is rejected by the optimizer roll table, source data must be reviewed. Stats stay locked.</p>}
     {!uid && <p className="field-error" role="alert">UID could not be read. Upload a clear original card; UID cannot be entered manually.</p>}
     {readiness&&!readiness.ready&&<p className="import-blocked" role="status">{readiness.reason} You can send this scan for moderator review, but it cannot rank until its equipment identities and scoring checks pass.</p>}

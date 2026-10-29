@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  env: {NEXT_PUBLIC_APP_RELEASE: process.env.VERCEL_GIT_COMMIT_SHA || "local"},
   cacheComponents: true,
   serverExternalPackages: ["@libsql/client", "tesseract.js", "sharp"],
   // OCR runs in a worker thread, whose transitive imports are invisible to tracing.

@@ -21,7 +21,7 @@ Sources: https://github.com/Arikatsu/WutheringWaves_Data/tree/3.7 (English multi
 
 The affected retained Carlotta build also contains `DEF 11.9%`, which is absent from the pinned optimizer's DEF roll table. Its original screenshot is no longer retained, so the system must not guess a replacement value. Recognition recovery now records the corrected Echo identities and reports the exact illegal slot/value while preserving every numeric stat, approval and verification flag. It remains unranked until a clearer original is reimported successfully.
 
-The browser and submission validation share `substat-rolls.json`, derived directly from the pinned optimizer. Unknown rolls are blocked before upload, and original-image verification independently checks the extracted fields. Readiness separates readable text from allowed rolls. Identity correction cannot override numeric legality. Failed numeric recovery is audited and idempotent; no score is inserted.
+The browser and submission validation share `substat-rolls.json`, derived directly from the pinned optimizer. Unlisted rolls block scoring. Cards whose only validation issues are unlisted rolls may be sent for unranked review with original evidence; three server image reads must agree exactly on each such field. Structural errors, duplicate stats and invalid ranges still block submission. Readiness separates readable text from allowed rolls. Identity correction cannot override numeric legality. Failed numeric recovery is audited and idempotent; no score is inserted.
 
 ## Browser/server verification agreement
 
@@ -58,3 +58,12 @@ Strict identity recognition can be retried without a typed note; a default audit
 UID extraction measures the gold digit line before OCR in both browser and server. It does not assume a nine-digit UID or substitute, truncate or pad recognized digits. Two independently scaled reads must still agree at the existing confidence threshold.
 
 A visible number absent from the pinned optimizer roll table is a source-data discrepancy, not necessarily unreadable OCR. For example, the supplied Rebecca card displays DEF 11.9%, while the pinned and upstream `src/echoes/stats.ts` tables contain 11.8%. The scanner preserves 11.9% and blocks scoring; it must not snap that value to 11.8% or recommend endless rescans. Resolve the verified source discrepancy before changing accepted roll data.
+
+
+### Follow-up: retained unranked source discrepancies and stale admin tabs
+
+Out-of-table values that match three independent server reads can be retained with `catalogReview: true`, `statsVerified: true`, `rollsVerified: false` and `eligible: false`. No calculation is created, active rotation application cannot promote them, and moderators still need explicit unranked approval plus an audit reason. This allows the exact Rebecca 11.9% record to reach moderation without altering numbers or treating it as a valid scoring roll. Conflicting OCR remains blocked.
+
+The observed Suisuli OCR spelling maps explicitly to Suisui in the shared browser/server header parser. Other unknown names are not guessed.
+
+The admin header identifies its compiled release. A visible-tab/60-second health check detects a newer server release and offers an explicit reload, preserving unsaved work until the owner chooses to reload. Existing tabs opened before this guard was installed must be reloaded once. Repeated note typing and consent changes are covered by desktop/mobile tests that assert exactly one identity panel for unresolved equipment and zero for verified waiting builds.

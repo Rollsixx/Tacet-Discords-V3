@@ -40,7 +40,7 @@ export function validateSubmission(input: unknown) {
       slot: index + 1, cost: field(item.cost), mainStat: field(item.mainStat), substats: item.substats.map(field),
     };
     const issues = validateEchoSlot(stats);
-    if (issues.length) throw new HttpError(400, `Echo ${index + 1}: ${issues[0].message}`);
+    if (issues.length && (!input.sourceImage || issues.some(issue=>issue.code!=="UNSUPPORTED_ROLL"))) throw new HttpError(400, `Echo ${index + 1}: ${issues[0].message}`);
     return { ...stats, portrait: pngCrop(item.portrait, 192, 182), sonata: pngCrop(item.sonata, 56, 56) };
   });
   let sourceImage: Buffer | undefined;

@@ -8,6 +8,6 @@ export async function GET(){
  try{
   const row=await database().execute('SELECT MAX(version) AS version FROM schema_migrations');
   const ready=Number(row.rows[0]?.version)===migrations.at(-1)?.version&&(process.env.MODERATOR_TOKEN||'').length>=32;
-  return json({ok:ready,database:ready?'ready':'setup-required',scoring:scoringReadiness},ready?200:503);
+  return json({release:process.env.NEXT_PUBLIC_APP_RELEASE||'local',ok:ready,database:ready?'ready':'setup-required',scoring:scoringReadiness},ready?200:503);
  }catch{return json({ok:false,database:'unavailable'},503);}
 }
