@@ -91,8 +91,8 @@ export async function assessSource(input){
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
   visualReport=await diagnoseSlots(decoded,slots.map(x=>Number(x.cost.value)));
-  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
-  if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:levelIssue};
+  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
+  if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:levelIssue};
   if(rollIssues.length)return {eligible:false,catalogReview:true,sourceUid,statsVerified,rollsVerified:false,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:'Source numbers verified; optimizer roll-table review required. This build can be approved as unranked, but cannot score. '+rollIssues.map(i=>'Echo '+i.slot+': '+i.message).join(' ')};
   const identities=identitiesFromReport(visualReport);
   const equipment=await assessEquipment(input.character,slots,identities);
