@@ -15,7 +15,7 @@ let active=false;
 export async function assessSource(input){
  if(!input.sourceImage)return {eligible:false,reason:'Original screenshot evidence is required for scoring.'};
  if(active)return {eligible:false,reason:'Scoring worker busy; resubmit later for scoring.'};
- active=true;let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;let stage='image';let retries=0;
+ active=true;const ocrReadings=[];let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;let stage='image';let retries=0;
  try{
   const image=input.sourceImage;
   const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
@@ -30,7 +30,7 @@ export async function assessSource(input){
    for(let i=0;i<data.length;i+=4){const gray=Math.round(.299*data[i]+.587*data[i+1]+.114*data[i+2]);const value=Math.max(0,Math.min(255,(gray-128)*1.5+128));data[i]=data[i+1]=data[i+2]=value;}
    let png=await sharp(data,{raw:{width:info.width,height:info.height,channels:4}}).png().toBuffer();
    if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:info.width+32,height:info.height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
-   try{const {data:result}=await worker.recognize(png);return {text:result.text.replace(/\s+/g,' ').trim(),confidence:result.confidence};}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
+   try{const {data:result}=await worker.recognize(png);const reading={text:result.text.replace(/\s+/g,' ').trim(),confidence:result.confidence};ocrReadings.push({region,scale,linear,padded,...reading});return reading;}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
   }
   const read=async(region,options)=>(await readResult(region,options)).text;
   async function confirm(primary,region,expected,key,slot,field){
@@ -71,17 +71,17 @@ export async function assessSource(input){
    const substats=[];
    for(const [j,top] of [880,918,950,984,1019].entries()){
     const region={left:64+offset,top,width:320,height:28};
-    let raw;
-    if(legalSubstatKey(client.substats[j].value))raw=await confirm(await read(region),region,client.substats[j].value,legalSubstatKey,i+1,'substat '+(j+1));
+    const primary=await read(region);let raw;
+    if(legalSubstatKey(client.substats[j].value))raw=await confirm(primary,region,client.substats[j].value,legalSubstatKey,i+1,'substat '+(j+1));
     else{
      // Out-of-table values may be retained for unranked review only. All three
      // server image reads must exactly match the locked client reading.
      const key=v=>{const s=parseSubstat(v);return s?JSON.stringify(s):null;};
-     const wanted=key(client.substats[j].value),reads=[await read(region),await read(region,{linear:true}),await read(region,{linear:true,scale:4})];
+     const wanted=key(client.substats[j].value),reads=[primary,await read(region,{linear:true}),await read(region,{linear:true,scale:4})];
      if(!wanted||!reads.every(v=>key(v)===wanted))throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo ${i+1}, substat ${j+1}: source reads do not agree. Retry the original card; stats stay locked.`,{slot:i+1,field:'substat '+(j+1)});
      raw=reads[0];
     }
-    substats.push({raw,value:raw});
+    substats.push({raw:primary,value:raw});
    }
    slots.push({slot:i+1,cost:{raw:cost,value:cost},mainStat:{raw:main,value:client.mainStat.value},substats});
   }
@@ -91,16 +91,16 @@ export async function assessSource(input){
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
   visualReport=await diagnoseSlots(decoded,slots.map(x=>Number(x.cost.value)));
-  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
-  if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:levelIssue};
-  if(rollIssues.length)return {eligible:false,catalogReview:true,sourceUid,statsVerified,rollsVerified:false,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,reason:'Source numbers verified; optimizer roll-table review required. This build can be approved as unranked, but cannot score. '+rollIssues.map(i=>'Echo '+i.slot+': '+i.message).join(' ')};
+  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
+  if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:levelIssue};
+  if(rollIssues.length)return {eligible:false,catalogReview:true,sourceUid,statsVerified,rollsVerified:false,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:'Source numbers verified; optimizer roll-table review required. This build can be approved as unranked, but cannot score. '+rollIssues.map(i=>'Echo '+i.slot+': '+i.message).join(' ')};
   const identities=identitiesFromReport(visualReport);
   const equipment=await assessEquipment(input.character,slots,identities);
-  return {...equipment,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,maxMainStatsVerified,visualReport,reason:equipment.reason||'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash};
+  return {...equipment,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,ocrReadings,maxMainStatsVerified,visualReport,reason:equipment.reason||'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash};
  }catch(error){
   const failure=error?.sourceFailure||(statsVerified?{code:'SCORING_BLOCKED',message:error instanceof Error?error.message:'Scoring validation failed.'}:stage==='worker'?{code:'OCR_SERVICE_UNAVAILABLE',message:'Screenshot verification could not start. Please try again shortly.'}:{code:'SOURCE_UNREADABLE',message:'Echo stats could not be verified from this image. Retry with the original 1920 × 1080 card; stats remain locked.'});
   console.warn('Source verification failed',JSON.stringify({code:failure.code,slot:failure.slot,field:failure.field}));
-  return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,maxMainStatsVerified,visualReport,failure,reason:failure.message};
+  return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,failure,reason:failure.message};
  }
  finally{try{await worker?.terminate();}catch{/* Keep the original diagnostic. */}active=false;}
 }

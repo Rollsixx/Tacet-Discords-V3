@@ -1,5 +1,4 @@
-import {validateEchoSlot} from "../scanner/stat-validation.ts";
-import {allowedSubstatCorrection} from "../scanner/substat-options.ts";
+import {revalidateCorrectedBuilds} from './correction-workflow.mjs';
 import {visualReadiness,assessmentReadiness} from "../scanner/scoring-readiness.ts";
 import { latestResonators } from "../resonators.ts";
 import { createHash, randomUUID } from "node:crypto";
@@ -8,7 +7,7 @@ import { database } from "./database.ts";
 import { HttpError, type SubmissionInput } from "./validation.ts";
 import { DAMAGE_CORE_VERSION } from "./damage-core.ts";
 import { assessSource } from "./source-evidence.mjs";
-import { ENGINE_VERSION, DATA_VERSION, POLICY_VERSION, SUPPORTED, assessEquipment, identitiesFromReport } from "./scoring.mjs";
+import { ENGINE_VERSION, DATA_VERSION, POLICY_VERSION, SUPPORTED } from "./scoring.mjs";
 import sharp from "sharp";
 import {OWNER_ROTATION_REQUIRED,AWAITING_ROTATION_POLICY} from "../game-data/scoring-policies.mjs";
 import {scoreActiveRotation,recordRotationScore,applyPublishedRotation} from "./rotations/store.mjs";
@@ -29,7 +28,8 @@ export async function rateLimit(key: string, max: number, db: Client = database(
 }
 export async function submit(input: SubmissionInput, db: Client = database(), requireSourceUid = false) {
   const sourceAssessment = await assessSource(input);
-  const assessment = {...sourceAssessment, ...(sourceAssessment.statsVerified && input.sourceImage ? {cropEvidenceVersion:'source-crops/1'} : {})};
+  const retainedAssessment={...sourceAssessment};delete retainedAssessment.ocrReadings;
+  const assessment = {...retainedAssessment, ...(sourceAssessment.statsVerified && input.sourceImage ? {cropEvidenceVersion:'source-crops/1'} : {})};
   if (requireSourceUid && assessment.reason.startsWith("Scoring worker busy")) throw new HttpError(429, "Scanner is busy. Please try again in a moment.");
   if (requireSourceUid && assessment.failure?.code==='OCR_SERVICE_UNAVAILABLE')throw new HttpError(503,assessment.failure.message);
   if (requireSourceUid && !assessment.statsVerified&&assessment.failure)throw new HttpError(400,assessment.failure.message);
@@ -66,6 +66,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     if (Number(recent.rows[0].count) >= 10) throw new HttpError(429, "Please wait before submitting another build for this UID.");
     await tx.execute({ sql: "INSERT INTO players(uid,created_at) VALUES (?,?) ON CONFLICT(uid) DO NOTHING", args: [input.uid, createdAt] });
     await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at,identity_verified) VALUES (?,?,?,?,?,?,?,(SELECT identity_verified FROM players WHERE uid=?))", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt, input.uid] });
+    if(input.sourceImage&&assessment.statsVerified&&assessment.sourceHash)await tx.execute({sql:'INSERT INTO submission_source_evidence VALUES (?,?,?,?,?,?,?)',args:[id,input.sourceImage,assessment.sourceHash,JSON.stringify(sourceAssessment.ocrReadings||[]),JSON.stringify(assessment.sourceSlots),JSON.stringify(input.slots.map(({slot,cost,mainStat,substats})=>({slot,cost,mainStat,substats}))),createdAt]});
     for (const slot of sourceCrops) {
       for (const kind of ["portrait", "sonata"] as const) {
         await tx.execute({ sql: "INSERT INTO assets(id,submission_id,slot,kind,png) VALUES (?,?,?,?,?)", args: [`${id}-${slot.slot}-${kind}`, id, slot.slot, kind, slot[kind]] });
@@ -83,7 +84,7 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
       const saved = await tx.execute({ sql: "SELECT uid FROM submissions WHERE id=? AND status='pending'", args: [id] });
       if (!saved.rows.length) throw new HttpError(409, "Submission is missing or has already been reviewed.");
       await tx.execute({ sql: "INSERT INTO rejection_events VALUES (?,?,?,?,?)", args: [randomUUID(), id, reviewer, note, now] });
-      for (const table of ["assets", "calculation_results", "build_events", "moderation_events", "rotation_run_scores"]) {
+      for (const table of ["submission_source_evidence", "assets", "calculation_results", "build_events", "moderation_events", "rotation_run_scores"]) {
         await tx.execute({ sql: `DELETE FROM ${table} WHERE submission_id=?`, args: [id] });
       }
       await tx.execute({ sql: "DELETE FROM submissions WHERE id=?", args: [id] });
@@ -98,7 +99,6 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
     if(prepared!==pendingData)await tx.execute({sql:"UPDATE submissions SET data=? WHERE id=? AND status='pending'",args:[JSON.stringify(prepared),id]});
     const assessed=prepared.assessment;
     if(!assessed?.eligible&&allowUnranked!==true)throw new HttpError(422,'Scoring is blocked. Resolve the Echo identities first, or explicitly approve this build as unranked.');
-    if(!assessed?.eligible&&note.trim().length<10)throw new HttpError(400,'Explain why this build is being approved as unranked (at least 10 characters).');
     const uid=String(pending.rows[0].uid);
     if(identityVerified)await applyUidVerification(tx,uid,true,reviewer,note,now);
     // A review checkbox cannot revoke a previously verified UID. Revocation is explicit.
@@ -113,7 +113,7 @@ export async function moderate(id: string, action: "approved" | "rejected", revi
         await recordRotationScore(tx,id,String((await tx.execute({sql:'SELECT character FROM submissions WHERE id=?',args:[id]})).rows[0].character),JSON.parse(String(saved.rows[0].data)),calculation,now);
       }
     }
-    await tx.execute({ sql: "INSERT INTO moderation_events VALUES (?,?,?,?,?,?)", args: [randomUUID(), id, action, reviewer, (!assessed?.eligible?"Approved as unranked: ":"")+note, now] });
+    await tx.execute({ sql: "INSERT INTO moderation_events VALUES (?,?,?,?,?,?)", args: [randomUUID(), id, action, reviewer, (!assessed?.eligible?"Approved as unranked: ":"")+(note.trim()||assessed?.reason||"Moderator approved this build."), now] });
     await tx.commit();
   } finally { tx.close(); }
 }
@@ -151,7 +151,7 @@ function publicBuild(row: Row) {
       id: String(row.id), rank: row.global_rank == null ? null : Number(row.global_rank), uid: String(row.uid), ign: String(row.ign), character: String(row.character),
       status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
       identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
-      data: data as { assessment?: {eligible: boolean; awaitingRotation?:boolean; reason: string; statsVerified?:boolean; rollsVerified?:boolean; visualReport?:import("../scanner/scoring-readiness.ts").VisualReportSlot[]; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalHp?:number;totalDef?:number;totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+      data: data as { assessment?: {eligible: boolean; awaitingRotation?:boolean; reason: string; statsVerified?:boolean; rollsVerified?:boolean; sourceSlots?:{slot:number;substats:{raw?:string;value:string}[]}[]; originalSourceSlots?:{slot:number;substats:{raw?:string;value:string}[]}[]; visualReport?:import("../scanner/scoring-readiness.ts").VisualReportSlot[]; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: {totalHp?:number;totalDef?:number;totalAtk?:number;totalCritRate?:number;totalCritDMG?:number;energyRegen?:number}; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
     }; }
 
 export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
@@ -185,18 +185,16 @@ async function applyUidVerification(tx: Awaited<ReturnType<Client['transaction']
  if(Boolean(player.rows[0].identity_verified)!==verified||builds.rows.length)await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),uid,verified?'player_verified':'player_unverified',reviewer,note,now]});
  return {updated:builds.rows.length};
 }
-export async function setPlayerVerification(id:string, verified:boolean, reviewer:string, note:string, db:Client=database()){
- const tx=await db.transaction('write');
- try{
-  const selected=await tx.execute({sql:"SELECT uid FROM submissions WHERE id=? AND status='approved'",args:[id]});
-  if(!selected.rows.length)throw new HttpError(404,'Approved build not found.');
-  const result=await applyUidVerification(tx,String(selected.rows[0].uid),verified,reviewer,note,new Date().toISOString());
-  await tx.commit();return result;
- }finally{tx.close();}
+export async function setPlayerVerification(id:string,verified:boolean,reviewer:string,note:string,db:Client=database()){
+ const row=(await db.execute({sql:"SELECT uid FROM submissions WHERE id=? AND status='approved'",args:[id]})).rows[0];
+ if(!row)throw new HttpError(404,'Approved build not found.');
+ return setUidVerification(String(row.uid),verified,reviewer,note,db);
 }
 export async function setUidVerification(uid:string,verified:boolean,reviewer:string,note:string,db:Client=database()){
- const tx=await db.transaction('write');
- try{const result=await applyUidVerification(tx,uid,verified,reviewer,note,new Date().toISOString());await tx.commit();return result;}finally{tx.close();}
+ const tx=await db.transaction('write');let result;
+ try{result=await applyUidVerification(tx,uid,verified,reviewer,note,new Date().toISOString());await tx.commit();}finally{tx.close();}
+ if(verified)await revalidateCorrectedBuilds(db,{uid});
+ return result;
 }
 
 export async function adminOverview(db: Client = database()) {
@@ -229,7 +227,7 @@ export async function deleteBuild(id: string, reviewer: string, note: string, db
     // Preserve decisions in a ledger without foreign keys before removing evidence.
     for(const table of ['moderation_events','build_events']) await tx.execute({sql:`INSERT INTO admin_audit_events SELECT id,submission_id,action,reviewer,note,created_at FROM ${table} WHERE submission_id=?`,args:[id]});
     await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'deleted',reviewer,note,new Date().toISOString()]});
-    for(const table of ['assets','calculation_results','build_events','moderation_events','rotation_run_scores']) await tx.execute({sql:`DELETE FROM ${table} WHERE submission_id=?`,args:[id]});
+    for(const table of ['submission_source_evidence','assets','calculation_results','build_events','moderation_events','rotation_run_scores']) await tx.execute({sql:`DELETE FROM ${table} WHERE submission_id=?`,args:[id]});
     await tx.execute({sql:'DELETE FROM submissions WHERE id=?',args:[id]});
     const uid=String(saved.rows[0].uid);
     await tx.execute({sql:'DELETE FROM players WHERE uid=? AND identity_verified=0 AND NOT EXISTS (SELECT 1 FROM submissions WHERE uid=?)',args:[uid,uid]});
@@ -283,78 +281,4 @@ export async function adminPlayerBuilds(uid:string,page=1,db:Client=database()){
  return {...await listBuilds({uid,page,includePending:true},db),player:{uid:String(row.uid),ign:String(row.ign),identityVerified:Boolean(row.identity_verified),verifiedAt:row.verified_at,pending:Number(row.pending),approved:Number(row.approved)}};
 }
 
-/** A moderator attests the corrected numeric OCR value. Original OCR remains in the audit ledger. */
-export async function correctEchoSubstat(id:string, slot:number, position:number, expected:string, replacement:string, reviewer:string, note:string, db:Client=database()){
- if(!Number.isInteger(slot)||slot<1||slot>5||!Number.isInteger(position)||position<1||position>5)throw new HttpError(400,'Invalid Echo or substat position.');
- if(!allowedSubstatCorrection(replacement))throw new HttpError(400,'Replacement must be a pinned legal Echo substat roll.');
- if(reviewer.trim().length<2||reviewer.length>64||note.length>500)throw new HttpError(400,'Valid reviewer and correction note required.');
- const tx=await db.transaction('write');
- try{
-  const found=await tx.execute({sql:'SELECT uid,character,data,status,identity_verified FROM submissions WHERE id=?',args:[id]});
-  if(!found.rows.length)throw new HttpError(404,'Submission not found.');
-  const row=found.rows[0];
-  if(String(row.status)!=='pending')throw new HttpError(409,'Only pending submissions may receive corrections.');
-  const data=JSON.parse(String(row.data));
-  const target=data.slots?.[slot-1],field=target?.substats?.[position-1];
-  if(!field||field.value!==expected)throw new HttpError(409,'Stored reading changed. Refresh before correcting.');
-  if(expected===replacement)throw new HttpError(400,'Choose a different roll value.');
-  const oldType=String(expected).replace(/[-+]?\d+(?:\.\d+)?%?\s*$/,'').trim();
-  const newType=String(replacement).replace(/[-+]?\d+(?:\.\d+)?%?\s*$/,'').trim();
-  if(oldType!==newType||expected.includes('%')!==replacement.includes('%'))throw new HttpError(422,'Correction must retain the original substat type and unit.');
-  const revised=structuredClone(data);
-  revised.slots[slot-1].substats[position-1]={...field,value:replacement};
-  const issues=revised.slots.flatMap((s:Parameters<typeof validateEchoSlot>[0])=>validateEchoSlot(s));
-  const invalid=issues.find((issue:{code:string;message:string})=>issue.code!=='UNSUPPORTED_ROLL');
-  if(invalid)throw new HttpError(422,'Invalid Echo combination: '+invalid.message);
-  const at=new Date().toISOString();
-  revised.substatCorrections=[...(revised.substatCorrections||[]),{slot,position,original:expected,serverOriginal:revised.assessment?.sourceSlots?.[slot-1]?.substats?.[position-1]?.value,replacement,reviewer:reviewer.trim(),note:note.trim()||'Moderator confirmed the correct in-game roll.',at,adminVerifiedSubstat:true}];
-  const originalSourceField=revised.assessment?.sourceSlots?.[slot-1]?.substats?.[position-1];
-  if(revised.assessment?.statsVerified!==true)throw new HttpError(422,'The original screenshot numeric fields were not server-verified. This submission cannot be ranked through a stat correction.');
-  if(!originalSourceField)throw new HttpError(422,'The original server-verified Echo substat is missing from the submission.');
-  // The displayed, locked submission value can differ from the server's retained raw OCR value.\n  // Both readings are preserved; the moderator explicitly attests the replacement.\n  if(typeof originalSourceField.value!=='string'||!originalSourceField.value.trim())throw new HttpError(422,'The original server OCR reading is unavailable.');
-  if(!/^[a-f0-9]{64}$/.test(String(revised.assessment.sourceHash||'')))throw new HttpError(422,'Original screenshot verification hash is missing. The submission needs verified source evidence before ranking.');
-  if(String(revised.assessment.sourceUid)!==String(row.uid))throw new HttpError(422,'Original screenshot UID does not match the submitted UID.');
-  revised.assessment.originalSourceSlots=structuredClone(revised.assessment.originalSourceSlots||revised.assessment.sourceSlots);\n  const scoringSlots=structuredClone(revised.assessment.sourceSlots);
-  scoringSlots[slot-1].substats[position-1]={...originalSourceField,value:replacement};
-  revised.slots=scoringSlots;
-  revised.assessment={...revised.assessment,sourceSlots:scoringSlots,rollsVerified:issues.length===0,catalogReview:issues.length>0,eligible:false,awaitingRotation:false,calculation:undefined};
-  let reason='Another Echo substat still has an unsupported roll.';
-  if(issues.length===0){
-   if(revised.assessment.maxMainStatsVerified!==true)reason='Max-level main stats are not verified.';
-   else if(!SUPPORTED.includes(String(row.character)))reason='This character has no supported scoring policy.';
-   else {
-    try{
-     const identities=identitiesFromReport(revised.assessment.visualReport||[]);
-     const equipment=await assessEquipment(String(row.character),scoringSlots,identities);
-     revised.assessment={...revised.assessment,...equipment,sourceSlots:scoringSlots,rollsVerified:true,catalogReview:false};
-     const prepared=await applyPublishedRotation(tx,String(row.character),revised);
-     revised.assessment=prepared.assessment;
-     reason=revised.assessment.reason||'Admin-confirmed legal roll; equipment verified.';
-    }catch(error){reason=error instanceof Error?error.message:'Echo identities or scoring inputs remain unverified.';}
-   }
-  }
-  let calculation=null;
-  if(revised.assessment.eligible===true){
-   try{calculation=await scoreActiveRotation(tx,String(row.character),revised)||revised.assessment.calculation||null;}
-   catch(error){reason=error instanceof Error?error.message:'Score calculation failed.';}
-  }
-  const activePolicy=(await tx.execute({sql:'SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[String(row.character)]})).rows[0];
-  const requiredPolicy=activePolicy?String(activePolicy.policy_id):POLICY_VERSION;
-  const validScore=calculation&&calculation.engineVersion===ENGINE_VERSION&&calculation.dataVersion===DATA_VERSION&&calculation.policyId===requiredPolicy&&Number.isFinite(calculation.score)&&calculation.score>0;
-  const verified=Number(row.identity_verified)===1;
-  const ranked=Boolean(validScore&&verified);
-  if(!ranked){
-   revised.assessment={...revised.assessment,reason:!verified&&validScore?'UID verification is still required before ranking.':!validScore&&revised.assessment.eligible===true?'A score matching the currently published rotation policy is required.':reason};
-  }
-  await tx.execute({sql:"UPDATE submissions SET data=?,status=?,reviewed_at=CASE WHEN ?='approved' THEN ? ELSE reviewed_at END WHERE id=? AND status='pending'",args:[JSON.stringify(revised),ranked?'approved':'pending',ranked?'approved':'pending',at,id]});
-  await tx.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[id]});
-  if(ranked){
-   await tx.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[id,calculation.score,ENGINE_VERSION,DATA_VERSION,calculation.referenceCaseVersion,at,calculation.policyId,JSON.stringify(calculation)]});
-   await recordRotationScore(tx,id,String(row.character),revised,calculation,at);
-   await tx.execute({sql:'INSERT INTO moderation_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'approved',reviewer.trim(),'Auto-approved after moderator-confirmed legal substat correction. '+(note.trim()||'Verified against the in-game roll.'),at]});
-  }
-  await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),'Echo '+slot+', substat '+position+': displayed '+expected+', server OCR '+originalSourceField.value+' -> '+replacement+'. '+(note.trim()||'Moderator confirmed the correct in-game roll.'),at]});
-  await tx.commit();
-  return {slot,position,original:expected,replacement,ranked,reason:ranked?'Approved and ranked automatically.':revised.assessment.reason};
- }finally{tx.close();}
-}
+export {correctEchoSubstat,revalidateCorrectedBuilds} from './correction-workflow.mjs';

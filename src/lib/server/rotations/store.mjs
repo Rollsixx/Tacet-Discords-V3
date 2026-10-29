@@ -202,7 +202,7 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
   await tx.execute({sql:'INSERT INTO rotation_activations VALUES (?,?,?,?,?,?)',args:[randomUUID(),run.character,run.base_version_id,version.id,id,at]});
   await tx.execute({sql:"UPDATE rotation_runs SET state='activated',updated_at=? WHERE id=?",args:[at,id]});
   await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),version.id,'rotation_published','owner',run.character+'; '+version.spec_hash+(JSON.parse(version.spec).mode===REVIEWED_MODE?'; owner confirmed combat review':''),at]});
-  await tx.commit();return {ok:true,versionId:version.id};
+  await tx.commit();const {revalidateCorrectedBuilds}=await import('../correction-workflow.mjs');const corrections=await revalidateCorrectedBuilds(db,{character:run.character});return {ok:true,versionId:version.id,corrections};
  }finally{tx.close();}
 }
 export async function scoreActiveRotation(db,character,data){
