@@ -49,7 +49,7 @@ test("transactional pending → approved journey, durable storage and private re
     assert.equal(scoringReadiness.enabled, true);
     await rateLimit("test", 1, db);
     await assert.rejects(rateLimit("test", 1, db), e => e.status === 429);
-  } finally { db.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { db.close(); await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); }
 });
 
 test("server validates all five slots, crop dimensions, OCR corrections and numeric ranges", () => {

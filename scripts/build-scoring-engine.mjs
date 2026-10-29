@@ -18,10 +18,10 @@ for(const type of ['Swords','Broadblades','Gauntlets','Pistols','Rectifiers']){
 await mkdir(join(vendor,'dist'),{recursive:true});
 await build({entryPoints:[join(root,'entry.ts')],outfile:join(vendor,'dist/index.mjs'),bundle:true,platform:'node',format:'esm',target:'node24',metafile:true,alias:{'@wutheringtools/formulas':join(root,'packages/formulas/src/index.ts'),'@':join(root,'src')},plugins:[{name:'host-module-maps',setup(b){b.onLoad({filter:/[\\/](characters|weapons)\.ts$/},async args=>{
  let source=await readFile(args.path,'utf8');
- if(args.path.endsWith('/characters/characters.ts')){
+ if(args.path.replaceAll('\\','/').endsWith('/characters/characters.ts')){
  const map=chars.map(name=>`${JSON.stringify(name)}:()=>import(${JSON.stringify('./'+name+'/index.ts')})`).join(',');
  source='const hostLoaders={'+map+'};\n'+source.replace('await import(`@/characters/${charName}/index.ts`)','await hostLoaders[charName]()');
- }else if(args.path.endsWith('/weapons/weapons.ts')){
+ }else if(args.path.replaceAll('\\','/').endsWith('/weapons/weapons.ts')){
  const map=Object.entries(weapons).map(([key,path])=>`${JSON.stringify(key)}:()=>import(${JSON.stringify(path)})`).join(',');
  source='const hostWeaponLoaders={'+map+'};\n'+source.replace('await import(`@/weapons/${type}/${weaponName}.ts`)','await hostWeaponLoaders[type+"/"+weaponName]()');
  }
