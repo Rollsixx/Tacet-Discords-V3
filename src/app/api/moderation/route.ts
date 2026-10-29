@@ -1,6 +1,6 @@
 import { authorize, failure, json, readJson } from "@/lib/server/http";
 import { HttpError, record } from "@/lib/server/validation";
-import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild } from "@/lib/server/store";
+import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild, correctEchoSubstat } from "@/lib/server/store";
 export async function GET(request: Request) {
   try {
     authorize(request);
@@ -50,5 +50,13 @@ export async function DELETE(request: Request) {
   authorize(request);const input=await readJson(request,4096);
   if(!record(input)||typeof input.id!=="string"||!/^[a-f0-9-]{36}$/.test(input.id)||input.confirm!==true||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Confirm deletion and provide a reviewer name and note.");
   return json({ok:true,...await deleteBuild(input.id,input.reviewer.trim(),input.note)});
+ }catch(error){return failure(error);}
+}
+
+export async function PUT(request:Request){
+ try{
+  authorize(request);const input=await readJson(request,4096);
+  if(!record(input)||typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id)||typeof input.slot!=='number'||typeof input.position!=='number'||typeof input.expected!=='string'||typeof input.replacement!=='string'||typeof input.reviewer!=='string'||typeof input.note!=='string')throw new HttpError(400,'Invalid Echo substat correction.');
+  return json({ok:true,...await correctEchoSubstat(input.id,input.slot,input.position,input.expected,input.replacement,input.reviewer,input.note)});
  }catch(error){return failure(error);}
 }
