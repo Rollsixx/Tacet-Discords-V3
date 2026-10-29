@@ -14,14 +14,14 @@ export function SubstatCorrection({id,slots,token,reviewer,onUpdated}:{id:string
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Correction failed.');
   setNote('');if(!data.ranked)setError(data.reason||'Correction saved; other ranking requirements remain.');await onUpdated();
  }catch(e){setError(e instanceof Error?e.message:'Correction failed.');}finally{setBusy(false);}}
- return <section className="identity-review" aria-label="Moderator Echo substat correction"><h3>Correct an Echo substat</h3><p>Choose only pinned legal rolls. Original OCR is retained. Saving confirms the administrator has checked the in-game value. Valid builds are automatically approved and ranked when all other requirements pass.</p>
+ return <section className="identity-review" aria-label="Moderator Echo substat correction"><h3>Correct an Echo substat</h3><p>Choose only pinned legal rolls. Original OCR is retained. Saving confirms the moderator has checked the correct in-game roll. Valid builds are automatically approved and ranked when all other requirements pass.</p>
   <div className="bs-review-fields"><label className="field"><span>Echo</span><select value={slot} onChange={e=>setSlot(Number(e.target.value))}>{slots.map((s,i)=><option key={i} value={i+1}>Echo {i+1}</option>)}</select></label>
   <label className="field"><span>Substat position</span><select value={position} onChange={e=>setPosition(Number(e.target.value))}>{slots[slot-1]?.substats.map((_,i)=><option key={i} value={i+1}>Substat {i+1}</option>)}</select></label>
   <label className="field"><span>Stat type</span><select value={type} onChange={e=>setType(e.target.value)}>{SUBSTAT_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.name} ({o.key.endsWith(':flat')?'flat':'%'})</option>)}</select></label>
   <label className="field"><span>Legal roll value</span><select value={selectedValue} onChange={e=>setValue(e.target.value)}>{options.map(o=><option key={o} value={o}>{o}</option>)}</select></label></div>
   <p>Stored OCR: <strong>{expected}</strong> · Proposed: <strong>{selectedValue}</strong></p>
-  <label className="field"><span>In-game evidence reference and correction reason (required)</span><textarea value={note} maxLength={500} onChange={e=>setNote(e.target.value)} placeholder="Describe where the in-game evidence was checked and why the OCR differs." /></label>
+  <label className="field"><span>Correction note (optional)</span><textarea value={note} maxLength={500} onChange={e=>setNote(e.target.value)} placeholder="Optional: add context for the audit history." /></label>
   {error&&<p className="field-error" role="alert">{error}</p>}
-  <button className="outline-button" disabled={busy||!selectedValue||!sameType||selectedValue===expected||!note.trim()||reviewer.trim().length<2} onClick={()=>void save()}>{busy?'Saving…':'Save correction and revalidate'}</button>
+  <button className="outline-button" disabled={busy||!selectedValue||!sameType||selectedValue===expected||reviewer.trim().length<2} onClick={()=>void save()}>{busy?'Saving…':'Correct roll and revalidate for ranking'}</button>
  </section>;
 }
