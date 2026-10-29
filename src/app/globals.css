@@ -1078,3 +1078,5 @@ input[readonly] { opacity: .75; cursor: default; }
 .rotation-fixed-effect p {font-size:12px;line-height:1.7;overflow-wrap:anywhere}
 .rotation-fixed-effect small {font-size:11px}
 @media(max-width:480px){.rotation-effect-categories button,.rotation-echo-costs button {padding:10px 8px}.rotation-effect-workspace .rotation-effect {padding:11px}}
+
+.rotation-equipment-reference{padding:16px;border:1px solid #354b61;border-radius:10px;background:#102235;margin:12px 0;font-size:13px;line-height:1.7;overflow-wrap:anywhere}.rotation-equipment-reference h4{margin:0 0 8px}.rotation-equipment-reference article+article{border-top:1px solid #354b61;padding-top:12px;margin-top:12px}.rotation-sonata-links{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.rotation-sonata-links button{white-space:normal;text-align:left}

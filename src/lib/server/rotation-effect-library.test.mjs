@@ -5,6 +5,7 @@ import {ROTATION_ROSTER} from '../game-data/rotation-mechanics.mjs';
 test('reference library exposes every engine Echo by cost and every Main Echo buff without permitting fixed overrides',async()=>{
  for(const character of ROTATION_ROSTER){
   const editable=await modifierCatalog(character),library=await modifierLibrary(character);
+  const all=[...editable,...library.referenceModifiers];assert.equal(new Set(all.map(m=>m.id)).size,all.length);
   assert.equal(library.mainEchoes.length,Object.keys(engine.mainEchoesData).length);
   for(const echo of library.mainEchoes){const source=engine.mainEchoesData[echo.key];assert.equal(echo.cost,({Calamity:4,Overlord:4,Elite:3,Common:1})[source.class]);assert.equal(echo.effectCount,echoBuffDefinitions(source).length);
    for(const buff of echoBuffDefinitions(source))assert.equal([...editable,...library.referenceModifiers].filter(m=>m.category==='mainEchoBuff'&&m.scope===echo.key&&m.key===buff.key).length,1,character+' '+echo.key+' '+buff.key);
@@ -18,4 +19,10 @@ test('conditional Main Echo effects still apply only to their equipped main slot
  const identities=Array.from({length:5},(_,i)=>({echo:i===0?'ReminiscenceSuhsintheInevitable':'KernelPuppetJoy',set:'HeartofSwornVigil'}));
  assert.equal(compileReviewed({actions:[action]},catalog,identities).trace[0].applied.length,1);
  identities[0].echo='ImpermanenceHeron';const inactive=compileReviewed({actions:[action]},catalog,identities);assert.equal(inactive.trace[0].applied.length,0);assert.equal(inactive.trace[0].inactive.length,1);
+});
+test('complete Sonata tiers and Echo-to-Sonata links use the same engine across the entire roster',async()=>{
+ for(const character of ROTATION_ROSTER){const library=await modifierLibrary(character);assert.equal(library.sonatas.length,Object.keys(engine.echoSetLabelMap).length);
+  for(const s of library.sonatas){assert.equal(s.name,engine.echoSetLabelMap[s.key]);assert.ok(s.tiers.length);assert.equal(new Set(s.tiers.map(t=>t.label)).size,s.tiers.length);for(const t of s.tiers){assert.ok([1,2,3,5].includes(t.pieces));assert.ok(t.description);}}
+  for(const e of library.mainEchoes){assert.deepEqual(e.sets.map(s=>s.key),engine.mainEchoesData[e.key].sets);for(const s of e.sets)assert.ok(library.sonatas.some(x=>x.key===s.key&&x.name===s.name));}
+ }
 });

@@ -3,7 +3,8 @@ import {echoBuffDefinitions} from './rotations/configuration.mjs';
 import catalog from '../game-data/fingerprints.json' with {type:'json'};
 import corrections from '../game-data/fingerprint-corrections.json' with {type:'json'};
 import supplement from '../game-data/scanner-reference-supplement.json' with {type:'json'};
-import {fingerprint,rankFingerprint,decodeFingerprintSource} from './image-fingerprint.mjs';
+import variants from '../game-data/scanner-reference-variants.json' with {type:'json'};
+import {fingerprint,rankFingerprint,decodeFingerprintSource,spatialDistance} from './image-fingerprint.mjs';
 import {SCORING_CHARACTERS,scoringPreset} from '../game-data/scoring-policies.mjs';
 import {parseSubstat} from '../scanner/stat-validation.ts';
 export const ENGINE_VERSION='wuthering-tools-b32cdbd+tacet/2.0';
@@ -13,7 +14,20 @@ export const SUPPORTED=SCORING_CHARACTERS;
 const attributes={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Basic Attack DMG Bonus':'BasicAttackDMGBonus','Heavy Attack DMG Bonus':'HeavyAttackDMGBonus','Resonance Skill DMG Bonus':'ResonanceSkillDMGBonus','Resonance Liberation DMG Bonus':'ResonanceLiberationDMGBonus','Glacio DMG Bonus':'Glacio','Fusion DMG Bonus':'Fusion','Aero DMG Bonus':'Aero','Electro DMG Bonus':'Electro','Spectro DMG Bonus':'Spectro','Havoc DMG Bonus':'Havoc','Healing Bonus':'HealingBonus',ATK:'ATK',DEF:'DEF',HP:'HP'};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
 const echoReferences=[...catalog.echoes,...supplement.echoes].map(e=>corrections.echoes.find(c=>c.key===e.key)||e);
-const echoesByCost=new Map([1,3,4].map(cost=>[cost,echoReferences.filter(e=>e.cost===cost)]));
+const allEchoReferences=[...echoReferences,...variants.echoes.flatMap(e=>e.variants.map(v=>({key:e.key,cost:e.cost,sets:e.sets,fingerprint:v.fingerprint})))];
+const echoesByCost=new Map([1,3,4].map(cost=>[cost,allEchoReferences.filter(e=>e.cost===cost)]));
+// Different renderings of one identity are not competing identities.
+function rankedEchoesFor(f,cost){const best=new Map();for(const e of rankFingerprint(f,echoesByCost.get(cost)||[]))if(!best.has(e.key))best.set(e.key,e);return [...best.values()];}
+function disambiguateSpatial(f,ranked,cost){
+ // This is only a second opinion for an otherwise ambiguous, Sonata-compatible
+ // portrait. It cannot admit images that fail the existing hash threshold.
+ const best=ranked[0];if(!best||best.difference>.18||!f.spatial)return null;
+ const close=ranked.filter(e=>e.difference-best.difference<.025);
+ if(close.length<2)return null;
+ const candidates=close.map(e=>({...e,difference:Math.min(...(echoesByCost.get(cost)||[]).filter(r=>r.key===e.key).map(r=>spatialDistance(f,r.fingerprint)))})).sort((a,b)=>a.difference-b.difference);
+ const match=matchRanked(candidates,.18,.025);
+ return match&&close.find(e=>e.key===match.key).difference<=.18?{...match,method:'foreground-colour-layout/1',hashDifference:close.find(e=>e.key===match.key).difference}:null;
+}
 const effectSignatures=new Map(Object.entries(engine.mainEchoesData).map(([key,d])=>[key,JSON.stringify([d.class,d.sets,d.modifiers,d.actions,d.alwaysEnabled],(_,v)=>typeof v==='function'?v.toString():v)]));
 function matchRanked(ranked,maximum,margin,equivalent=false){
  const best=ranked[0],next=ranked[1];
@@ -31,10 +45,18 @@ export async function identifySlots(image,costs){return identitiesFromReport(awa
 export async function identifyCrops(crops){return identitiesFromReport(await diagnoseCrops(crops));}
 export function diagnoseFingerprints(features){
  return features.map(({cost,portrait:ef,sonata:sf},i)=>{
-  const rankedSets=rankFingerprint(sf,catalog.sets),rankedEchoes=rankFingerprint(ef,echoesByCost.get(cost)||[]);
+  const rankedSets=rankFingerprint(sf,catalog.sets),rankedEchoes=rankedEchoesFor(ef,cost);
   let set=matchRanked(rankedSets,.20,.015);
-  let echo=set?matchRanked(rankedEchoes.filter(e=>e.sets.includes(set.key)),.18,.025,i>0):null;
-  if(!echo){echo=matchRanked(rankedEchoes,.18,.025,i>0);if(echo)set=matchRanked(rankedSets.filter(s=>engine.mainEchoesData[echo.key].sets.includes(s.key)),.20,.015);}
+  const compatible=set?rankedEchoes.filter(e=>e.sets.includes(set.key)):[];
+  let echo=set?(matchRanked(compatible,.18,.025,i>0)||disambiguateSpatial(ef,compatible,cost)):null;
+  if(!set){
+   // Resolve jointly when similar Sonata icons tie: neither the portrait nor
+   // the Sonata may contradict the other or exceed the original thresholds.
+   const plausibleSets=new Set(rankedSets.filter(s=>s.difference<=.20&&s.difference-rankedSets[0].difference<.015).map(s=>s.key));
+   const joint=plausibleSets.size?rankedEchoes.filter(e=>e.sets.some(s=>plausibleSets.has(s))):rankedEchoes;
+   echo=matchRanked(joint,.18,.025,i>0)||disambiguateSpatial(ef,joint,cost);
+   if(echo)set=matchRanked(rankedSets.filter(s=>engine.mainEchoesData[echo.key].sets.includes(s.key)),.20,.015);
+  }
   const candidates=rankedEchoes.filter(e=>!set||e.sets.includes(set.key)).slice(0,5).map(e=>({key:e.key,name:engine.getEchoData(e.key)?.name||e.key,difference:e.difference}));
   const sonatas=rankedSets.filter(s=>!echo||engine.mainEchoesData[echo.key].sets.includes(s.key)).slice(0,3).map(s=>({key:s.key,name:engine.echoSetLabelMap[s.key]||s.key,difference:s.difference}));
   return {slot:i+1,cost,echo:echo?.key||null,set:set?.key||null,echoMatch:echo,setMatch:set,echoCandidates:candidates,sonataCandidates:sonatas,problem:!echo?'Echo '+(i+1)+' is unknown or ambiguous.':!set?'Sonata '+(i+1)+' is unknown or ambiguous.':null};
@@ -45,15 +67,22 @@ export function identitiesFromReport(report){
  return report.map(s=>({echo:s.echo,set:s.set,echoMatch:s.echoMatch,setMatch:s.setMatch}));
 }
 export function identifyFingerprints(features){return identitiesFromReport(diagnoseFingerprints(features));}
+async function diagnoseWithDetails(features,readPortrait){
+ const initial=diagnoseFingerprints(features);
+ const unresolved=initial.filter(r=>!r.echo);
+ if(!unresolved.length)return initial;
+ await Promise.all(unresolved.map(async r=>{features[r.slot-1].portrait=await readPortrait(r.slot-1);}));
+ return diagnoseFingerprints(features);
+}
 export async function diagnoseCrops(crops){
  if(crops.length!==5)throw Error('Five retained Echo crops are required.');
  const features=await Promise.all(crops.map(async crop=>{const [portrait,sonata]=await Promise.all([fingerprint(crop.portrait),fingerprint(crop.sonata)]);return {cost:crop.cost,portrait,sonata};}));
- return diagnoseFingerprints(features);
+ return diagnoseWithDetails(features,i=>fingerprint(crops[i].portrait,undefined,true));
 }
 export async function diagnoseSlots(image,costs){
  const decoded=await decodeFingerprintSource(image);
  const features=await Promise.all(Array.from({length:5},async(_,i)=>{const [portrait,sonata]=await Promise.all([fingerprint(decoded,{left:22+i*374,top:650,width:192,height:182}),fingerprint(decoded,{left:264+i*374,top:660,width:56,height:56})]);return {cost:costs[i],portrait,sonata};}));
- return diagnoseFingerprints(features);
+ return diagnoseWithDetails(features,i=>fingerprint(decoded,{left:22+i*374,top:650,width:192,height:182},true));
 }
 
 export async function calculateStandard(character,slots,identities,managed=null){

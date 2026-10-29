@@ -25,13 +25,16 @@ export async function modifierCatalog(character,includeReferences=false){
  };
  for(const d of c.buffs||[])add('buffs',d,'Resonator');
  for(const d of w?.info?.passiveData||[])add('weaponPassives',d,w.info.name);
- for(const group of [engine.sets.setBonusEffectsOnePiece,engine.sets.setBonusEffectsOne,engine.sets.setBonusEffectsTwo])for(const [label,set]of Object.entries(group))for(const d of set.passives||[])add('echoSetPassives',d,label,label);
+ const sets=Object.fromEntries([engine.sets.setBonusEffectsOnePiece,engine.sets.setBonusEffectsOne,engine.sets.setBonusEffectsTwo].flatMap(group=>Object.entries(group)));
+ for(const [label,set]of Object.entries(sets))for(const d of set.passives||[])add('echoSetPassives',d,label,label);
  for(const [key,echo]of Object.entries(engine.mainEchoesData))for(const d of echoBuffDefinitions(echo))add('mainEchoBuff',d,echo.name||key,key);
  return result;
 }
 export async function modifierLibrary(character){
  const all=await modifierCatalog(character,true);
- return {referenceModifiers:all.filter(d=>d.automatic||d.unavailableReason),mainEchoes:Object.entries(engine.mainEchoesData).map(([key,e])=>({key,name:e.name||key,cost:({Calamity:4,Overlord:4,Elite:3,Common:1})[e.class],effectCount:echoBuffDefinitions(e).length})).sort((a,b)=>b.cost-a.cost||a.name.localeCompare(b.name))};
+ const bonuses=Object.entries(Object.fromEntries([engine.sets.setBonusEffectsOnePiece,engine.sets.setBonusEffectsOne,engine.sets.setBonusEffectsTwo].flatMap(group=>Object.entries(group))));
+ const sonatas=Object.entries(engine.echoSetLabelMap).map(([key,name])=>({key,name,tiers:bonuses.filter(([,d])=>d.name===name).map(([label,d])=>({label,pieces:Number(label.match(/(\d+) Set$/)?.[1]),description:text(d.details),effectCount:d.passives?.length||0})).sort((a,b)=>a.pieces-b.pieces)})).sort((a,b)=>a.name.localeCompare(b.name));
+ return {referenceModifiers:all.filter(d=>d.automatic||d.unavailableReason),sonatas,mainEchoes:Object.entries(engine.mainEchoesData).map(([key,e])=>({key,name:e.name||key,cost:({Calamity:4,Overlord:4,Elite:3,Common:1})[e.class],effectCount:echoBuffDefinitions(e).length,description:text(e.details),sets:e.sets.map(key=>({key,name:engine.echoSetLabelMap[key]})),attacks:(e.actions||[]).map(a=>a.label||a.key)})).sort((a,b)=>b.cost-a.cost||a.name.localeCompare(b.name))};
 }
 export function normalizeEffects(effects,catalog){
  if(effects===undefined)return [];

@@ -49,12 +49,17 @@ test('effect editor separates categories, groups every Echo by cost and preserve
  await expect(categories.getByRole('button')).toHaveCount(4);
  await categories.getByRole('button',{name:/Signature weapon/}).click();await expect(page.getByLabel('Optimizer effect for action 1',{exact:true}).locator('optgroup')).toHaveCount(0);
  await categories.getByRole('button',{name:/Sonata/}).click();await expect(page.getByLabel('Sonata set for action 1',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Sonata set for action 1',{exact:true}).locator('option')).toHaveCount(38);
+ await page.getByLabel('Sonata set for action 1',{exact:true}).selectOption('HeartofEvilsPurge');
+ const sonataReference=effects.getByRole('region',{name:'Selected Sonata reference'});
+ await expect(sonataReference.getByText('2-piece bonus',{exact:true})).toBeVisible();await expect(sonataReference.getByText('5-piece bonus',{exact:true})).toBeVisible();
+ await expect(sonataReference).toContainText('Crit. DMG');
  await categories.getByRole('button',{name:/Main Echo/}).click();const costs=page.getByRole('group',{name:'Main Echo cost for action 1',exact:true});await expect(costs.getByRole('button')).toHaveCount(3);
  const workspace=await(await request.get('/api/admin/rotations?character=Carlotta',{headers})).json();let count=0;
  for(const cost of [4,3,1]){await costs.getByRole('button',{name:new RegExp('^'+cost+' cost')}).click();const options=page.getByLabel('Main Echo for action 1',{exact:true}).locator('option');const expected=workspace.mainEchoes.filter((e:{cost:number})=>e.cost===cost).length;await expect(options).toHaveCount(expected+1);count+=expected;}
  expect(count).toBe(230);
- await costs.getByRole('button',{name:/^1 cost/}).click();await page.getByLabel('Main Echo for action 1',{exact:true}).selectOption('KernelPuppetJoy');await expect(effects.getByText('This Echo has no Main Echo stat buff',{exact:false})).toBeVisible();
- await costs.getByRole('button',{name:/^3 cost/}).click();await page.getByLabel('Main Echo for action 1',{exact:true}).selectOption('Formrender');await effects.getByText(/Automatic and read-only effects/).click();await expect(effects.locator('.rotation-fixed-effect')).not.toHaveCount(0);await expect(effects.locator('.rotation-fixed-effect input')).toHaveCount(0);
+ await costs.getByRole('button',{name:/^1 cost/}).click();await page.getByLabel('Main Echo for action 1',{exact:true}).selectOption('KernelPuppetJoy');await expect(effects.getByRole('region',{name:'Selected Echo reference'})).toContainText('Compatible Sonata sets');await expect(effects.getByText('This Echo has no Main Echo stat buff',{exact:false})).toBeVisible();
+ await costs.getByRole('button',{name:/^3 cost/}).click();await page.getByLabel('Main Echo for action 1',{exact:true}).selectOption('Formrender');await expect(effects.locator('.rotation-fixed-effect')).not.toHaveCount(0);await expect(effects.locator('.rotation-fixed-effect input')).toHaveCount(0);
  await costs.getByRole('button',{name:/^4 cost/}).click();await page.getByLabel('Main Echo for action 1',{exact:true}).selectOption('ReminiscenceSuhsintheInevitable');
  const modifier=workspace.modifiers.find((m:{category:string;scope:string})=>m.category==='mainEchoBuff'&&m.scope==='ReminiscenceSuhsintheInevitable');
  await page.getByLabel('Optimizer effect for action 1',{exact:true}).selectOption(modifier.id);await effects.getByRole('button',{name:'Add effect',exact:true}).click();await expect(effects.locator('.rotation-effect')).toContainText('Reminiscence');
