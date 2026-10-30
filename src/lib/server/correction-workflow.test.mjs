@@ -108,3 +108,37 @@ for(const character of ['Carlotta','Lucilla','Rebecca'])test(character+' histori
 test('historical verification never bypasses other invalid canonical fields',async()=>{
  const {verifyHistoricalCorrections}=await import('./correction-workflow.mjs');const db=createClient({url:'file::memory:'});try{await migrate(db);const f=await seedCorrection(db);const d=structuredClone(f.data);d.substatCorrections=[{slot:f.slot,position:f.position,original:'DEF 8.1%',replacement:'DEF 11.8%'}];d.assessment.sourceSlots[f.slot-1].substats[0].value='DEF 13.7%';await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(d),f.id]});const r=await verifyHistoricalCorrections(f.id,d.substatCorrections,'QA',true,'',db);assert.equal(r.ranked,false);assert.match(r.reason,/13.7/);}finally{db.close();}
 });
+
+
+test('saved legal correction clears stale OCR roll errors and remains available for a private first-rotation preview',async()=>{
+ const db=createClient({url:'file::memory:'});try{
+  await migrate(db);const f=await seedCorrection(db,'Sigrika');
+  const first=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);
+  assert.equal(first.ranked,false);
+  const row=(await db.execute({sql:'SELECT data FROM submissions WHERE id=?',[f.id]})).rows[0];
+  const data=JSON.parse(row.data);
+  data.assessment.reason='Source numbers verified; optimizer roll-table review required. Echo 5: Substat 5: DEF 11.9% does not match the pinned optimizer roll table.';
+  data.assessment.rollsVerified=false;data.assessment.catalogReview=true;
+  data.assessment.scoringIssues=[{slot:f.slot,position:f.position,code:'UNSUPPORTED_ROLL',value:'DEF 11.9%'}];
+  await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(data),f.id]});
+  const retry=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 11.8%','DEF 11.8%','QA','',db);
+  assert.equal(retry.ranked,false);
+  assert.equal(retry.eligible,false);
+  assert.match(retry.reason,/Awaiting the owner’s first published rotation/);
+  assert.doesNotMatch(retry.reason,/11\.9|roll-table/i);
+  const saved=JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0].data);
+  assert.equal(saved.slots[f.slot-1].substats[f.position-1].value,'DEF 11.8%');
+  assert.equal(saved.assessment.sourceSlots[f.slot-1].substats[f.position-1].value,'DEF 11.8%');
+  assert.equal(saved.assessment.originalSourceSlots[f.slot-1].substats[f.position-1].value,'DEF 11.9%');
+  assert.equal(saved.assessment.rollsVerified,true);
+  assert.equal(saved.assessment.scoringIssues,undefined);
+  assert.equal(saved.assessment.awaitingRotation,true);
+  const {rotationWorkspace,saveRotationDraft,sampleRotationDraft}=await import('./rotations/store.mjs');
+  const workspace=await rotationWorkspace(db,'Sigrika');
+  const action=workspace.catalog.find(x=>!x.mainEcho&&!['Healing','Shield','ElementalEffect'].includes(x.damageType));
+  const draft=await saveRotationDraft(db,'Sigrika',{name:'Private correction test',mode:'admin-reviewed',actions:[{type:action.type,key:action.key,count:1}]},0);
+  const preview=await sampleRotationDraft(db,'Sigrika',draft.revision);
+  assert.equal(preview.builds.some(x=>x.id===f.id&&x.status==='pending'),true);
+  assert.equal((await listLeaderboard({character:'Sigrika',search:f.uid},db)).builds.length,0);
+ }finally{db.close();}
+});
