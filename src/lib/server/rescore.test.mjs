@@ -4,7 +4,7 @@ import {createClient} from '@libsql/client';
 import {migrate} from './database.ts';
 import {fixture} from './fixtures.mjs';
 import {validateSubmission} from './validation.ts';
-import {submit,moderate,listLeaderboard} from './store.ts';
+import {submit} from './submission-store.ts';import {moderate,listLeaderboard} from './store.ts';
 import {rescoreStoredBuilds} from './rescore.mjs';
 import {DATA_VERSION,ENGINE_VERSION,POLICY_VERSION} from './scoring.mjs';
 import cases from '../game-data/scoring-cases.json' with {type:'json'};

@@ -8,7 +8,7 @@ import {ScoringReadinessCard} from "./scoring-readiness";
 import {assessmentReadiness} from "@/lib/scanner/scoring-readiness";
 import {RotationEditor} from "./rotation-editor";
 import { BuildCard } from "./build-directory";
-import type { listAdminPlayers, adminPlayerBuilds, listBuilds, adminOverview, listAdminAudit } from "@/lib/server/store";
+import type { listAdminPlayers, adminPlayerBuilds, listBuilds, adminOverview, listAdminAudit } from "@/lib/server/queries";
 type Audit = Awaited<ReturnType<typeof listAdminAudit>>;
 type Results = Awaited<ReturnType<typeof listBuilds>> & { overview: Awaited<ReturnType<typeof adminOverview>>; activity: Audit["events"] };
 type Build = Results["builds"][number];

@@ -2,7 +2,7 @@ import {connection} from 'next/server';
 import {database} from '@/lib/server/database';
 import {migrations} from '@/lib/server/schema';
 import {json} from '@/lib/server/http';
-import {scoringReadiness} from '@/lib/server/store';
+import {scoringReadiness} from '@/lib/server/scoring-info';
 export async function GET(){
  await connection();
  try{

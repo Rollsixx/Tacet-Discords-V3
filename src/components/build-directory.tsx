@@ -3,7 +3,7 @@ import {featuredResonators} from "@/lib/resonators";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { listBuilds } from "@/lib/server/store";
+import type { listBuilds } from "@/lib/server/queries";
 type Results = Awaited<ReturnType<typeof listBuilds>>;
 type Build = Results["builds"][number];
 

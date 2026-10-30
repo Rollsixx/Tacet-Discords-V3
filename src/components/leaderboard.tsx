@@ -3,7 +3,7 @@ import { ResonatorPortrait } from "./resonator-portrait";
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { listLeaderboard } from "@/lib/server/store";
+import type { listLeaderboard } from "@/lib/server/queries";
 import { compactNumber, echoCritValue, readableName } from "@/lib/leaderboards/display";
 import { featuredResonators } from "@/lib/resonators";
 type Result=Awaited<ReturnType<typeof listLeaderboard>>;

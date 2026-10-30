@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "./database.ts";
 import { validateSubmission } from "./validation.ts";
-import { findPlayers, listBuilds, submit, moderate as moderateBuild, rateLimit, scoringReadiness } from "./store.ts";
+import {submit} from './submission-store.ts';import {findPlayers,listBuilds,moderate as moderateBuild,rateLimit,scoringReadiness} from './store.ts';
 import { authorize, readJson } from "./http.ts";
 import { fixture } from "./fixtures.mjs";
 

@@ -4,13 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/function-bundle-report.mjs --check && node scripts/smoke-function-runtime.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mts",
     "test": "node --test src/lib/scanner/*.test.mjs src/lib/server/*.test.mjs src/lib/leaderboards/*.test.mjs",
     "predev": "node scripts/build-scoring-engine.mjs && node scripts/prepare-ocr.mjs",
-    "prebuild": "node scripts/build-scoring-engine.mjs && npm run catalog:check && npm run scanner:regression && node scripts/prepare-ocr.mjs",
+    "prebuild": "node scripts/check-function-platform.mjs && node scripts/build-scoring-engine.mjs && npm run catalog:check && npm run scanner:regression && node scripts/prepare-ocr.mjs",
     "test:browser": "npm run build && playwright test",
     "test:reference": "node scripts/fetch-reference-fixture.mjs && npm run test:browser",
     "pretest": "node scripts/build-scoring-engine.mjs",
@@ -21,7 +21,9 @@
     "verify": "npm test && npm run lint && npm run build",
     "db:backup": "node --env-file-if-exists=.env.local scripts/backup.mts",
     "catalog:check": "node scripts/check-catalog-completeness.mjs && node scripts/check-scanner-coverage.mjs",
-    "scanner:regression": "node --test src/lib/scanner/*.test.mjs src/lib/server/ocr-agreement.test.mjs src/lib/server/scanner-regression-matrix.test.mjs"
+    "scanner:regression": "node --test src/lib/scanner/*.test.mjs src/lib/server/ocr-agreement.test.mjs src/lib/server/scanner-regression-matrix.test.mjs",
+    "bundles:report": "node scripts/function-bundle-report.mjs --check",
+    "bundles:smoke": "node scripts/smoke-function-runtime.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

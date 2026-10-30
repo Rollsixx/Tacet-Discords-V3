@@ -5,12 +5,10 @@ import corrections from '../game-data/fingerprint-corrections.json' with {type:'
 import supplement from '../game-data/scanner-reference-supplement.json' with {type:'json'};
 import variants from '../game-data/scanner-reference-variants.json' with {type:'json'};
 import {fingerprint,rankFingerprint,decodeFingerprintSource,spatialDistance} from './image-fingerprint.mjs';
-import {SCORING_CHARACTERS,scoringPreset} from '../game-data/scoring-policies.mjs';
+import {scoringPreset} from '../game-data/scoring-policies.mjs';
 import {validateEchoSlot,parseSubstat} from '../scanner/stat-validation.ts';
-export const ENGINE_VERSION='wuthering-tools-b32cdbd+tacet/2.0';
-export const DATA_VERSION='b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5';
-export const POLICY_VERSION='solo-permanent-s0-signature-r1/2';
-export const SUPPORTED=SCORING_CHARACTERS;
+import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
+export {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 const attributes={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Basic Attack DMG Bonus':'BasicAttackDMGBonus','Heavy Attack DMG Bonus':'HeavyAttackDMGBonus','Resonance Skill DMG Bonus':'ResonanceSkillDMGBonus','Resonance Liberation DMG Bonus':'ResonanceLiberationDMGBonus','Glacio DMG Bonus':'Glacio','Fusion DMG Bonus':'Fusion','Aero DMG Bonus':'Aero','Electro DMG Bonus':'Electro','Spectro DMG Bonus':'Spectro','Havoc DMG Bonus':'Havoc','Healing Bonus':'HealingBonus',ATK:'ATK',DEF:'DEF',HP:'HP'};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
 const echoReferences=[...catalog.echoes,...supplement.echoes].map(e=>corrections.echoes.find(c=>c.key===e.key)||e);

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { latestResonators } from "@/lib/resonators";
 import { ResonatorPortrait } from "./resonator-portrait";
-import type { homeRankings } from "@/lib/server/store";
+import type { homeRankings } from "@/lib/server/queries";
 type Rankings=Awaited<ReturnType<typeof homeRankings>>;
 export function HomeOverview(){
  const router=useRouter();
