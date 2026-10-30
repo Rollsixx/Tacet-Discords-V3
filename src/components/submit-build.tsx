@@ -15,8 +15,8 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   const character = result.identity.character;
   const characterLabel = resonatorDisplayName(character);
   const [confirmed, setConfirmed] = useState(false);
-  const [avatarCharacter,setAvatarCharacter] = useState(character);
-  const [savedAvatarCharacter,setSavedAvatarCharacter] = useState(character);
+  const [avatarCharacter,setAvatarCharacter] = useState("");
+  const [savedAvatarCharacter,setSavedAvatarCharacter] = useState("");
   const [avatarSaving,setAvatarSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [id, setId] = useState("");
@@ -42,7 +42,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
       const sourceImage=await verificationImageData(file);
       const response = await fetch("/api/submissions", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid, ign, character, avatarCharacter, confirmed, sourceImage, slots: result.slots.map((slot, index) => ({ ...slot, ...visuals[index] })) }),
+        body: JSON.stringify({ uid, ign, character, ...(avatarCharacter?{avatarCharacter}:{}), confirmed, sourceImage, slots: result.slots.map((slot, index) => ({ ...slot, ...visuals[index] })) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Submission failed.");
@@ -51,7 +51,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
     finally { setBusy(false); }
   }
   async function saveAvatar() {
-    if(avatarSaving||avatarCharacter===savedAvatarCharacter)return;
+    if(avatarSaving||!avatarCharacter||avatarCharacter===savedAvatarCharacter)return;
     setAvatarSaving(true);setError("");
     try {
       const bitmap=await createImageBitmap(file);
@@ -74,7 +74,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
     <div className="receipt-icon" aria-hidden="true">✓</div>
     <div className="receipt-content"><span className="eyebrow">{submissionStatus==="approved"?"Build published":"Submission received"}</span><h2>{submissionStatus==="approved"?"Build approved and ranked":"Build saved · Pending review"}</h2>
       <p className="muted">{submissionStatus==="approved"?`Your ${characterLabel} build passed verification and scoring checks and is now on the leaderboard.`:`Your ${characterLabel} build is saved privately. It will appear in Profiles after required identity, equipment, and scoring checks are complete.`}</p>
-      <div className="receipt-avatar"><ResonatorPortrait name={savedAvatarCharacter} className="lb-monogram"/><label htmlFor="receipt-avatar">Profile avatar <select id="receipt-avatar" value={avatarCharacter} onChange={event=>setAvatarCharacter(event.target.value)}>{[...new Set(featuredResonators.map(item=>item.patchVersion))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(version=><optgroup key={version} label={`${version} Characters`}>{featuredResonators.filter(item=>item.patchVersion===version).map(item=><option key={item.name} value={item.name}>{item.displayName||item.name}</option>)}</optgroup>)}</select></label><button type="button" className="outline-button" disabled={avatarSaving||avatarCharacter===savedAvatarCharacter} onClick={saveAvatar}>{avatarSaving?"Verifying screenshot…":avatarCharacter===savedAvatarCharacter?"Current avatar":"Change avatar"}</button></div>{error&&<p className="field-error" role="alert">{error}</p>}<dl className="receipt-player"><div><dt>Player</dt><dd>{ign}</dd></div><div><dt>UID</dt><dd>{uid}</dd></div><div><dt>Echoes</dt><dd>5 · Locked</dd></div></dl>
+      <div className="receipt-avatar"><ResonatorPortrait name={avatarCharacter||savedAvatarCharacter||character} className="lb-monogram"/><label htmlFor="receipt-avatar">Profile avatar <select id="receipt-avatar" value={avatarCharacter} onChange={event=>setAvatarCharacter(event.target.value)}><option value="">Keep current avatar</option>{[...new Set(featuredResonators.map(item=>item.patchVersion))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(version=><optgroup key={version} label={`${version} Characters`}>{featuredResonators.filter(item=>item.patchVersion===version).map(item=><option key={item.name} value={item.name}>{item.displayName||item.name}</option>)}</optgroup>)}</select></label><button type="button" className="outline-button" disabled={avatarSaving||avatarCharacter===savedAvatarCharacter} onClick={saveAvatar}>{avatarSaving?"Verifying screenshot…":avatarCharacter===savedAvatarCharacter?"Current avatar":"Change avatar"}</button></div>{error&&<p className="field-error" role="alert">{error}</p>}<dl className="receipt-player"><div><dt>Player</dt><dd>{ign}</dd></div><div><dt>UID</dt><dd>{uid}</dd></div><div><dt>Echoes</dt><dd>5 · Locked</dd></div></dl>
       <ScoringReadinessCard value={serverReadiness}/>
       <div className="receipt-reference"><div><span>Submission ID</span><code>{id}</code></div><button type="button" className="outline-button" onClick={copyId}>Copy submission ID</button></div>
       {copyStatus && <p className="muted">{copyStatus}</p>}
@@ -97,7 +97,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
         <label className="player-field"><span>In-game name <small>Editable</small></span><input aria-label="In-game name" required minLength={2} maxLength={32} value={ign} onChange={e => setIgn(e.target.value)} autoComplete="off" aria-describedby="ign-help" /><small id="ign-help">Shown with your approved build.</small></label>
         <label className="player-field"><span>Wuthering Waves UID <small>Locked</small></span><input aria-label="Wuthering Waves UID" aria-describedby="uid-help" required inputMode="numeric" value={uid} readOnly aria-readonly="true" placeholder="Rescan required" /><small id="uid-help">Read from your screenshot and verified on upload.</small></label>
       </div>
-      <div className="profile-avatar-choice"><div><ResonatorPortrait name={avatarCharacter} className="lb-monogram"/><label htmlFor="profile-avatar">Profile avatar <small>Change this to any supported Resonator</small></label></div><select id="profile-avatar" value={avatarCharacter} onChange={event=>setAvatarCharacter(event.target.value)}>{[...new Set(featuredResonators.map(item=>item.patchVersion))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(version=><optgroup key={version} label={`${version} Characters`}>{featuredResonators.map(item=>item.patchVersion===version?<option key={item.name} value={item.name}>{item.displayName||item.name}</option>:null)}</optgroup>)}</select></div>
+      <div className="profile-avatar-choice"><div><ResonatorPortrait name={avatarCharacter||character} className="lb-monogram"/><label htmlFor="profile-avatar">Profile avatar <small>Change this to any supported Resonator</small></label></div><select id="profile-avatar" value={avatarCharacter} onChange={event=>setAvatarCharacter(event.target.value)}><option value="">Keep current avatar</option>{[...new Set(featuredResonators.map(item=>item.patchVersion))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(version=><optgroup key={version} label={`${version} Characters`}>{featuredResonators.map(item=>item.patchVersion===version?<option key={item.name} value={item.name}>{item.displayName||item.name}</option>:null)}</optgroup>)}</select></div>
       <label className="publish-consent"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>I checked all five Echoes against my screenshot and agree to submit this build for verification and review if needed.</span></label>
       <div className="import-submit-bar"><p>{busy ? "Verifying your screenshot and saving the build…" : "Verified accounts with scoring-ready builds are published automatically; other builds stay private until required checks are complete."}</p><button className="action" disabled={busy || checking || !confirmed || !ready}>{busy ? "Verifying screenshot…" : "Submit build"}</button></div>
     </fieldset></form>
