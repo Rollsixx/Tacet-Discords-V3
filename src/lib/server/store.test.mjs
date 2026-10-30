@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "./database.ts";
 import { validateSubmission } from "./validation.ts";
-import {submit} from './submission-store.ts';import {findPlayers,listBuilds,moderate as moderateBuild,rateLimit,scoringReadiness} from './store.ts';
+import {submit} from './submission-store.ts';import {findPlayers,listBuilds,moderate as moderateBuild,rateLimit,scoringReadiness,autoApproveVerifiedPendingBuilds,setUidVerification,listLeaderboard} from './store.ts';
+import {seedCorrection,ensureTestRotation} from '../../../tests/fixtures/corrected-build.mjs';
 import { authorize, readJson } from "./http.ts";
 import { fixture } from "./fixtures.mjs";
 
@@ -179,7 +180,7 @@ test('admin dashboard, ID search, audited approved deletion and rollback are rea
  const db=createClient({url:'file::memory:'});
  try{
   await migrate(db);
-  const firstInput=fixture();firstInput.character='Carlotta';
+  const firstInput=fixture();firstInput.character='Lucy';
   const first=await submit(validateSubmission(firstInput),db);
   const input=fixture();input.character='Hiyuki';
   const second=await submit(validateSubmission(input),db);
@@ -187,7 +188,7 @@ test('admin dashboard, ID search, audited approved deletion and rollback are rea
   assert.equal((await listBuilds({pending:true,search:first.id},db)).builds.length,1);
   await moderate(first.id,'approved','Owner label','Reviewed crops',true,db);
   await db.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[first.id,100,scoringReadiness.engineVersion,scoringReadiness.dataVersion,'test-reference',new Date().toISOString(),scoringReadiness.policyId,'{}']});
-  assert.equal((await listLeaderboard({character:'Carlotta'},db)).builds.length,1);
+  assert.equal((await listLeaderboard({character:'Lucy'},db)).builds.length,1);
   assert.deepEqual(await adminOverview(db),{pending:1,approved:1,unverified:0,players:1});
   await db.execute("CREATE TRIGGER fail_delete BEFORE INSERT ON admin_audit_events WHEN NEW.action='deleted' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
   await assert.rejects(deleteBuild(first.id,'Owner label','Test rollback',db));
@@ -195,7 +196,7 @@ test('admin dashboard, ID search, audited approved deletion and rollback are rea
   assert.equal((await db.execute({sql:'SELECT COUNT(*) n FROM assets WHERE submission_id=?',args:[first.id]})).rows[0].n,10);
   await db.execute('DROP TRIGGER fail_delete');
   await deleteBuild(first.id,'Owner label','Removed approved build',db);
-  assert.equal((await listLeaderboard({character:'Carlotta'},db)).builds.length,0);
+  assert.equal((await listLeaderboard({character:'Lucy'},db)).builds.length,0);
   assert.equal((await listBuilds({id:first.id},db)).builds.length,0);
   assert.equal((await db.execute({sql:'SELECT COUNT(*) n FROM assets WHERE submission_id=?',args:[first.id]})).rows[0].n,0);
   assert.equal((await listBuilds({pending:true},db)).builds[0].id,second.id);
@@ -214,17 +215,17 @@ test('leaderboard rank remains global when searching and ties use stable build I
   await migrate(db);
   const ids=[];
   for(const [i,score] of [300,200,200].entries()){
-   const body=fixture('88888888'+i);body.character='Carlotta';body.ign='Rank Player '+i;
+   const body=fixture('88888888'+i);body.character='Lucy';body.ign='Rank Player '+i;
    const saved=await submit(validateSubmission(body),db);ids.push(saved.id);
    await moderate(saved.id,'approved','QA reviewer','',true,db);
    await db.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[saved.id,score,scoringReadiness.engineVersion,scoringReadiness.dataVersion,'test-reference',new Date().toISOString(),scoringReadiness.policyId,'{}']});
   }
-  const all=await listLeaderboard({character:'Carlotta'},db);
+  const all=await listLeaderboard({character:'Lucy'},db);
   assert.deepEqual(all.builds.map(b=>b.rank),[1,2,3]);
   assert.equal(all.builds[0].id,ids[0]);
   assert.deepEqual(all.builds.slice(1).map(b=>b.id),ids.slice(1).sort());
   const lowest=all.builds[2];
-  assert.equal((await listLeaderboard({character:'Carlotta',search:lowest.uid},db)).builds[0].rank,3);
+  assert.equal((await listLeaderboard({character:'Lucy',search:lowest.uid},db)).builds[0].rank,3);
  }finally{db.close();}
 });
 
@@ -315,5 +316,34 @@ test('migration backfills only previously verified approved UIDs and is repeatab
   await migrate(db);await migrate(db);
   const rows=await db.execute('SELECT uid,identity_verified FROM players ORDER BY uid');assert.deepEqual(rows.rows.map(r=>Number(r.identity_verified)),[1,0]);
   const builds=await db.execute('SELECT identity_verified FROM submissions ORDER BY id');assert.deepEqual(builds.rows.map(r=>Number(r.identity_verified)),[1,1,1,0]);
+ }finally{db.close();}
+});
+
+for(const character of ['Lucy','Lucilla'])test(character+' clean verified build automatically publishes only with active rotation scoring',async()=>{
+ const db=createClient({url:'file::memory:'});try{
+  await migrate(db);await ensureTestRotation(db,character);
+  const fixture=await seedCorrection(db,character,{incorrect:false,uid:character==='Lucy'?'833333341':'833333342'});
+  const result=await autoApproveVerifiedPendingBuilds(fixture.uid,db);
+  assert.equal(result.approved,1);assert.equal((await listBuilds({id:fixture.id},db)).builds[0].status,'approved');
+  const ranked=(await listLeaderboard({character,search:fixture.uid},db)).builds[0];assert.equal(ranked.id,fixture.id);assert.ok(ranked.score>0);
+ }finally{db.close();}
+});
+test('unverified clean builds wait for UID review, then eligible builds publish automatically',async()=>{
+ const db=createClient({url:'file::memory:'});try{
+  await migrate(db);await ensureTestRotation(db,'Lucy');const fixture=await seedCorrection(db,'Lucy',{incorrect:false,verified:false,uid:'833333343'});
+  assert.deepEqual(await autoApproveVerifiedPendingBuilds(fixture.uid,db),{approved:0,checked:1});
+  assert.equal((await listBuilds({id:fixture.id,pending:true},db)).builds[0].status,'pending');
+  await setUidVerification(fixture.uid,true,'QA','Manually matched UID',db);
+  assert.equal((await listLeaderboard({character:'Lucy',search:fixture.uid},db)).builds[0].id,fixture.id);
+ }finally{db.close();}
+});
+test('verified builds with unresolved Echo roll errors stay pending for moderator correction',async()=>{
+ const {correctEchoSubstat}=await import('./correction-workflow.mjs');
+ const db=createClient({url:'file::memory:'});try{
+  await migrate(db);await ensureTestRotation(db,'Lucy');const fixture=await seedCorrection(db,'Lucy',{uid:'833333344'});
+  assert.deepEqual(await autoApproveVerifiedPendingBuilds(fixture.uid,db),{approved:0,checked:1});
+  assert.equal((await listBuilds({id:fixture.id,pending:true},db)).builds[0].status,'pending');
+  const corrected=await correctEchoSubstat(fixture.id,fixture.slot,fixture.position,'DEF 8.1%','DEF 11.8%','QA','',db);
+  assert.equal(corrected.ranked,true,corrected.reason);assert.equal((await listLeaderboard({character:'Lucy',search:fixture.uid},db)).builds[0].id,fixture.id);
  }finally{db.close();}
 });

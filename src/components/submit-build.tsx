@@ -15,6 +15,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [id, setId] = useState("");
+  const [submissionStatus,setSubmissionStatus]=useState<"pending"|"approved">("pending");
   const [error, setError] = useState("");
   const [serverReadiness,setServerReadiness]=useState<ScoringReadiness|null>(null);
   const [copyStatus, setCopyStatus] = useState("");
@@ -40,7 +41,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Submission failed.");
-      setServerReadiness(data.readiness||null);setId(data.id); onSubmitted?.();
+      setServerReadiness(data.readiness||null);setSubmissionStatus(data.status==="approved"?"approved":"pending");setId(data.id); onSubmitted?.();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to submit. Try again."); }
     finally { setBusy(false); }
   }
@@ -50,13 +51,13 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   }
   if (id) return <section className="submission-receipt" role="status" aria-label="Submission confirmation">
     <div className="receipt-icon" aria-hidden="true">✓</div>
-    <div className="receipt-content"><span className="eyebrow">Submission received</span><h2>Build saved · Pending moderation</h2>
-      <p className="muted">Your {character} build is saved. It will appear in Profiles after approval.</p>
+    <div className="receipt-content"><span className="eyebrow">{submissionStatus==="approved"?"Build published":"Submission received"}</span><h2>{submissionStatus==="approved"?"Build approved and ranked":"Build saved · Pending review"}</h2>
+      <p className="muted">{submissionStatus==="approved"?`Your ${character} build passed verification and scoring checks and is now on the leaderboard.`:`Your ${character} build is saved privately. It will appear in Profiles after required identity, equipment, and scoring checks are complete.`}</p>
       <dl className="receipt-player"><div><dt>Player</dt><dd>{ign}</dd></div><div><dt>UID</dt><dd>{uid}</dd></div><div><dt>Echoes</dt><dd>5 · Locked</dd></div></dl>
       <ScoringReadinessCard value={serverReadiness}/>
       <div className="receipt-reference"><div><span>Submission ID</span><code>{id}</code></div><button type="button" className="outline-button" onClick={copyId}>Copy submission ID</button></div>
       {copyStatus && <p className="muted">{copyStatus}</p>}
-      <p className="receipt-note">Keep this ID for reference. Your build stays private while it awaits review.</p>
+      <p className="receipt-note">{submissionStatus==="approved"?"Your build is public on the leaderboard. Keep this ID for reference.":"Keep this ID for reference while your build awaits required checks."}</p>
       {onReset && <button type="button" className="action" onClick={onReset}>Import another build</button>}
     </div>
   </section>;
@@ -75,8 +76,8 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
         <label className="player-field"><span>In-game name <small>Editable</small></span><input aria-label="In-game name" required minLength={2} maxLength={32} value={ign} onChange={e => setIgn(e.target.value)} autoComplete="off" aria-describedby="ign-help" /><small id="ign-help">Shown with your approved build.</small></label>
         <label className="player-field"><span>Wuthering Waves UID <small>Locked</small></span><input aria-label="Wuthering Waves UID" aria-describedby="uid-help" required inputMode="numeric" value={uid} readOnly aria-readonly="true" placeholder="Rescan required" /><small id="uid-help">Read from your screenshot and verified on upload.</small></label>
       </div>
-      <label className="publish-consent"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>I checked all five Echoes against my screenshot and agree to publish this build after moderator approval.</span></label>
-      <div className="import-submit-bar"><p>{busy ? "Verifying your screenshot and saving the build…" : "Your build stays private until a moderator approves it."}</p><button className="action" disabled={busy || checking || !confirmed || !ready}>{busy ? "Verifying screenshot…" : "Submit for moderation"}</button></div>
+      <label className="publish-consent"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>I checked all five Echoes against my screenshot and agree to submit this build for verification and review if needed.</span></label>
+      <div className="import-submit-bar"><p>{busy ? "Verifying your screenshot and saving the build…" : "Verified accounts with scoring-ready builds are published automatically; other builds stay private until required checks are complete."}</p><button className="action" disabled={busy || checking || !confirmed || !ready}>{busy ? "Verifying screenshot…" : "Submit build"}</button></div>
     </fieldset></form>
     {error && <div className="import-submit-error"><p className="field-error" role="alert">{error}</p>{onRetryScan&&<button type="button" className="outline-button" disabled={busy||checking} onClick={onRetryScan}>Rescan same screenshot</button>}</div>}
   </section>;

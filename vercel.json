@@ -1,5 +1,10 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build && node scripts/deployment-maintenance.mjs",
-  "ignoreCommand": "node scripts/ignore-docs-only-build.mjs"
+  "ignoreCommand": "node scripts/ignore-docs-only-build.mjs",
+  "git": {
+    "deploymentEnabled": {
+      "development/verified-uid-auto-publish": false
+    }
+  }
 }

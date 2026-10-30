@@ -8,6 +8,7 @@ import {assessSource} from './source-evidence.mjs';
 import {visualReadiness,assessmentReadiness} from '../scanner/scoring-readiness.ts';
 import {POLICY_VERSION} from './scoring-versions.mjs';
 import {applyPublishedRotation} from './rotations/store.mjs';
+import {autoApproveVerifiedSubmission} from './approval-workflow.mjs';
 export async function submit(input: SubmissionInput, db: Client = database(), requireSourceUid = false) {
   const sourceAssessment = await assessSource(input);
   const retainedAssessment={...sourceAssessment};delete retainedAssessment.ocrReadings;
@@ -55,6 +56,11 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
       }
     }
     await tx.commit();
-    return { ok: true, id, status: "pending", createdAt, readiness:{...visualReadiness(assessment.visualReport||[],assessment.statsVerified===true),rolls:assessment.rollsVerified??(assessment.eligible?true:null),ready:data.assessment.eligible,awaitingRotation:assessmentReadiness(data.assessment).awaitingRotation,reason:data.assessment.reason} };
+    let status:"pending"|"approved"="pending";
+    if(requireSourceUid){
+      try{if(await autoApproveVerifiedSubmission(id,db))status="approved";}
+      catch{ /* A durable submission remains pending if automatic scoring or audit work is unavailable. */ }
+    }
+    return { ok: true, id, status, createdAt, readiness:{...visualReadiness(assessment.visualReport||[],assessment.statsVerified===true),rolls:assessment.rollsVerified??(assessment.eligible?true:null),ready:data.assessment.eligible,awaitingRotation:assessmentReadiness(data.assessment).awaitingRotation,reason:data.assessment.reason} };
   } finally { tx.close(); }
 }
