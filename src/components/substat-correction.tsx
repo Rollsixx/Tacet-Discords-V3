@@ -6,6 +6,8 @@ import {SUBSTAT_OPTIONS} from "@/lib/scanner/substat-options";
 type Slot={slot:number;substats:{raw?:string;value:string}[]};
 export function SubstatCorrection({id,slots,sourceSlots,token,reviewer,onUpdated}:{id:string;slots:Slot[];sourceSlots?:Slot[];token:string;reviewer:string;onUpdated:(result?:{ranked?:boolean;reason?:string})=>Promise<void>}){
  const [slot,setSlot]=useState(1),[position,setPosition]=useState(1),[type,setType]=useState("DEF:percent"),[value,setValue]=useState(""),[note,setNote]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ const [success,setSuccess]=useState("");
+ const [stage,setStage]=useState("");
  const [evidence,setEvidence]=useState<{image:string}|null>(null);
  async function inspect(){setError('');try{const r=await fetch('/api/admin/source-evidence?id='+id,{headers:{Authorization:'Bearer '+token},cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error);setEvidence(data);}catch(e){setError(e instanceof Error?e.message:'Original evidence unavailable.');}}
  const expected=slots[slot-1]?.substats[position-1]?.value||"";
