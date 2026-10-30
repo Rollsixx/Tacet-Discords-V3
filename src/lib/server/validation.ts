@@ -1,4 +1,5 @@
 import { validateEchoSlot } from "../scanner/stat-validation.ts";
+import { featuredResonators } from "../resonators.ts";
 import type { RecognizedSlot } from "../scanner/build-card-ocr";
 
 export class HttpError extends Error {
@@ -48,6 +49,9 @@ export function validateSubmission(input: unknown) {
     if (typeof input.sourceImage !== "string" || input.sourceImage.length > 1500000 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(input.sourceImage)) throw new HttpError(400, "Invalid or oversized original screenshot evidence.");
     sourceImage = Buffer.from(input.sourceImage.split(",")[1], "base64");
   }
-  return { uid: input.uid, ign: text(input.ign, 32, 2), character: text(input.character, 64), slots, sourceImage };
+  const character=text(input.character,64);
+  const avatarCharacter=input.avatarCharacter===undefined?character:text(input.avatarCharacter,64);
+  if(!featuredResonators.some(item=>item.name===avatarCharacter))throw new HttpError(400,"Choose a supported Resonator portrait for your profile.");
+  return { uid: input.uid, ign: text(input.ign, 32, 2), character, avatarCharacter, slots, sourceImage };
 }
 export type SubmissionInput = ReturnType<typeof validateSubmission>;

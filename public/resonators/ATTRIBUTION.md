@@ -28,3 +28,5 @@ Lucilla.png: e57480f7deec9638e6821f9292e13e2fa7bb5186
 Rebecca.png: ed567973e16f2205723e1627e7c29b17dfb9857f
 Denia.png: ca5228bb50fbb8b967cb732a50443af5e50af505
 Sigrika.png: 57288daa19dc5670e5605370768e93ddb889c6cc
+
+Additional supported Resonator portraits in this change are sourced from the same upstream asset project listed above: YangyangXuanling, LuukHerssen, Mornye, Lynae, Qiuyuan, Galbrena, Iuno, Augusta, Phrolova, Lupa, Zani, Ciaccona, Cantarella, Phoebe, Brant, Roccia, Shorekeeper, Zhezhi, Changli, XiangliYao, Jinhsi, Yinlin, Camellya, and Jiyan. These images are game artwork © KURO GAMES; upstream asset repository: https://github.com/ryanbenson/wuthering-waves-assets.

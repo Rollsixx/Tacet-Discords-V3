@@ -101,4 +101,8 @@ export const migrations = [
     "CREATE INDEX submission_current_build ON submissions(uid,character,replaced_by,status)",
     `CREATE TRIGGER rotation_replacement_update AFTER UPDATE OF replaced_by ON submissions WHEN OLD.replaced_by IS NOT NEW.replaced_by BEGIN INSERT INTO rotation_clock VALUES(NEW.character,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1; END`,
   ]},
+  {version:10,statements:[
+    "ALTER TABLE players ADD COLUMN avatar_character TEXT",
+    "UPDATE players SET avatar_character=(SELECT character FROM submissions s WHERE s.uid=players.uid AND s.status='approved' AND s.replaced_by IS NULL ORDER BY s.created_at DESC,s.id DESC LIMIT 1) WHERE avatar_character IS NULL",
+  ]},
 ];

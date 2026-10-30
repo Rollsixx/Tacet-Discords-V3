@@ -48,6 +48,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     const recent = await tx.execute({ sql: "SELECT COUNT(*) AS count FROM submissions WHERE uid=? AND created_at>?", args: [input.uid, new Date(Date.now() - 60000).toISOString()] });
     if (Number(recent.rows[0].count) >= 10) throw new HttpError(429, "Please wait before submitting another build for this UID.");
     await tx.execute({ sql: "INSERT INTO players(uid,created_at) VALUES (?,?) ON CONFLICT(uid) DO NOTHING", args: [input.uid, createdAt] });
+    if(input.avatarCharacter && assessment.sourceUid === input.uid) await tx.execute({sql:"UPDATE players SET avatar_character=? WHERE uid=?",args:[input.avatarCharacter,input.uid]});
     await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at,identity_verified) VALUES (?,?,?,?,?,?,?,(SELECT identity_verified FROM players WHERE uid=?))", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt, input.uid] });
     if(input.sourceImage&&assessment.statsVerified&&assessment.sourceHash)await tx.execute({sql:'INSERT INTO submission_source_evidence VALUES (?,?,?,?,?,?,?)',args:[id,input.sourceImage,assessment.sourceHash,JSON.stringify(sourceAssessment.ocrReadings||[]),JSON.stringify(assessment.sourceSlots),JSON.stringify(input.slots.map(({slot,cost,mainStat,substats})=>({slot,cost,mainStat,substats}))),createdAt]});
     for (const slot of sourceCrops) {
