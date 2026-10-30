@@ -5,7 +5,7 @@ import {HttpError} from './validation.ts';
 import {latestResonators} from '../resonators.ts';
 import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 import {scoringReadiness} from './scoring-info.ts';
-import {OWNER_ROTATION_REQUIRED,AWAITING_ROTATION_POLICY} from '../game-data/scoring-policies.mjs';
+import {AWAITING_ROTATION_POLICY} from '../game-data/scoring-policies.mjs';
 export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
@@ -41,7 +41,7 @@ export async function listLeaderboard(options: {character?: string;search?: stri
   if (!SUPPORTED.includes(character)) return {builds: [],page,hasMore:false,scoring:scoringReadiness,rotationReady:false};
   const search = (options.search || "").slice(0,64).trim();
   const policy=(await db.execute({sql:'SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];
-  const rotationReady=!OWNER_ROTATION_REQUIRED.includes(character)||Boolean(policy&&policy.policy_id!==AWAITING_ROTATION_POLICY);
+  const rotationReady=Boolean(policy&&policy.policy_id!==AWAITING_ROTATION_POLICY);
   const result = await db.execute({sql: `WITH candidates AS (
     SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,c.details AS current_calculation,c.score AS verified_score,
     row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
