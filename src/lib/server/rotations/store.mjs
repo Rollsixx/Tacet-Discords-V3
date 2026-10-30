@@ -72,7 +72,7 @@ export async function evaluateVersion(character,data,version,{allowProvisional=f
  if(spec.mode===REVIEWED_MODE){
   const validation=await validateSpec(character,spec);must(validation.valid||allowProvisional,'Benchmark configuration is incomplete.',422);
   must(!spec.actions.some(a=>a.mainEcho),'A universal benchmark cannot use a fixed main Echo attack.',422);
-  const compiled=compileReviewed(validation.spec,await modifierCatalog(character),source.identities);
+  const compiled=compileReviewed(validation.spec,await modifierCatalog(character,validation.spec.effectMode==='equipped-passives/1'),source.identities);
   return calculateStandard(character,data.slots,source.identities,{name:spec.name,actions:compiled.actions,baseConfig:compiled.baseConfig,sharedDefaults:spec.defaults!==undefined,policyId:version.policy_id,versionId:version.id,mechanicsVersion:validation.mechanicsVersion,trace:compiled.trace,configuredEffects:true,provenance:'Owner-reviewed benchmark using pinned optimizer effects. Combat timing and resource legality are manually reviewed, not automatically simulated.',startState:spec.conditions});
  }
  const baseline=await calculateStandard(character,data.slots,source.identities);

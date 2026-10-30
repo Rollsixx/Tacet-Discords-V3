@@ -84,3 +84,13 @@ Pending test inputs require the same verified source UID, hash, unchanged source
 Only the first rotation may use pending inputs to authorize publication. Later updates still require approved test inputs. Publication rechecks exact current input snapshots. It does not approve pending submissions, make their builds public, insert their leaderboard results or change their UID verification. Later moderator approval calculates them using the active official rotation. Owner review, typed confirmation, approved-build coverage checks, atomic activation, score history and rollback remain in place.
 
 Tested pending inputs receive a private scoring-ready assessment at activation so the moderation UI can show normal approval immediately. Their numeric source fields, pending status and UID verification remain unchanged, and no public calculation result is inserted until approval.
+
+### Moves-only equipped-passive policy
+
+New owner-reviewed drafts default to `effectMode: equipped-passives/1` (`owner-configured-benchmark/3`). Add the verified moveset; permanent Resonator passives, the standardized signature weapon's permanent passives, qualifying Sonata tiers and first-slot Main Echo passives resolve per build. The compiler uses only the pinned engine's permanent definitions and actual equipped set counts. It never enables an unproven conditional trigger, maximizes unknown stacks or borrows another build's equipment. Advanced conditional assumptions and per-move overrides remain available for owner-reviewed exceptions.
+
+Existing drafts retain their saved settings until explicitly upgraded; published v1/v2 rotations retain their original interpretation. Enabling the new policy creates a separately hashed/versioned draft and still requires validation, multi-build preview and owner publication. No live rotation is automatically published by a code release.
+
+### Echo source gaps
+
+`src/lib/game-data/echo-effect-gaps.json` records all 22 source gaps, compatible sets, source blob and immutable upstream review commit `60d91acfc536425bd302cd14ab85ab9d8b135a63` (checked 2026-10-30). The latest allowed upstream source still has empty descriptions, modifiers and actions for these entries. The editor labels them **source data missing**, rather than claiming they have no in-game effect. Recognition and Sonata membership are supported; undefined main-slot modifiers and skill damage remain unavailable. The catalog gate rejects stale gap records when verified definitions are integrated. Do not substitute another Echo's effects or guess values.
