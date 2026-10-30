@@ -58,3 +58,8 @@ export const featuredResonators: ResonatorPreview[] = [
 
 // Original releases, not rerun banners. Limited to the supported scoring roster.
 export const latestResonators=[...featuredResonators].sort((a,b)=>b.releaseDate.localeCompare(a.releaseDate)).slice(0,3);
+
+export function resonatorDisplayName(name: string) {
+  const resonator = featuredResonators.find(item => item.name === name || item.displayName === name);
+  return resonator?.displayName || resonator?.name || name;
+}

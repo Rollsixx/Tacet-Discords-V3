@@ -2,7 +2,7 @@
 import {verificationImageData} from "@/lib/scanner/verification-image";
 import {ScoringReadinessCard} from "./scoring-readiness";
 import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
-import {featuredResonators} from "@/lib/resonators";
+import {featuredResonators, resonatorDisplayName} from "@/lib/resonators";
 import { ResonatorPortrait } from "./resonator-portrait";
 import { LockIcon } from "./ui";
 import { useState } from "react";
@@ -13,6 +13,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   const uid = result.identity.uid;
   const [ign, setIgn] = useState(result.identity.ign);
   const character = result.identity.character;
+  const characterLabel = resonatorDisplayName(character);
   const [confirmed, setConfirmed] = useState(false);
   const [avatarCharacter,setAvatarCharacter] = useState(character);
   const [savedAvatarCharacter,setSavedAvatarCharacter] = useState(character);
@@ -72,7 +73,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   if (id) return <section className="submission-receipt" role="status" aria-label="Submission confirmation">
     <div className="receipt-icon" aria-hidden="true">✓</div>
     <div className="receipt-content"><span className="eyebrow">{submissionStatus==="approved"?"Build published":"Submission received"}</span><h2>{submissionStatus==="approved"?"Build approved and ranked":"Build saved · Pending review"}</h2>
-      <p className="muted">{submissionStatus==="approved"?`Your ${character} build passed verification and scoring checks and is now on the leaderboard.`:`Your ${character} build is saved privately. It will appear in Profiles after required identity, equipment, and scoring checks are complete.`}</p>
+      <p className="muted">{submissionStatus==="approved"?`Your ${characterLabel} build passed verification and scoring checks and is now on the leaderboard.`:`Your ${characterLabel} build is saved privately. It will appear in Profiles after required identity, equipment, and scoring checks are complete.`}</p>
       <div className="receipt-avatar"><ResonatorPortrait name={savedAvatarCharacter} className="lb-monogram"/><label htmlFor="receipt-avatar">Profile avatar <select id="receipt-avatar" value={avatarCharacter} onChange={event=>setAvatarCharacter(event.target.value)}>{[...new Set(featuredResonators.map(item=>item.patchVersion))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(version=><optgroup key={version} label={`${version} Characters`}>{featuredResonators.filter(item=>item.patchVersion===version).map(item=><option key={item.name} value={item.name}>{item.displayName||item.name}</option>)}</optgroup>)}</select></label><button type="button" className="outline-button" disabled={avatarSaving||avatarCharacter===savedAvatarCharacter} onClick={saveAvatar}>{avatarSaving?"Verifying screenshot…":avatarCharacter===savedAvatarCharacter?"Current avatar":"Change avatar"}</button></div>{error&&<p className="field-error" role="alert">{error}</p>}<dl className="receipt-player"><div><dt>Player</dt><dd>{ign}</dd></div><div><dt>UID</dt><dd>{uid}</dd></div><div><dt>Echoes</dt><dd>5 · Locked</dd></div></dl>
       <ScoringReadinessCard value={serverReadiness}/>
       <div className="receipt-reference"><div><span>Submission ID</span><code>{id}</code></div><button type="button" className="outline-button" onClick={copyId}>Copy submission ID</button></div>
@@ -85,8 +86,8 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   const ready = scanValid && ign.trim().length >= 2;
   return <section className="player-details-card" aria-busy={busy} aria-labelledby="player-details-title">
     <div className="player-details-heading"><div><span className="eyebrow">Finish your import</span><h2 id="player-details-title">Player details</h2><p className="muted">Check your name, confirm your card, then send it for review.</p></div><span className="scan-chip passed"><LockIcon /> Echo stats locked</span></div>
-    <div className="player-build-summary"><span className="player-character-mark" aria-hidden="true">{character.slice(0,2).toUpperCase() || "?"}</span><div><strong>{character || "Character unreadable"}</strong><span>5 Echo slots · Screenshot import</span></div><span className="player-summary-state">{!scanValid ? "Rescan required" : ready ? "Ready for confirmation" : "Add your in-game name"}</span></div>
-    {featuredResonators.find(r=>r.name===character)?.ownerRotationRequired&&<p className="import-blocked">Imports and approval are available for {character}. Ranking requires an owner-published rotation; verified equipment is retained so you will not need to reimport when it is published.</p>}
+    <div className="player-build-summary"><span className="player-character-mark" aria-hidden="true">{character.slice(0,2).toUpperCase() || "?"}</span><div><strong>{characterLabel || "Character unreadable"}</strong><span>5 Echo slots · Screenshot import</span></div><span className="player-summary-state">{!scanValid ? "Rescan required" : ready ? "Ready for confirmation" : "Add your in-game name"}</span></div>
+    {featuredResonators.find(r=>r.name===character)?.ownerRotationRequired&&<p className="import-blocked">Imports and approval are available for {characterLabel}. Ranking requires an owner-published rotation; verified equipment is retained so you will not need to reimport when it is published.</p>}
     {catalogReview&&<p className="import-blocked">Only a roll-table discrepancy remains. You may submit this card for unranked moderator review. The server must independently confirm every number from the original; no score is granted.</p>}
     {issues.length > 0 && <p className="import-blocked" role="status">{issues.length} stat issue(s) need review. Compare the marked fields with the original card. Retry unreadable text; if an exact visible value is rejected by the optimizer roll table, source data must be reviewed. Stats stay locked.</p>}
     {!uid && <p className="field-error" role="alert">UID could not be read. Upload a clear original card; UID cannot be entered manually.</p>}

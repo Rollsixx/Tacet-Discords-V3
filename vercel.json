@@ -15,7 +15,8 @@
       "development/leaderboard-roster-expansion": false,
       "development/leaderboard-roster-build-fix": false,
       "development/iuno-header-ocr-fix": false,
-      "development/leaderboard-avatar-stat-groups": false
+      "development/leaderboard-avatar-stat-groups": false,
+      "development/import-resonator-names-and-patch-dropdowns": false
     }
   }
 }
