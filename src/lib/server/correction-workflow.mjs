@@ -16,7 +16,10 @@ export function correctionLedgerVerified(data){
  return ledger.every((c,i)=>allowedSubstatCorrection(c.replacement)&&(c.adminVerifiedSubstat===true||(data.correctionVerifications||[]).some(v=>v.verified===true&&JSON.stringify(v.corrections?.[i])===JSON.stringify(c))));
 }
 function materializeCorrectedSlots(data){
- const slots=structuredClone(data.assessment?.sourceSlots||data.slots||[]);
+ // `slots` is the persisted effective build shown in admin. `assessment.sourceSlots`
+ // can lag behind it when a correction was saved while retaining immutable OCR.
+ // Start from the effective snapshot, then replay the audited legal correction ledger.
+ const slots=structuredClone(data.slots||data.assessment?.sourceSlots||[]);
  for(const correction of data.substatCorrections||[]){
   const {slot,position,replacement}=correction;
   must(Number.isInteger(slot)&&slot>=1&&slot<=5&&Number.isInteger(position)&&position>=1&&position<=5,'Saved correction has an invalid Echo position.');
