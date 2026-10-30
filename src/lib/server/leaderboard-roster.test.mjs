@@ -3,7 +3,7 @@ import test from 'node:test';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import { featuredResonators } from '../resonators.ts';
 import { ROTATION_ROSTER } from '../game-data/rotation-mechanics.mjs';
-import { AWAITING_ROTATION_POLICY, rotationPolicyReady, scoringPreset } from '../game-data/scoring-policies.mjs';
+import { AWAITING_ROTATION_POLICY, OWNER_ROTATION_REQUIRED, rotationPolicyReady, scoringPreset } from '../game-data/scoring-policies.mjs';
 
 const requested = [
   ['YangyangXuanling', 'Yangyang: Xuanling'],
@@ -48,6 +48,7 @@ test('requested Resonators have leaderboard entries and reference-backed scoring
     const preset = scoringPreset(key, character);
     if (key === 'LuukHerssen') {
       assert.equal(preset, undefined, 'Luuk must wait for a verified benchmark instead of receiving a fabricated score');
+      assert.ok(OWNER_ROTATION_REQUIRED.includes(key), 'Luuk must be explicitly held until an owner rotation is available');
     } else {
       assert.ok(preset?.data?.actions?.length, `${label} has no usable scoring actions`);
     }
