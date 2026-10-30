@@ -17,7 +17,8 @@
       "development/iuno-header-ocr-fix": false,
       "development/leaderboard-avatar-stat-groups": false,
       "development/import-resonator-names-and-patch-dropdowns": false,
-      "development/leaderboard-profile-filters-auto-approval": false
+      "development/leaderboard-profile-filters-auto-approval": false,
+      "development/verified-auto-approval-profile-avatar": false
     }
   }
 }

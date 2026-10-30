@@ -83,10 +83,11 @@ export async function listAdminAudit(page = 1, search = "", db: Client = databas
 export async function findPlayers(search = "", db: Client = database()) {
  const query=search.trim().slice(0,64);
  const result=await db.execute({sql:`SELECT uid,MAX(created_at) AS updated_at,COUNT(*) AS builds,COUNT(DISTINCT character) AS characters,(SELECT avatar_character FROM players p WHERE p.uid=s.uid) AS avatar_character,
+ (SELECT character FROM submissions latest WHERE latest.uid=s.uid AND latest.status='approved' AND latest.replaced_by IS NULL ORDER BY created_at DESC,id DESC LIMIT 1) AS latest_character,
  (SELECT ign FROM submissions latest WHERE latest.uid=s.uid AND latest.status='approved' AND latest.replaced_by IS NULL ORDER BY created_at DESC,id DESC LIMIT 1) AS ign
  FROM submissions s WHERE status='approved' AND replaced_by IS NULL AND uid IN (SELECT uid FROM submissions WHERE status='approved' AND replaced_by IS NULL AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0))
  GROUP BY uid ORDER BY updated_at DESC,uid ASC LIMIT 21`,args:[query,query,query]});
- return {players:result.rows.slice(0,20).map(row=>({uid:String(row.uid),ign:String(row.ign),avatarCharacter:row.avatar_character==null?null:String(row.avatar_character),builds:Number(row.builds),characters:Number(row.characters),updatedAt:String(row.updated_at)})),hasMore:result.rows.length>20};
+ return {players:result.rows.slice(0,20).map(row=>({uid:String(row.uid),ign:String(row.ign),avatarCharacter:row.avatar_character==null?null:String(row.avatar_character),character:row.latest_character==null?null:String(row.latest_character),builds:Number(row.builds),characters:Number(row.characters),updatedAt:String(row.updated_at)})),hasMore:result.rows.length>20};
 }
 
 // Reuse the ranking policy, including one best build per verified UID and stable ties.

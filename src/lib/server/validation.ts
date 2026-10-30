@@ -50,8 +50,8 @@ export function validateSubmission(input: unknown) {
     sourceImage = Buffer.from(input.sourceImage.split(",")[1], "base64");
   }
   const character=text(input.character,64);
-  const avatarCharacter=input.avatarCharacter===undefined?character:text(input.avatarCharacter,64);
-  if(!featuredResonators.some(item=>item.name===avatarCharacter))throw new HttpError(400,"Choose a supported Resonator portrait for your profile.");
-  return { uid: input.uid, ign: text(input.ign, 32, 2), character, avatarCharacter, slots, sourceImage };
+  const avatarCharacter=input.avatarCharacter===undefined||input.avatarCharacter===null||input.avatarCharacter===""?undefined:text(input.avatarCharacter,64);
+  if(avatarCharacter!==undefined&&!featuredResonators.some(item=>item.name===avatarCharacter))throw new HttpError(400,"Choose a supported Resonator portrait for your profile.");
+  return { uid: input.uid, ign: text(input.ign, 32, 2), character, ...(avatarCharacter?{avatarCharacter}:{}), slots, sourceImage };
 }
 export type SubmissionInput = ReturnType<typeof validateSubmission>;

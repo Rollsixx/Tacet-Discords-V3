@@ -32,7 +32,7 @@ export async function approvePendingBuildTx(tx,id,{reviewer,note,identityVerifie
  const identityIsVerified=Number(player?.identity_verified)===1;
  if(requireRanked){
   if(!identityIsVerified)throw new HttpError(422,'UID verification is required before automatic approval.');
-  if(!isAutomaticApprovalReady({identityVerified:identityIsVerified,assessment,calculation,rotation:active,hasCorrections:Array.isArray(data.substatCorrections)&&data.substatCorrections.length>0}))throw new HttpError(422,'This build is not fully scoring-ready under the active published rotation.');
+  if(!isAutomaticApprovalReady({identityVerified:identityIsVerified,assessment,calculation,rotation:active}))throw new HttpError(422,'This build is not fully scoring-ready under the active published rotation.');
   assessment={...assessment,eligible:true,awaitingRotation:false,calculation,reason:'Automatically approved: verified UID and current scoring checks passed.'};
   data={...data,assessment};calculation=assessment.calculation;
  }
@@ -45,16 +45,14 @@ export async function approvePendingBuildTx(tx,id,{reviewer,note,identityVerifie
   await recordRotationScore(tx,id,character,data,calculation,now);
  }
  await tx.execute({sql:'INSERT INTO moderation_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'approved',reviewer,(!assessment?.eligible?'Approved as unranked: ':'')+(note.trim()||assessment?.reason||'Moderator approved this build.'),now]});
- return {id,status:'approved',ranked:Boolean(calculation&&calculation.rotationVersion)};
+ return {id,status:'approved',ranked:Boolean(identityIsVerified&&isRankableUnderActiveRotation(calculation,active))};
 }
 
 export async function autoApproveVerifiedSubmission(id,db){
  const tx=await db.transaction('write');
  try{
-  const row=(await tx.execute({sql:"SELECT s.status,s.data,p.identity_verified FROM submissions s JOIN players p ON p.uid=s.uid WHERE s.id=?",args:[id]})).rows[0];
+  const row=(await tx.execute({sql:"SELECT s.status,p.identity_verified FROM submissions s JOIN players p ON p.uid=s.uid WHERE s.id=?",args:[id]})).rows[0];
   if(!row||String(row.status)!=='pending'||Number(row.identity_verified)!==1)return false;
-  const data=JSON.parse(String(row.data));
-  if(Array.isArray(data.substatCorrections)&&data.substatCorrections.length)return false;
   await approvePendingBuildTx(tx,id,{reviewer:'System: verified UID',note:'Automatically approved after verified UID and active scoring checks passed.',requireRanked:true});
   await tx.commit();return true;
  }catch(error){
@@ -63,12 +61,22 @@ export async function autoApproveVerifiedSubmission(id,db){
  }finally{tx.close();}
 }
 
-export async function autoApproveVerifiedPendingBuilds(uid,db){
- const rows=(await db.execute({sql:"SELECT id FROM submissions WHERE uid=? AND status='pending' ORDER BY created_at ASC,id ASC",args:[uid]})).rows;
+export async function autoApproveVerifiedPendingBuilds(uid,db,{character}={}){
+ const rows=(await db.execute({sql:"SELECT id FROM submissions WHERE uid=? AND status='pending' AND (? IS NULL OR character=?) ORDER BY created_at ASC,id ASC",args:[uid,character||null,character||null]})).rows;
  let approved=0;
  for(const row of rows){
   try{if(await autoApproveVerifiedSubmission(String(row.id),db))approved++;}
   catch{/* Keep an individual submission pending if its evidence or scoring work fails. */}
  }
  return {approved,checked:rows.length};
+}
+
+export async function autoApproveVerifiedPendingBuildsForCharacter(character,db){
+ const rows=(await db.execute({sql:"SELECT DISTINCT s.uid FROM submissions s JOIN players p ON p.uid=s.uid WHERE s.character=? AND s.status='pending' AND p.identity_verified=1 ORDER BY s.uid",args:[character]})).rows;
+ let approved=0,checked=0;
+ for(const row of rows){
+  const result=await autoApproveVerifiedPendingBuilds(String(row.uid),db,{character});
+  approved+=result.approved;checked+=result.checked;
+ }
+ return {approved,checked};
 }

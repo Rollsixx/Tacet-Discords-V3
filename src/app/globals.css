@@ -1148,6 +1148,12 @@ input[readonly] { opacity: .75; cursor: default; }
 .lb-patch-menu [role=option]:hover,.lb-patch-menu [role=option][aria-selected=true]{background:#223342}
 @media(max-width:700px){.lb-character-select{grid-template-columns:1fr}.lb-patch-trigger{min-height:54px}}
 
+/* Match the profile build table to leaderboard columns, without a rank column. */
+.pp-build-table{min-width:980px}
+.pp-build-table th:first-child{width:22%}
+.pp-build-table .lb-player-button{min-width:150px}
+.pp-profile .lb-table-wrap{overflow-x:auto}
+
 /* Keep portal menus scrollable and hold their scroll gestures inside the menu. */
 .lb-patch-menu,.lb-stat-menu{overscroll-behavior:contain;touch-action:pan-y;scrollbar-gutter:stable}
 .lb-patch-menu [role=option],.lb-stat-menu [role=option]{touch-action:pan-y}
