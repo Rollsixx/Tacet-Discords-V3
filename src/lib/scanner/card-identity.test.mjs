@@ -15,3 +15,10 @@ test('specific observed Suisui OCR confusion resolves to the canonical supported
  assert.equal(parseCardIdentity('Suisui LV.90','','').character,'Suisui');
  assert.equal(parseCardIdentity('Unknown','','').character,'Unknown');
 });
+
+test('OCR-confusable character names resolve only to one roster match', () => {
+ assert.equal(parseCardIdentity('luno LV.90', '', '').character, 'Iuno');
+ assert.equal(parseCardIdentity('Xiangli Yao LV.90', '', '').character, 'XiangliYao');
+ assert.equal(parseCardIdentity('Yangyang: Xuanling LV.90', '', '').character, 'YangyangXuanling');
+ assert.equal(parseCardIdentity('Lucilla LV.90', '', '').character, 'Lucilla');
+});
