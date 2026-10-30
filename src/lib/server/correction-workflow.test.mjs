@@ -13,7 +13,7 @@ test('revalidation reapplies saved legal correction when copied OCR stats are st
  const db=createClient({url:'file::memory:'});try{
   await migrate(db);await ensureTestRotation(db,'Sigrika');const f=await seedCorrection(db,'Sigrika');
   const initial=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);assert.equal(initial.ranked,true,initial.reason);
-  const row=(await db.execute({sql:'SELECT data FROM submissions WHERE id=?',[f.id]})).rows[0],data=JSON.parse(row.data);
+  const row=(await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0],data=JSON.parse(row.data);
   data.slots[f.slot-1].substats[f.position-1].value='DEF 11.9%';
   data.assessment.sourceSlots[f.slot-1].substats[f.position-1].value='DEF 11.9%';
   data.assessment.rollsVerified=false;data.assessment.catalogReview=true;data.assessment.scoringIssues=[{slot:f.slot,position:f.position,code:'UNSUPPORTED_ROLL',value:'DEF 11.9%'}];
@@ -21,7 +21,7 @@ test('revalidation reapplies saved legal correction when copied OCR stats are st
   await db.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[f.id]});
   const result=(await revalidateCorrectedBuilds(db,{uid:f.uid,character:'Sigrika'}))[0];
   assert.equal(result.ranked,true,result.reason);
-  const stored=JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',[f.id]})).rows[0].data);
+  const stored=JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0].data);
   assert.equal(stored.slots[f.slot-1].substats[f.position-1].value,'DEF 11.8%');
   assert.equal(stored.assessment.sourceSlots[f.slot-1].substats[f.position-1].value,'DEF 11.8%');
   assert.equal(stored.assessment.originalSourceSlots[f.slot-1].substats[f.position-1].value,'DEF 11.9%');
