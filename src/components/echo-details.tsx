@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import type { listBuilds } from "@/lib/server/store";
+import type { listBuilds } from "@/lib/server/queries";
 import { compactNumber, echoCritValue, mainStatAmount, readableName, shortStat } from "@/lib/leaderboards/display";
 type Build=Awaited<ReturnType<typeof listBuilds>>['builds'][number];
 export function PublicImage({src,alt,className}:{src:string;alt:string;className:string}){

@@ -3,7 +3,7 @@ import { ResonatorPortrait } from "./resonator-portrait";
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { findPlayers, listBuilds } from "@/lib/server/store";
+import type { findPlayers, listBuilds } from "@/lib/server/queries";
 import { compactNumber, echoCritValue } from "@/lib/leaderboards/display";
 import { EchoDetails } from "./echo-details";
 import { featuredResonators } from "@/lib/resonators";

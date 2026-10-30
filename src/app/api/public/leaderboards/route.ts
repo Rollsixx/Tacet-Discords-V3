@@ -1,4 +1,4 @@
-import { listLeaderboard } from "@/lib/server/store";
+import { listLeaderboard } from "@/lib/server/queries";
 import { json, failure } from "@/lib/server/http";
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;

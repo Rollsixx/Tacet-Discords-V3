@@ -1,5 +1,5 @@
 import {failure,json,readJson} from '@/lib/server/http';
-import {rateLimit} from '@/lib/server/store';
+import {rateLimit} from '@/lib/server/rate-limit';
 import {HttpError,record,pngCrop} from '@/lib/server/validation';
 import {diagnoseCrops} from '@/lib/server/scoring.mjs';
 import {visualReadiness} from '@/lib/scanner/scoring-readiness';

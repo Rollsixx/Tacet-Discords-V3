@@ -1,7 +1,7 @@
 // SYNTHETIC source proof used exclusively with an isolated test database.
 import {fixture} from '../../src/lib/server/fixtures.mjs';
 import {validateSubmission} from '../../src/lib/server/validation.ts';
-import {submit,moderate} from '../../src/lib/server/store.ts';
+import {submit} from '../../src/lib/server/submission-store.ts';import {moderate} from '../../src/lib/server/store.ts';
 import cards from '../browser/user-card-expectations.json' with {type:'json'};
 import cases from '../../src/lib/game-data/scoring-cases.json' with {type:'json'};
 export async function seedIdentityFixture(db,uid='822222222',approved=false){

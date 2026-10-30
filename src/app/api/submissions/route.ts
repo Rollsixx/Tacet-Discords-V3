@@ -1,6 +1,7 @@
 import { failure, json, readJson } from "@/lib/server/http";
 import { validateSubmission } from "@/lib/server/validation";
-import { rateLimit, submit } from "@/lib/server/store";
+import {rateLimit} from "@/lib/server/rate-limit";
+import {submit} from "@/lib/server/submission-store";
 export async function POST(request: Request) {
   try {
     await rateLimit("submission-global", 30);

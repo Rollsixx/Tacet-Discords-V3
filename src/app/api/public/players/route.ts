@@ -1,5 +1,5 @@
 import { failure, json } from "@/lib/server/http";
-import { findPlayers, listBuilds } from "@/lib/server/store";
+import { findPlayers, listBuilds } from "@/lib/server/queries";
 export async function GET(request: Request) {
  const params=new URL(request.url).searchParams;
  try {

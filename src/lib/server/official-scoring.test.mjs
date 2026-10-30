@@ -11,7 +11,7 @@ import manifest from '../game-data/manifest.json' with {type:'json'};
 import {identifySlots,identifyFingerprints,calculateStandard,matchVisual,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from './scoring.mjs';
 import visualFeatures from '../../../tests/fixtures/carlotta-visual-features.json' with {type:'json'};
 import {migrate} from './database.ts';
-import {submit,moderate,listLeaderboard,listBuilds} from './store.ts';
+import {submit} from './submission-store.ts';import {moderate,listLeaderboard,listBuilds} from './store.ts';
 import {validateSubmission} from './validation.ts';
 import {fixture} from './fixtures.mjs';
 import {assessSource} from './source-evidence.mjs';
