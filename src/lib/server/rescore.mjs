@@ -6,7 +6,7 @@ import {calculateStandard,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} 
 // Reuse only previously server-validated evidence from this known data snapshot.
 // Old unsupported/no-evidence submissions must be resubmitted with an original.
 export async function rescoreStoredBuilds(db){
- const rows=await db.execute("SELECT id,uid,character,status,identity_verified,reviewed_at,data FROM submissions WHERE status IN ('pending','approved')");
+ const rows=await db.execute("SELECT id,uid,character,status,identity_verified,reviewed_at,data FROM submissions WHERE status IN ('pending','approved') AND replaced_by IS NULL");
  const result={updated:0,skipped:0,failed:0};
  for(const row of rows.rows){
   const data=JSON.parse(String(row.data)),a=data.assessment,c=a?.calculation;
