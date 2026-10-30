@@ -84,8 +84,15 @@ export async function correctEchoSubstat(id,slot,position,expected,replacement,r
  await initializeRotations(db);const tx=await db.transaction('write');try{
   const row=(await tx.execute({sql:"SELECT * FROM submissions WHERE id=? AND status IN ('pending','approved')",args:[id]})).rows[0];must(row,'Submission not found.',404);
   const data=JSON.parse(String(row.data)),field=data.slots?.[slot-1]?.substats?.[position-1];
-  must(field&&field.value===expected,'Stored reading changed. Reload before correcting.',409);must(expected!==replacement,'Choose a different legal roll.',400);
+  must(field&&field.value===expected,'Stored reading changed. Reload before correcting.',409);
   const old=parseSubstat(expected),corrected=parseSubstat(replacement);must(old&&corrected&&old.name===corrected.name&&old.percent===corrected.percent,'Correction must preserve the recognized stat type and unit.');await proof(row,data,tx);
+  if(expected===replacement){
+   const ledger=data.substatCorrections||[],hasSaved=ledger.some((c,i)=>c.slot===slot&&c.position===position&&c.replacement===replacement&&allowedSubstatCorrection(c.replacement)&&(c.adminVerifiedSubstat===true||(data.correctionVerifications||[]).some(v=>v.verified===true&&JSON.stringify(v.corrections?.[i])===JSON.stringify(c))));
+   must(hasSaved,'This Echo already shows that roll, but no moderator-verified saved correction exists.',400);
+   const result=await rebuild(tx,row,data),at=new Date().toISOString();
+   await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_correction_revalidated',reviewer.trim(),JSON.stringify({slot,position,replacement,...result}),at]});
+   await tx.commit();return {slot,position,original:expected,replacement,...result};
+  }
   const original=data.assessment.sourceSlots[slot-1]?.substats?.[position-1];must(original,'Original server OCR field is missing.');
   const next=structuredClone(data);
   if(!next.assessment.originalSourceSlots){
