@@ -1,3 +1,16 @@
 [
-  {"requestId":"owner-2026-10-29-rebecca-legal-def-correction","uid":"900445927","character":"Rebecca","expected":"DEF 8.1%","replacement":"DEF 11.8%"}
+  {
+    "requestId": "owner-2026-10-29-rebecca-legal-def-correction",
+    "uid": "900445927",
+    "character": "Rebecca",
+    "expected": "DEF 8.1%",
+    "replacement": "DEF 11.8%"
+  },
+  {
+    "requestId": "owner-2026-10-31-sigrika-uid500580864-echo5-substat5-def-correction",
+    "uid": "500580864",
+    "character": "Sigrika",
+    "expected": "DEF 11.9%",
+    "replacement": "DEF 11.8%"
+  }
 ]
