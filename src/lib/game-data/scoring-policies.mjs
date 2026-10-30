@@ -24,7 +24,7 @@ export const TACET_WINDOWS={
   data:{actions:[action('liberation','MomentofNihilityDMG'),action('skill','SerratedLoopDMG'),action('forteCircuit','SawringBlitzStage2DMG'),action('forteCircuit','SawringBlitzStage3DMG'),action('forteCircuit','SawringEradicationDMG')]},
  },
 };
-const EXPANDED_ROSTER=new Set(['Suoming','Jingran','Hsin','Qingxiao','Suisui','Denia','Sigrika']);
+const EXPANDED_ROSTER=new Set(['Suoming','Jingran','Hsin','Qingxiao','Suisui','Denia','Sigrika','YangyangXuanling','Mornye','Lynae','Qiuyuan','Galbrena','Iuno','Augusta','Phrolova','Lupa','Zani','Ciaccona','Cantarella','Phoebe','Brant','Roccia','Shorekeeper','Zhezhi','Changli','XiangliYao','Jinhsi','Yinlin','Camellya','Jiyan']);
 export function scoringPreset(character,data){
  const preset=data.rotations[0]||TACET_WINDOWS[character];
  if(!preset||!EXPANDED_ROSTER.has(character))return preset;
@@ -40,3 +40,4 @@ export function scoringPreset(character,data){
 // Kits are integrated, but no upstream rotation preset exists.
 export const OWNER_ROTATION_REQUIRED=['Lucy','Lucilla','Rebecca'];
 export const AWAITING_ROTATION_POLICY='awaiting-owner-rotation/1';
+export function rotationPolicyReady(policyId){return Boolean(policyId&&policyId!==AWAITING_ROTATION_POLICY);}
