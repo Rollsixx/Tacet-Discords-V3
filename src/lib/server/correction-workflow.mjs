@@ -15,10 +15,27 @@ export function correctionLedgerVerified(data){
  const ledger=data.substatCorrections||[];
  return ledger.every((c,i)=>allowedSubstatCorrection(c.replacement)&&(c.adminVerifiedSubstat===true||(data.correctionVerifications||[]).some(v=>v.verified===true&&JSON.stringify(v.corrections?.[i])===JSON.stringify(c))));
 }
+function materializeCorrectedSlots(data){
+ const slots=structuredClone(data.assessment?.sourceSlots||data.slots||[]);
+ for(const correction of data.substatCorrections||[]){
+  const {slot,position,replacement}=correction;
+  must(Number.isInteger(slot)&&slot>=1&&slot<=5&&Number.isInteger(position)&&position>=1&&position<=5,'Saved correction has an invalid Echo position.');
+  must(allowedSubstatCorrection(replacement),'Saved correction is not a pinned legal Echo substat roll.');
+  const field=slots[slot-1]?.substats?.[position-1],before=parseSubstat(field?.value||''),after=parseSubstat(replacement);
+  must(before&&after&&before.name===after.name&&before.percent===after.percent,'Saved correction changes its recognized stat type or unit.');
+  slots[slot-1].substats[position-1]={...field,value:replacement};
+ }
+ return slots;
+}
 async function rebuild(tx,row,data){
- await proof(row,data,tx);const a=data.assessment,slots=data.slots;
+ await proof(row,data,tx);
+ // The correction ledger is authoritative for effective scoring values. Keep
+ // originalSourceSlots and submission_source_evidence as immutable OCR evidence.
+ const slots=materializeCorrectedSlots(data),a={...data.assessment,sourceSlots:structuredClone(slots)};
+ data={...data,slots,assessment:a};
+ const freshAssessment={...a};delete freshAssessment.scoringIssues;delete freshAssessment.rollTableIssues;
  const issues=slots.flatMap(s=>validateEchoSlot(s).map(i=>({slot:s.slot,...i})));
- const next={...data,assessment:{...a,eligible:false,awaitingRotation:false,rollsVerified:issues.length===0,catalogReview:issues.length>0,calculation:undefined}};
+ const next={...data,assessment:{...freshAssessment,eligible:false,awaitingRotation:false,rollsVerified:issues.length===0,catalogReview:issues.length>0,calculation:undefined}};
  let reason=issues.length?'Echo '+issues[0].slot+': '+issues[0].message:'';
  let calculation=null;
  if(!issues.length&&!correctionLedgerVerified(data))reason='Historical corrections require moderator verification against original evidence.';

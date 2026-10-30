@@ -9,6 +9,27 @@ for(const character of SUPPORTED)test(character+' legal correction auto-approves
  const audit=(await db.execute("SELECT COUNT(*) n FROM admin_audit_events")).rows[0].n;await revalidateCorrectedBuilds(db,{uid:f.uid});assert.equal((await db.execute("SELECT COUNT(*) n FROM admin_audit_events")).rows[0].n,audit);await correctEchoSubstat(f.id,f.slot,f.position,'DEF 11.8%','DEF 10.9%','QA','',db);assert.equal((await db.execute('SELECT COUNT(*) n FROM moderation_events')).rows[0].n,1);
  }finally{db.close();}
 });
+test('revalidation reapplies saved legal correction when copied OCR stats are stale',async()=>{
+ const db=createClient({url:'file::memory:'});try{
+  await migrate(db);await ensureTestRotation(db,'Sigrika');const f=await seedCorrection(db,'Sigrika');
+  const initial=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);assert.equal(initial.ranked,true,initial.reason);
+  const row=(await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0],data=JSON.parse(row.data);
+  data.slots[f.slot-1].substats[f.position-1].value='DEF 11.9%';
+  data.assessment.sourceSlots[f.slot-1].substats[f.position-1].value='DEF 11.9%';
+  data.assessment.rollsVerified=false;data.assessment.catalogReview=true;data.assessment.scoringIssues=[{slot:f.slot,position:f.position,code:'UNSUPPORTED_ROLL',value:'DEF 11.9%'}];
+  await db.execute({sql:"UPDATE submissions SET data=?,status='pending',reviewed_at=NULL WHERE id=?",args:[JSON.stringify(data),f.id]});
+  await db.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[f.id]});
+  const result=(await revalidateCorrectedBuilds(db,{uid:f.uid,character:'Sigrika'}))[0];
+  assert.equal(result.ranked,true,result.reason);
+  const stored=JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0].data);
+  assert.equal(stored.slots[f.slot-1].substats[f.position-1].value,'DEF 11.8%');
+  assert.equal(stored.assessment.sourceSlots[f.slot-1].substats[f.position-1].value,'DEF 11.8%');
+  assert.equal(stored.assessment.originalSourceSlots[f.slot-1].substats[f.position-1].value,'DEF 11.9%');
+  assert.equal(stored.assessment.scoringIssues,undefined);
+  assert.equal((await listLeaderboard({character:'Sigrika',search:f.uid},db)).builds[0].id,f.id);
+ }finally{db.close();}
+});
+
 test('correction never verifies a UID; subsequent moderator verification completes approval automatically',async()=>{
  const db=createClient({url:'file::memory:'});try{await migrate(db);await ensureTestRotation(db,'Carlotta');const f=await seedCorrection(db,'Carlotta',{verified:false});const r=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);assert.equal(r.ranked,false);assert.match(r.reason,/UID verification/);assert.equal((await listBuilds({id:f.id,pending:true},db)).builds[0].status,'pending');await setUidVerification(f.uid,true,'QA','',db);assert.equal((await listLeaderboard({character:'Carlotta',search:f.uid},db)).builds[0].id,f.id);}finally{db.close();}
 });
