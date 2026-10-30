@@ -1,18 +1,3 @@
-export function correctionDraftKey(slot, position) {
-  return `${slot}:${position}`;
-}
-/** Update one field draft without disturbing edits for other Echo slots. */
-export function updateCorrectionDraft(drafts, key, patch) {
-  const previous = drafts[key] ?? { type: "DEF:percent", value: "", note: "" };
-  return { ...drafts, [key]: { ...previous, ...patch } };
-}
-/** Clear only the correction that was successfully saved. */
-export function clearCorrectionDraft(drafts, key) {
-  if (!(key in drafts)) return drafts;
-  const next = { ...drafts };
-  delete next[key];
-  return next;
-}
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -20,6 +5,7 @@ import {
   correctionDraftKey,
   updateCorrectionDraft,
 } from "../../components/substat-correction-drafts.mjs";
+
 test("switching between Echoes preserves each unsaved correction independently", () => {
   const echoOne = correctionDraftKey(1, 5);
   const echoTwo = correctionDraftKey(2, 2);
@@ -28,15 +14,18 @@ test("switching between Echoes preserves each unsaved correction independently",
     value: "Resonance Liberation DMG Bonus 10.1%",
     note: "Checked against screenshot",
   });
+
   // Editing the second Echo must not overwrite the first Echo's draft.
   drafts = updateCorrectionDraft(drafts, echoTwo, {
     type: "Crit. Rate:percent",
     value: "Crit. Rate 7.5%",
   });
+
   assert.equal(drafts[echoOne].value, "Resonance Liberation DMG Bonus 10.1%");
   assert.equal(drafts[echoOne].note, "Checked against screenshot");
   assert.equal(drafts[echoTwo].value, "Crit. Rate 7.5%");
 });
+
 test("saving a correction clears only that Echo-position draft", () => {
   const first = correctionDraftKey(1, 5);
   const second = correctionDraftKey(2, 2);
@@ -45,6 +34,7 @@ test("saving a correction clears only that Echo-position draft", () => {
     second,
     { value: "Crit. Rate 7.5%" },
   );
+
   const remaining = clearCorrectionDraft(drafts, first);
   assert.equal(remaining[first], undefined);
   assert.equal(remaining[second].value, "Crit. Rate 7.5%");
