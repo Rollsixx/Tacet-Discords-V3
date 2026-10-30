@@ -1,0 +1,1 @@
+/** Return a stable key for one Echo substat correction draft. */
