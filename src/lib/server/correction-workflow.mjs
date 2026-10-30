@@ -36,8 +36,6 @@ async function rebuild(tx,row,data){
  const {scoringIssues:_staleScoringIssues,rollTableIssues:_staleRollTableIssues,...freshAssessment}=a;
  const issues=slots.flatMap(s=>validateEchoSlot(s).map(i=>({slot:s.slot,...i})));
  const next={...data,assessment:{...freshAssessment,eligible:false,awaitingRotation:false,rollsVerified:issues.length===0,catalogReview:issues.length>0,calculation:undefined}};
- const issues=slots.flatMap(s=>validateEchoSlot(s).map(i=>({slot:s.slot,...i})));
- const next={...data,assessment:{...a,eligible:false,awaitingRotation:false,rollsVerified:issues.length===0,catalogReview:issues.length>0,calculation:undefined}};
  let reason=issues.length?'Echo '+issues[0].slot+': '+issues[0].message:'';
  let calculation=null;
  if(!issues.length&&!correctionLedgerVerified(data))reason='Historical corrections require moderator verification against original evidence.';
