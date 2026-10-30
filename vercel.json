@@ -12,7 +12,8 @@
       "development/revalidate-saved-echo-correction": false,
       "development/fix-correction-revalidation-v2": false,
       "development/include-verified-baseline-builds": false,
-      "development/leaderboard-roster-expansion": false
+      "development/leaderboard-roster-expansion": false,
+      "development/leaderboard-roster-build-fix": false
     }
   }
 }
