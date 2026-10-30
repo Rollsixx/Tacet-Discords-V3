@@ -115,7 +115,7 @@ test('saved legal correction clears stale OCR roll errors and remains available 
   await migrate(db);const f=await seedCorrection(db,'Sigrika');
   const first=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);
   assert.equal(first.ranked,false);
-  const row=(await db.execute({sql:'SELECT data FROM submissions WHERE id=?',[f.id]})).rows[0];
+  const row=(await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]}})).rows[0];
   const data=JSON.parse(row.data);
   data.assessment.reason='Source numbers verified; optimizer roll-table review required. Echo 5: Substat 5: DEF 11.9% does not match the pinned optimizer roll table.';
   data.assessment.rollsVerified=false;data.assessment.catalogReview=true;
