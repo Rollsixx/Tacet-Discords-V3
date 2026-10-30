@@ -65,7 +65,7 @@ async function rebuild(tx,row,data){
     next.assessment.eligible=false;next.assessment.awaitingRotation=true;
     reason='Equipment verified. Awaiting the owner’s first published rotation; this build remains unranked.';
    }
-  }catch(e){next.assessment.eligible=false;reason=e.message||'Scoring evaluation failed.';}
+  }catch(e){next.assessment.eligible=false;next.assessment.awaitingRotation=false;reason=e.message||'Scoring evaluation failed.';}
  }
  const valid=isRankableUnderActiveRotation(calculation,active);
  const player=(await tx.execute({sql:'SELECT identity_verified FROM players WHERE uid=?',args:[String(row.uid)]})).rows[0];
