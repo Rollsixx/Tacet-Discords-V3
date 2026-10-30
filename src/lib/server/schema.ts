@@ -96,4 +96,9 @@ export const migrations = [
     `CREATE TABLE submission_source_evidence (submission_id TEXT PRIMARY KEY REFERENCES submissions(id) ON DELETE CASCADE, image BLOB NOT NULL CHECK(length(image)<=1500000), source_hash TEXT NOT NULL, original_ocr TEXT NOT NULL, original_slots TEXT NOT NULL, displayed_slots TEXT NOT NULL, created_at TEXT NOT NULL)`,
     `CREATE TRIGGER immutable_source_evidence BEFORE UPDATE ON submission_source_evidence BEGIN SELECT RAISE(ABORT,'Original screenshot and OCR evidence are immutable'); END`,
   ]},
+  {version:9,statements:[
+    "ALTER TABLE submissions ADD COLUMN replaced_by TEXT",
+    "CREATE INDEX submission_current_build ON submissions(uid,character,replaced_by,status)",
+    `CREATE TRIGGER rotation_replacement_update AFTER UPDATE OF replaced_by ON submissions WHEN OLD.replaced_by IS NOT NEW.replaced_by BEGIN INSERT INTO rotation_clock VALUES(NEW.character,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1; END`,
+  ]},
 ];

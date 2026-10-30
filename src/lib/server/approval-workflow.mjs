@@ -3,6 +3,7 @@ import {HttpError} from './validation.ts';
 import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from './scoring-versions.mjs';
 import {scoreActiveRotation,recordRotationScore,applyPublishedRotation} from './rotations/store.mjs';
 import {isRankableUnderActiveRotation} from './approval-policy.mjs';
+import {replacePriorResonatorBuilds} from './replacement-workflow.mjs';
 
 export async function applyUidVerification(tx,uid,verified,reviewer,note,now){
  const player=await tx.execute({sql:'SELECT identity_verified FROM players WHERE uid=?',args:[uid]});
@@ -26,10 +27,11 @@ export async function approvePendingBuildTx(tx,id,{reviewer,note,identityVerifie
  if(!assessment?.eligible&&!allowUnranked)throw new HttpError(422,'Scoring is blocked. Resolve the Echo identities first, or explicitly approve this build as unranked.');
  if(identityVerified)await applyUidVerification(tx,uid,true,reviewer,note,now);
  let calculation=assessment?.eligible?await scoreActiveRotation(tx,character,data)||assessment.calculation:null;
+ const player=(await tx.execute({sql:'SELECT identity_verified FROM players WHERE uid=?',args:[uid]})).rows[0];
+ const active=(await tx.execute({sql:'SELECT v.id,v.kind,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];
+ const identityIsVerified=Number(player?.identity_verified)===1;
  if(requireRanked){
-  const player=(await tx.execute({sql:'SELECT identity_verified FROM players WHERE uid=?',args:[uid]})).rows[0];
-  const active=(await tx.execute({sql:'SELECT v.id,v.kind,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];
-  if(Number(player?.identity_verified)!==1)throw new HttpError(422,'UID verification is required before automatic approval.');
+  if(!identityIsVerified)throw new HttpError(422,'UID verification is required before automatic approval.');
   if(!assessment?.eligible||!isRankableUnderActiveRotation(calculation,active))throw new HttpError(422,'This build is not fully scoring-ready under the active published rotation.');
   assessment={...assessment,eligible:true,awaitingRotation:false,calculation,reason:'Automatically approved: verified UID and current scoring checks passed.'};
   data={...data,assessment};calculation=assessment.calculation;
@@ -37,6 +39,7 @@ export async function approvePendingBuildTx(tx,id,{reviewer,note,identityVerifie
  if(data!==pendingData)await tx.execute({sql:"UPDATE submissions SET data=? WHERE id=? AND status='pending'",args:[JSON.stringify(data),id]});
  const updated=await tx.execute({sql:"UPDATE submissions SET status='approved',reviewed_at=?,identity_verified=(SELECT identity_verified FROM players WHERE uid=?) WHERE id=? AND status='pending'",args:[now,uid,id]});
  if(updated.rowsAffected!==1)throw new HttpError(409,'Submission is missing or has already been reviewed.');
+ if(identityIsVerified&&isRankableUnderActiveRotation(calculation,active))await replacePriorResonatorBuilds(tx,{id,uid,character,reviewer:'System: build replacement',now});
  if(calculation&&calculation.engineVersion===ENGINE_VERSION&&calculation.dataVersion===DATA_VERSION&&(calculation.policyId===POLICY_VERSION||calculation.rotationVersion)&&Number.isFinite(calculation.score)&&calculation.score>0){
   await tx.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[id,calculation.score,ENGINE_VERSION,DATA_VERSION,calculation.referenceCaseVersion,now,calculation.policyId,JSON.stringify(calculation)]});
   await recordRotationScore(tx,id,character,data,calculation,now);
@@ -61,7 +64,7 @@ export async function autoApproveVerifiedSubmission(id,db){
 }
 
 export async function autoApproveVerifiedPendingBuilds(uid,db){
- const rows=(await db.execute({sql:"SELECT id FROM submissions WHERE uid=? AND status='pending'",args:[uid]})).rows;
+ const rows=(await db.execute({sql:"SELECT id FROM submissions WHERE uid=? AND status='pending' ORDER BY created_at ASC,id ASC",args:[uid]})).rows;
  let approved=0;
  for(const row of rows){
   try{if(await autoApproveVerifiedSubmission(String(row.id),db))approved++;}

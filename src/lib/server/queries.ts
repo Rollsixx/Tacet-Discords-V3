@@ -14,7 +14,7 @@ export async function listBuilds(options: { search?: string; character?: string;
     sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,
       CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.score ELSE NULL END AS verified_score
        ,CASE WHEN c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.details END AS current_calculation
-      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE (status=? OR (?=1 AND status IN ('pending','approved'))) AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
+      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE replaced_by IS NULL AND (status=? OR (?=1 AND status IN ('pending','approved'))) AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
       AND (?='' OR character=?) AND (?='' OR s.id=?) AND (?='' OR uid=?)
       ORDER BY created_at DESC,s.id DESC LIMIT 21 OFFSET ?`,
     args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", (page - 1) * 20],
@@ -46,7 +46,7 @@ export async function listLeaderboard(options: {character?: string;search?: stri
     SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,c.details AS current_calculation,c.score AS verified_score,
     row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
     FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
-    WHERE s.status='approved' AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
+    WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
   ), ranked AS (
     SELECT *,row_number() OVER (ORDER BY verified_score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1
   ) SELECT * FROM ranked WHERE (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0)
@@ -57,8 +57,8 @@ export async function listLeaderboard(options: {character?: string;search?: stri
 export async function adminOverview(db: Client = database()) {
   const result = await db.execute(`SELECT
     (SELECT COUNT(*) FROM submissions WHERE status='pending') AS pending,
-    (SELECT COUNT(*) FROM submissions WHERE status='approved') AS approved,
-    (SELECT COUNT(DISTINCT uid) FROM submissions WHERE status='approved' AND identity_verified=0) AS unverified,
+    (SELECT COUNT(*) FROM submissions WHERE status='approved' AND replaced_by IS NULL) AS approved,
+    (SELECT COUNT(DISTINCT uid) FROM submissions WHERE status='approved' AND replaced_by IS NULL AND identity_verified=0) AS unverified,
     (SELECT COUNT(*) FROM players) AS players`);
   return Object.fromEntries(Object.entries(result.rows[0]).map(([key,value])=>[key,Number(value)])) as {pending:number;approved:number;unverified:number;players:number};
 }
@@ -79,8 +79,8 @@ export async function listAdminAudit(page = 1, search = "", db: Client = databas
 export async function findPlayers(search = "", db: Client = database()) {
  const query=search.trim().slice(0,64);
  const result=await db.execute({sql:`SELECT uid,MAX(created_at) AS updated_at,COUNT(*) AS builds,COUNT(DISTINCT character) AS characters,
- (SELECT ign FROM submissions latest WHERE latest.uid=s.uid AND latest.status='approved' ORDER BY created_at DESC,id DESC LIMIT 1) AS ign
- FROM submissions s WHERE status='approved' AND uid IN (SELECT uid FROM submissions WHERE status='approved' AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0))
+ (SELECT ign FROM submissions latest WHERE latest.uid=s.uid AND latest.status='approved' AND latest.replaced_by IS NULL ORDER BY created_at DESC,id DESC LIMIT 1) AS ign
+ FROM submissions s WHERE status='approved' AND replaced_by IS NULL AND uid IN (SELECT uid FROM submissions WHERE status='approved' AND replaced_by IS NULL AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0))
  GROUP BY uid ORDER BY updated_at DESC,uid ASC LIMIT 21`,args:[query,query,query]});
  return {players:result.rows.slice(0,20).map(row=>({uid:String(row.uid),ign:String(row.ign),builds:Number(row.builds),characters:Number(row.characters),updatedAt:String(row.updated_at)})),hasMore:result.rows.length>20};
 }
@@ -101,10 +101,10 @@ export async function listAdminPlayers(options:{search?:string;character?:string
  const result=await db.execute({sql:`SELECT p.uid,p.identity_verified,p.verified_at,
  COALESCE((SELECT ign FROM submissions n WHERE n.uid=p.uid ORDER BY created_at DESC,id DESC LIMIT 1),p.uid) AS ign,
  COALESCE(MAX(s.created_at),p.created_at) AS updated_at,COUNT(s.id) AS builds,
- SUM(CASE WHEN s.status='approved' THEN 1 ELSE 0 END) AS approved,
+ SUM(CASE WHEN s.status='approved' AND s.replaced_by IS NULL THEN 1 ELSE 0 END) AS approved,
  SUM(CASE WHEN s.status='pending' THEN 1 ELSE 0 END) AS pending,
  COUNT(DISTINCT s.character) AS characters
- FROM players p LEFT JOIN submissions s ON s.uid=p.uid AND s.status IN ('pending','approved')
+ FROM players p LEFT JOIN submissions s ON s.uid=p.uid AND s.status IN ('pending','approved') AND s.replaced_by IS NULL
  WHERE (?='' OR instr(p.uid,?)>0 OR EXISTS (SELECT 1 FROM submissions n WHERE n.uid=p.uid AND (instr(lower(n.ign),lower(?))>0 OR instr(lower(n.id),lower(?))>0)))
  AND (?='' OR EXISTS (SELECT 1 FROM submissions n WHERE n.uid=p.uid AND n.character=?))
  GROUP BY p.uid ORDER BY updated_at DESC,p.uid ASC LIMIT 21 OFFSET ?`,args:[query,query,query,query,character,character,(page-1)*20]});
@@ -114,7 +114,7 @@ export async function adminPlayerBuilds(uid:string,page=1,db:Client=database()){
  const player=await db.execute({sql:`SELECT uid,identity_verified,verified_at,
  COALESCE((SELECT ign FROM submissions s WHERE s.uid=p.uid ORDER BY created_at DESC,id DESC LIMIT 1),uid) AS ign,
  (SELECT COUNT(*) FROM submissions s WHERE s.uid=p.uid AND status='pending') AS pending,
- (SELECT COUNT(*) FROM submissions s WHERE s.uid=p.uid AND status='approved') AS approved
+ (SELECT COUNT(*) FROM submissions s WHERE s.uid=p.uid AND status='approved' AND replaced_by IS NULL) AS approved
  FROM players p WHERE uid=?`,args:[uid]});
  if(!player.rows.length)throw new HttpError(404,'Player UID not found.');
  const row=player.rows[0];
