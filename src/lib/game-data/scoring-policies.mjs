@@ -38,6 +38,6 @@ export function scoringPreset(character,data){
 }
 
 // Kits are integrated, but no upstream rotation preset exists.
-export const OWNER_ROTATION_REQUIRED=['Lucy','Lucilla','Rebecca'];
+export const OWNER_ROTATION_REQUIRED=['Lucy','Lucilla','Rebecca','LuukHerssen'];
 export const AWAITING_ROTATION_POLICY='awaiting-owner-rotation/1';
 export function rotationPolicyReady(policyId){return Boolean(policyId&&policyId!==AWAITING_ROTATION_POLICY);}
