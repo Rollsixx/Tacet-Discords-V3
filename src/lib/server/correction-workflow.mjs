@@ -5,6 +5,7 @@ import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
 import {assessEquipment,identitiesFromReport,SUPPORTED,ENGINE_VERSION,DATA_VERSION} from './scoring.mjs';
 import {initializeRotations,scoreActiveRotation} from './rotations/store.mjs';
 import {isRankableUnderActiveRotation} from './approval-policy.mjs';
+import {replacePriorResonatorBuilds} from './replacement-workflow.mjs';
 const must=(c,m,status=422)=>{if(!c)throw new HttpError(status,m);};
 async function proof(row,data,db){const a=data.assessment;must(a?.statsVerified===true,'Original screenshot numbers were not server-verified.');must(/^[a-f0-9]{64}$/.test(a.sourceHash||''),'Original screenshot verification hash is missing.');must(a.sourceUid===String(row.uid),'Original screenshot UID does not match this player.');must(a.sourceSlots?.length===5,'Original server OCR slots are missing.');
  const evidence=(await db.execute({sql:'SELECT image,source_hash FROM submission_source_evidence WHERE submission_id=?',args:[String(row.id)]})).rows[0];
@@ -44,6 +45,7 @@ async function rebuild(tx,row,data){
  if(!changed)return {ranked,eligible:valid,status,reason:next.assessment.reason,score:ranked?calculation.score:null,policyId:valid?calculation.policyId:null,changed:false};
  if(previous&&active){const c=JSON.parse(String(previous.details)),v=(await tx.execute({sql:'SELECT id FROM rotation_versions WHERE id=?',args:[c.rotationVersion||active.id]})).rows[0];if(v)await tx.execute({sql:'INSERT OR IGNORE INTO rotation_score_history VALUES (?,?,?,?,?,?,?)',args:[randomUUID(),String(v.id),String(row.id),'before-correction/'+randomUUID(),c.score,JSON.stringify(c),at]});}
  await tx.execute({sql:"UPDATE submissions SET data=?,status=?,identity_verified=?,reviewed_at=CASE WHEN status='pending' AND ?='approved' THEN ? ELSE reviewed_at END WHERE id=?",args:[JSON.stringify(next),status,verified?1:0,status,at,String(row.id)]});
+ if(ranked&&row.status==='pending')await replacePriorResonatorBuilds(tx,{id:String(row.id),uid:String(row.uid),character:String(row.character),reviewer:'System: corrected build replacement',now:at});
  await tx.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[String(row.id)]});
  // An approved unverified build may retain a valid calculation; public ranking
  // still requires the UID flag. Pending unverified builds never auto-approve.

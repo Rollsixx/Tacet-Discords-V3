@@ -4,7 +4,8 @@
   "ignoreCommand": "node scripts/ignore-docs-only-build.mjs",
   "git": {
     "deploymentEnabled": {
-      "development/verified-uid-auto-publish": false
+      "development/verified-uid-auto-publish": false,
+      "development/build-replacement-and-correction-retention": false
     }
   }
 }
