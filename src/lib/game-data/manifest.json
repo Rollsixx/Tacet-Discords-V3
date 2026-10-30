@@ -1,7 +1,7 @@
 {
   "version": "b32cdbd3e3c6c3a838e6e5abb71fe46c79c876c5",
-  "sha256": "ca6aa3da8567778f588d58628b5b23a5fdd303c30418fe2b40ad8f7510a2e278",
-  "characters": 15,
+  "sha256": "fa9c1c07dcd465dc2d2b6c91f0dccc0ab37b5fad9bbe463abe524c7b030dd3eb",
+  "characters": 39,
   "echoes": 230,
   "sets": 37,
   "supported": [
@@ -19,12 +19,37 @@
     "Lucilla",
     "Rebecca",
     "Denia",
-    "Sigrika"
+    "Sigrika",
+    "YangyangXuanling",
+    "LuukHerssen",
+    "Mornye",
+    "Lynae",
+    "Qiuyuan",
+    "Galbrena",
+    "Iuno",
+    "Augusta",
+    "Phrolova",
+    "Lupa",
+    "Zani",
+    "Ciaccona",
+    "Cantarella",
+    "Phoebe",
+    "Brant",
+    "Roccia",
+    "Shorekeeper",
+    "Zhezhi",
+    "Changli",
+    "XiangliYao",
+    "Jinhsi",
+    "Yinlin",
+    "Camellya",
+    "Jiyan"
   ],
   "ownerRotationRequired": [
     "Lucy",
     "Lucilla",
-    "Rebecca"
+    "Rebecca",
+    "LuukHerssen"
   ],
   "unsupported": {}
 }
