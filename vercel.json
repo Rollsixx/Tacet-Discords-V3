@@ -9,7 +9,8 @@
       "development/corrected-roll-revalidation": false,
       "development/sigrika-correction-revalidation": false,
       "development/effective-correction-snapshot": false,
-      "development/revalidate-saved-echo-correction": false
+      "development/revalidate-saved-echo-correction": false,
+      "development/fix-correction-revalidation-v2": false
     }
   }
 }

@@ -36,7 +36,12 @@ async function rebuild(tx,row,data){
  // originalSourceSlots and submission_source_evidence as immutable OCR evidence.
  const slots=materializeCorrectedSlots(data),a={...data.assessment,sourceSlots:structuredClone(slots)};
  data={...data,slots,assessment:a};
- const freshAssessment={...a};delete freshAssessment.scoringIssues;delete freshAssessment.rollTableIssues;
+ const freshAssessment={...a};
+ // Rebuild every derived readiness field from corrected canonical values. An old
+ // OCR error reason is not evidence about the corrected slot and must not survive.
+ delete freshAssessment.reason;delete freshAssessment.scoringIssues;delete freshAssessment.rollTableIssues;
+ const active=(await tx.execute({sql:'SELECT v.id,v.kind,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[String(row.character)]})).rows[0];
+ const hasPublishedRotation=Boolean(active&&active.kind!=='baseline');
  const issues=slots.flatMap(s=>validateEchoSlot(s).map(i=>({slot:s.slot,...i})));
  const next={...data,assessment:{...freshAssessment,eligible:false,awaitingRotation:false,rollsVerified:issues.length===0,catalogReview:issues.length>0,calculation:undefined}};
  let reason=issues.length?'Echo '+issues[0].slot+': '+issues[0].message:'';
@@ -49,11 +54,19 @@ async function rebuild(tx,row,data){
    const identities=a.visualReport?.length===5?identitiesFromReport(a.visualReport):a.calculation?.identities;
    must(identities?.length===5,'Five confirmed Echo and Sonata identities are required.');
    Object.assign(next.assessment,await assessEquipment(String(row.character),slots,identities));
-   calculation=await scoreActiveRotation(tx,String(row.character),next)||(next.assessment.eligible?next.assessment.calculation:null);
-   reason=next.assessment.reason||'Equipment validated.';
-  }catch(e){next.assessment.eligible=false;reason=e.message||'Scoring evaluation failed.';}
+   if(hasPublishedRotation){
+    calculation=await scoreActiveRotation(tx,String(row.character),next);
+    reason=calculation?(next.assessment.reason||'Equipment validated under the active rotation.'):'A calculation matching the active scoring policy is required.';
+   }else{
+    // Keep complete, verified inputs available for a private rotation preview.
+    // A legacy preset score is never treated as this Resonator's published score.
+    calculation={character:String(row.character),score:null,engineVersion:ENGINE_VERSION,dataVersion:DATA_VERSION,identities};
+    next.assessment.calculation=calculation;
+    next.assessment.eligible=false;next.assessment.awaitingRotation=true;
+    reason='Equipment verified. Awaiting the owner’s first published rotation; this build remains unranked.';
+   }
+  }catch(e){next.assessment.eligible=false;next.assessment.awaitingRotation=false;reason=e.message||'Scoring evaluation failed.';}
  }
- const active=(await tx.execute({sql:'SELECT v.id,v.kind,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[String(row.character)]})).rows[0];
  const valid=isRankableUnderActiveRotation(calculation,active);
  const player=(await tx.execute({sql:'SELECT identity_verified FROM players WHERE uid=?',args:[String(row.uid)]})).rows[0];
  const verified=Number(player?.identity_verified)===1,ranked=valid&&verified;
