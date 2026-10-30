@@ -1,0 +1,13 @@
+import {test,expect} from '@playwright/test';
+const token='browser-test-only-token-00000000000000000000',headers={Authorization:'Bearer '+token};
+test('moves-only draft resolves equipped passives and exposes source gaps without manual effect setup',async({page,request},info)=>{
+ const character=info.project.name==='desktop'?'Chisa':'Hsin';const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await page.getByLabel('Resonator',{exact:true}).selectOption(character);
+ const workspace=await(await request.get('/api/admin/rotations?character='+character,{headers})).json();
+ const auto=page.getByLabel('Automatic equipped effects');await expect(auto).toBeVisible();await expect(auto).toContainText('Add moves only.');await expect(auto).toContainText('Equipped Sonata sets');await expect(auto).toContainText('Equipped Main Echo');
+ await expect(page.getByText('Advanced conditional assumptions · 0 configured',{exact:true})).toBeVisible();
+ await page.getByLabel('Rotation name',{exact:true}).fill('Automatic equipped QA '+info.project.name);await expect(page.getByText(/Saved · revision/)).toBeVisible();await page.getByRole('button',{name:'Validate draft',exact:true}).click();await expect(page.getByText('Passed · optimizer configuration checked; owner review required',{exact:true})).toBeVisible();
+ const saved=await(await request.get('/api/admin/rotations?character='+character,{headers})).json();expect(saved.draft.spec.effectMode).toBe('equipped-passives/1');expect(saved.draft.spec.defaults).toEqual([]);expect(saved.draft.validation.mechanicsVersion).toBe('owner-configured-benchmark/3');expect(saved.active.id).toBe(workspace.active.id);
+ await page.getByText('Advanced conditional assumptions · 0 configured',{exact:true}).click();const panel=page.locator('.rotation-defaults');await panel.getByRole('button',{name:/Main Echo · equipped only/}).click();await panel.getByRole('button',{name:/^1 cost/}).click();await page.getByLabel('Main Echo for rotation defaults',{exact:true}).selectOption('KernelPuppetJoy');await expect(page.getByRole('region',{name:'Selected Echo reference'})).toContainText('This is not confirmation that the Echo has no effect.');await expect(page.getByRole('region',{name:'Selected Echo reference'})).toContainText('60d91acfc536');
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);await page.screenshot({path:info.outputPath('automatic-effects-and-source-gap.png'),fullPage:true});
+});

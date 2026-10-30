@@ -1,4 +1,5 @@
 // Release gate for every supported Resonator and all pinned Echo/Sonata data.
+import effectGaps from '../game-data/echo-effect-gaps.json' with {type:'json'};
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import {SCORING_CHARACTERS,OWNER_ROTATION_REQUIRED,scoringPreset} from '../game-data/scoring-policies.mjs';
 import {MECHANICS_MODELS} from '../game-data/rotation-mechanics.mjs';
@@ -30,9 +31,10 @@ export async function catalogCompleteness({roster=SCORING_CHARACTERS,features=fe
  }catch(e){errors.push(key+': '+e.message);}}
  for(const [key,e]of Object.entries(engine.mainEchoesData)){
   check([1,3,4].includes(({Calamity:4,Overlord:4,Elite:3,Common:1})[e.class]),key+': invalid Echo cost.');
-  if(!e.details){if(e.modifiers?.length||e.actions?.length)errors.push(key+': effect description missing for modeled effects.');else warnings.push(key+': upstream has no main-slot effect description, modifiers or attacks; no effect is invented.');}
+  if(!e.details){if(e.modifiers?.length||e.actions?.length)errors.push(key+': effect description missing for modeled effects.');else {const gap=effectGaps.echoes.find(g=>g.key===key);check(Boolean(gap?.checkedCommit&&gap?.sourceUrl&&gap?.status==='awaiting-upstream'),key+': missing source-gap review record.');warnings.push(key+': main-slot effects unresolved; upstream checked '+(gap?.checkedCommit||'not reviewed')+'. Identity and Sonata membership remain supported.');}}
   check(e.sets?.length>0&&e.sets.every(s=>engine.echoSetLabelMap[s]),key+': unknown Sonata association.');
   check(tables.echoes.some(x=>x.key===key&&JSON.stringify(x.sets)===JSON.stringify(e.sets)),key+': missing/stale exported Echo.');
  }
- return {ok:errors.length===0,errors,warnings,characters,echoes:Object.keys(engine.mainEchoesData).length,sonatas:Object.keys(engine.echoSetLabelMap).length};
+ for(const gap of effectGaps.echoes){const e=engine.mainEchoesData[gap.key];check(Boolean(e)&&!e.details&&!e.modifiers.length&&!e.actions.length,gap.key+': stale source-gap record; review newly available definitions.');}
+ return {sourceGapReview:{commit:effectGaps.checkedCommit,date:effectGaps.checkedDate},ok:errors.length===0,errors,warnings,characters,echoes:Object.keys(engine.mainEchoesData).length,sonatas:Object.keys(engine.echoSetLabelMap).length};
 }

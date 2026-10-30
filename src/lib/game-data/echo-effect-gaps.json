@@ -1,0 +1,385 @@
+{
+  "source": "ryanbenson/wuthering-waves-optimizer",
+  "sourceFile": "src/echoes/index.ts",
+  "sourceBlob": "6eab6eac102e3a3f3bde8f62a05892c28b765b17",
+  "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+  "checkedDate": "2026-10-30",
+  "policy": "Missing effect definitions do not mean no in-game effect. Identity and Sonata membership stay supported. Never copy another Echo's modifiers or invent numeric values.",
+  "echoes": [
+    {
+      "key": "AeroDrake",
+      "name": "Aero Drake",
+      "cost": 1,
+      "sets": [
+        "GustsofWelkin",
+        "TidebreakingCourage",
+        "FlamingClawprint"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "AureatePicket",
+      "name": "Aureate Picket",
+      "cost": 1,
+      "sets": [
+        "HeartofEvilsPurge",
+        "FlashofElectricReflection"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "ElectroDrake",
+      "name": "Electro Drake",
+      "cost": 1,
+      "sets": [
+        "GustsofWelkin",
+        "MidnightVeil",
+        "FlamingClawprint"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "FogLionarch",
+      "name": "Fog Lionarch",
+      "cost": 3,
+      "sets": [
+        "SongofFeatheredTrace",
+        "HeartofEvilsPurge",
+        "LampofNetherRoad"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "FogLionarchBody",
+      "name": "Fog Lionarch: Body",
+      "cost": 1,
+      "sets": [
+        "SongofFeatheredTrace",
+        "HeartofSwornVigil"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "FogLionarchHead",
+      "name": "Fog Lionarch: Head",
+      "cost": 1,
+      "sets": [
+        "SongofFeatheredTrace",
+        "HeartofSwornVigil"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "GlacioDrake",
+      "name": "Glacio Drake",
+      "cost": 1,
+      "sets": [
+        "GustsofWelkin",
+        "WindwardPilgrimage"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "KernelPuppetAnger",
+      "name": "Kernel Puppet: Anger",
+      "cost": 1,
+      "sets": [
+        "HeartofEvilsPurge",
+        "FlowerofTingedYearning"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "KernelPuppetFright",
+      "name": "Kernel Puppet: Fright",
+      "cost": 1,
+      "sets": [
+        "LampofNetherRoad",
+        "FlowerofTingedYearning"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "KernelPuppetGrief",
+      "name": "Kernel Puppet: Grief",
+      "cost": 1,
+      "sets": [
+        "LampofNetherRoad",
+        "FlowerofTingedYearning"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "KernelPuppetJoy",
+      "name": "Kernel Puppet: Joy",
+      "cost": 1,
+      "sets": [
+        "SongofFeatheredTrace",
+        "HeartofSwornVigil"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "KernelPuppetReflection",
+      "name": "Kernel Puppet: Reflection",
+      "cost": 1,
+      "sets": [
+        "HeartofEvilsPurge",
+        "FlowerofTingedYearning"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "KernelPuppetWorry",
+      "name": "Kernel Puppet: Worry",
+      "cost": 1,
+      "sets": [
+        "HeartofEvilsPurge",
+        "FlashofElectricReflection"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "LaGuardia",
+      "name": "La Guardia",
+      "cost": 1,
+      "sets": [
+        "GustsofWelkin",
+        "MidnightVeil",
+        "FlamingClawprint"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "PhantomSmiter",
+      "name": "Phantom: Smiter",
+      "cost": 1,
+      "sets": [
+        "SongofFeatheredTrace"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "PhantomSmolder",
+      "name": "Phantom: Smolder",
+      "cost": 1,
+      "sets": [
+        "SongofFeatheredTrace"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "PorcelainPicket",
+      "name": "Porcelain Picket",
+      "cost": 1,
+      "sets": [
+        "LampofNetherRoad",
+        "FlashofElectricReflection"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "Sacerdos",
+      "name": "Sacerdos",
+      "cost": 1,
+      "sets": [
+        "GustsofWelkin",
+        "WindwardPilgrimage"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "Sagittario",
+      "name": "Sagittario",
+      "cost": 1,
+      "sets": [
+        "GustsofWelkin",
+        "EternalRadiance",
+        "FlamingClawprint"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "Smiter",
+      "name": "Smiter",
+      "cost": 1,
+      "sets": [
+        "SongofFeatheredTrace"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "Smolder",
+      "name": "Smolder",
+      "cost": 1,
+      "sets": [
+        "SongofFeatheredTrace"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    },
+    {
+      "key": "StonePicket",
+      "name": "Stone Picket",
+      "cost": 1,
+      "sets": [
+        "LampofNetherRoad",
+        "FlashofElectricReflection"
+      ],
+      "status": "awaiting-upstream",
+      "checkedCommit": "60d91acfc536425bd302cd14ab85ab9d8b135a63",
+      "sourceUrl": "https://github.com/ryanbenson/wuthering-waves-optimizer/blob/60d91acfc536425bd302cd14ab85ab9d8b135a63/src/echoes/index.ts",
+      "missing": [
+        "details",
+        "modifiers",
+        "actions"
+      ]
+    }
+  ]
+}
