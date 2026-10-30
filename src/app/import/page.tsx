@@ -5,6 +5,7 @@ import {ScoringReadinessCard} from "@/components/scoring-readiness";
 import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
 import {extractEchoVisuals} from "@/lib/scanner/portrait-regions";
 import { ResonatorPortrait } from "@/components/resonator-portrait";
+import { resonatorDisplayName } from "@/lib/resonators";
 import { useEffect, useRef, useState } from "react";
 import { PageHeading, Panel, LockIcon } from "@/components/ui";
 import { SubmitBuild } from "@/components/submit-build";
@@ -87,7 +88,7 @@ export default function ImportPage() {
           {result&&<ScoringReadinessCard value={readiness} checking={identityChecking} preliminary/>}
           <p className="muted scan-footnote">A stat pass does not establish Echo identity or leaderboard eligibility. Passed means the extracted fields are readable and structurally valid. Every stat is checked against the screenshot when you submit.</p>
         </Panel>
-        {identity && <Panel className="import-character"><ResonatorPortrait key={identity.character} name={identity.character||""} className="import-character-portrait"/><div><span className="eyebrow">Character</span><h2>{identity.character || "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
+        {identity && <Panel className="import-character"><ResonatorPortrait key={identity.character} name={identity.character||""} className="import-character-portrait"/><div><span className="eyebrow">Character</span><h2>{identity.character ? resonatorDisplayName(identity.character) : "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
         {preview && <details className="source-preview"><summary>Compare original screenshot</summary>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="Selected build screenshot" />

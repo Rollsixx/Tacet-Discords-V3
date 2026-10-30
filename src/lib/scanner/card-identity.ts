@@ -16,10 +16,23 @@ export function parseCardIdentity(character: string, player: string, uidLine: st
     .replace(/\bSuisuli\b/gi, "Suisui")
     .split(/\bL\s*V\s*\.?\s*\d/i)[0]
     .trim();
-  const canonical = featuredResonators.map(r => r.name).find(name => new RegExp("\\b" + name + "\\b", "i").test(header));
   const normalizedHeader = normalizeCharacterOcr(header);
-  const equivalentNames = featuredResonators.filter(r => normalizeCharacterOcr(r.name) === normalizedHeader);
-  const resolved = canonical || (equivalentNames.length === 1 ? equivalentNames[0].name : null);
+  // Restrict corrections to known roster names and observed OCR variants. Matching
+  // a full normalized roster name inside the header tolerates OCR noise after LV.
+  const ocrAliases: Record<string, string> = {
+    zanmw: "Zani",
+  };
+  const aliasMatch = Object.entries(ocrAliases).find(([alias]) => normalizedHeader.includes(alias));
+  const rosterMatches = featuredResonators.flatMap(resonator => {
+    const aliases = [resonator.name, resonator.displayName].filter((value): value is string => Boolean(value));
+    return aliases.filter(alias => normalizedHeader.includes(normalizeCharacterOcr(alias))).map(() => resonator);
+  });
+  const uniqueMatches = [...new Map(rosterMatches.map(resonator => [resonator.name, resonator])).values()];
+  const resolved = aliasMatch
+    ? aliasMatch[1]
+    : uniqueMatches.length === 1
+      ? uniqueMatches[0].name
+      : null;
   return {
     character: resolved || header.replace(/[^\p{L}\p{N}\s'’()-]/gu, "").trim(),
     ign: player.replace(/^\s*Player\s*I[Dd]\s*[:：.]?\s*/i, "").trim().slice(0, 32),

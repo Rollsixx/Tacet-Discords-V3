@@ -12,6 +12,38 @@ import type { LeaderboardMetric } from "@/lib/leaderboards/metrics.mjs";
 import { createPortal } from "react-dom";
 type Result=Awaited<ReturnType<typeof listLeaderboard>>;
 type Build=Result['builds'][number];
+function PatchCharacterPicker({version,resonators,selected,onSelect}:{version:string;resonators:typeof featuredResonators;selected:string;onSelect:(name:string)=>void}) {
+ const [open,setOpen]=useState(false);
+ const [position,setPosition]=useState<{top:number;left:number;width:number}|null>(null);
+ const trigger=useRef<HTMLButtonElement>(null),menu=useRef<HTMLDivElement>(null);
+ const current=resonators.find(item=>item.name===selected)||resonators[0];
+ const selectedResonator=resonators.find(item=>item.name===selected);
+ useEffect(()=>{
+  if(!open)return;
+  const dismiss=(event:PointerEvent)=>{const target=event.target as Node;if(!trigger.current?.contains(target)&&!menu.current?.contains(target))setOpen(false);};
+  const closeOnScroll=()=>setOpen(false);
+  document.addEventListener("pointerdown",dismiss);window.addEventListener("scroll",closeOnScroll,true);
+  return()=>{document.removeEventListener("pointerdown",dismiss);window.removeEventListener("scroll",closeOnScroll,true);};
+ },[open]);
+ function toggle(){
+  if(open){setOpen(false);return;}
+  const rect=trigger.current?.getBoundingClientRect();
+  if(rect){const width=Math.max(210,Math.min(rect.width,window.innerWidth-16));setPosition({top:Math.max(8,Math.min(rect.bottom+6,window.innerHeight-360)),left:Math.max(8,Math.min(rect.left,window.innerWidth-width-8)),width});}
+  setOpen(true);
+ }
+ return <div className="lb-patch-picker">
+  <button ref={trigger} type="button" className="lb-patch-trigger" aria-haspopup="listbox" aria-expanded={open} aria-label={`Choose a ${version} Resonator`} onClick={toggle}>
+   {current&&<ResonatorPortrait name={current.name} className="lb-patch-avatar"/>}
+   <span><strong>{version} Characters</strong><small>{selectedResonator?.displayName||selectedResonator?.name||"Choose a character"}</small></span>
+   <span className="lb-patch-chevron" aria-hidden="true">⌄</span>
+  </button>
+  {open&&position&&createPortal(<div ref={menu} className="lb-patch-menu" role="listbox" aria-label={`${version} Characters`} style={{top:position.top,left:position.left,width:position.width}} onKeyDown={event=>{if(event.key==="Escape")setOpen(false);}}>
+   {resonators.map(item=><button type="button" role="option" aria-selected={item.name===selected} key={item.name} onClick={()=>{onSelect(item.name);setOpen(false);}}>
+    <ResonatorPortrait name={item.name} className="lb-patch-option-avatar"/><span>{item.displayName||item.name}</span>
+   </button>)}
+  </div>,document.body)}
+ </div>;
+}
 function StatColumn({title,metric,onChange}: {title:string;metric:LeaderboardMetric;onChange:(metric:LeaderboardMetric)=>void}) {
  const [open,setOpen]=useState(false);
  const [position,setPosition]=useState<{top:number;left:number}|null>(null);
@@ -61,6 +93,7 @@ export function Leaderboard(){
  function updateColumn(key:"primary"|"attribute"|"damage"|"recovery",metric:LeaderboardMetric){setColumnState({character,columns:{...columns,[key]:metric}});}
  const resonator=currentResonator;
  const displayCharacter=resonator?.displayName||character;
+ const patchMajors=[...new Set(featuredResonators.map(item=>item.patchVersion.split(".")[0]))].sort((a,b)=>Number(a)-Number(b));
  useEffect(()=>{
   const controller=new AbortController();
   const timer=setTimeout(()=>{
@@ -78,7 +111,9 @@ export function Leaderboard(){
  const builds=result?.builds||[];
  return <div className="leaderboard-page">
   <header className="lb-page-heading"><div><span className="eyebrow">Competitive rankings</span><h1>Solo Leaderboards</h1><p>Verified players. One best build per character.</p></div><Link className="outline-button" href="/import">Import your build ↗</Link></header>
-  <div className="lb-character-select"><ResonatorPortrait name={character} className={`lb-monogram tone-${resonator?.tone||'glacio'}`}/><label><span className="visually-hidden">Choose a Resonator and patch group</span><select value={character} onChange={event=>chooseCharacter(event.target.value)}>{[...new Set(featuredResonators.map(item=>item.patchVersion))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(version=><optgroup key={version} label={`${version} Characters`}>{featuredResonators.filter(item=>item.patchVersion===version).map(item=><option key={item.name} value={item.name}>{item.displayName||item.name}</option>)}</optgroup>)}</select></label></div>
+  <div className="lb-character-select" role="group" aria-label="Choose Resonator patch">
+   {patchMajors.map(major=>{const version=major+".x";return <PatchCharacterPicker key={version} version={version} resonators={featuredResonators.filter(item=>item.patchVersion.startsWith(major+".")).sort((a,b)=>(a.displayName||a.name).localeCompare(b.displayName||b.name))} selected={featuredResonators.find(item=>item.name===character)?.patchVersion.startsWith(major+".")?character:""} onSelect={chooseCharacter}/>})}
+  </div>
   <section className="lb-board" aria-label={`${displayCharacter} rankings`}>
    <div className="lb-board-heading"><div><ResonatorPortrait name={character} className={`lb-monogram lb-board-mark tone-${resonator?.tone||'glacio'}`}/><div><h2>{displayCharacter}</h2><p>{resonator?.element||'Character'} · Standardized Solo benchmark</p></div></div><span className="lb-metric-label">Expected damage · not DPS</span></div>
    <div className="lb-toolbar"><label><span className="visually-hidden">Search UID or in-game name</span><input type="search" placeholder="Search player name or UID…" value={search} maxLength={64} onChange={e=>{setSearch(e.target.value);setPage(1);}} /></label>{search&&<button className="text-link" onClick={()=>{setSearch('');setPage(1);}}>Clear search</button>}<span>{loading?'Loading…':`${builds.length} player${builds.length===1?'':'s'} on this page`}</span></div>
