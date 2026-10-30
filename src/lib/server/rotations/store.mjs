@@ -82,7 +82,13 @@ export async function evaluateVersion(character,data,version,{allowProvisional=f
  return calculateStandard(character,data.slots,source.identities,{name:spec.name,actions:validation.valid?validation.actions:spec.actions,policyId:version.policy_id,versionId:version.id,mechanicsVersion:validation.mechanicsVersion,trace:validation.trace,verifiedMechanics:validation.valid,provenance:validation.valid?'Tacet managed, mechanics-validated full rotation.':'Provisional attack damage only; combat mechanics NOT validated.',startState:validation.valid?JSON.stringify(MECHANICS_MODELS[character].initial):'Unverified: current permanent-passive damage assumptions only.'});
 }
 async function firstRotation(db,versionId){
- return (await db.execute({sql:'SELECT policy_id FROM rotation_versions WHERE id=?',args:[versionId]})).rows[0]?.policy_id===AWAITING_ROTATION_POLICY;
+ const version=(await db.execute({sql:'SELECT character,kind,policy_id FROM rotation_versions WHERE id=?',args:[versionId]})).rows[0];
+ if(!version)return false;
+ // Pending, source-verified builds may be privately tested before the first
+ // owner publication, whether the active baseline is a placeholder or a
+ // retained legacy preset. A rollback after publication is not a first rotation.
+ if((await db.execute({sql:'SELECT 1 FROM rotation_activations WHERE character=? LIMIT 1',args:[version.character]})).rows.length)return false;
+ return version.policy_id===AWAITING_ROTATION_POLICY||version.kind==='baseline';
 }
 async function testedInputs(db,run){
  const pending=await firstRotation(db,run.base_version_id);
