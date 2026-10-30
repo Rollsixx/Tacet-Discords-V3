@@ -3,7 +3,7 @@ import test from 'node:test';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import { featuredResonators } from '../resonators.ts';
 import { ROTATION_ROSTER } from '../game-data/rotation-mechanics.mjs';
-import { scoringPreset } from '../game-data/scoring-policies.mjs';
+import { AWAITING_ROTATION_POLICY, rotationPolicyReady, scoringPreset } from '../game-data/scoring-policies.mjs';
 
 const requested = [
   ['YangyangXuanling', 'Yangyang: Xuanling'],
@@ -52,4 +52,10 @@ test('requested Resonators have leaderboard entries and reference-backed scoring
       assert.ok(preset?.data?.actions?.length, `${label} has no usable scoring actions`);
     }
   }
+});
+
+test('a leaderboard stays pending until its scoring policy is published', () => {
+  assert.equal(rotationPolicyReady(undefined), false);
+  assert.equal(rotationPolicyReady(AWAITING_ROTATION_POLICY), false);
+  assert.equal(rotationPolicyReady('owner-validated-policy/1'), true);
 });
