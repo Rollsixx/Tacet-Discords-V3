@@ -2,8 +2,9 @@ import {randomUUID,createHash} from 'node:crypto';
 import {HttpError} from './validation.ts';
 import {allowedSubstatCorrection} from '../scanner/substat-options.ts';
 import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
-import {assessEquipment,identitiesFromReport,SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from './scoring.mjs';
+import {assessEquipment,identitiesFromReport,SUPPORTED,ENGINE_VERSION,DATA_VERSION} from './scoring.mjs';
 import {initializeRotations,scoreActiveRotation} from './rotations/store.mjs';
+import {isRankableUnderActiveRotation} from './approval-policy.mjs';
 const must=(c,m,status=422)=>{if(!c)throw new HttpError(status,m);};
 async function proof(row,data,db){const a=data.assessment;must(a?.statsVerified===true,'Original screenshot numbers were not server-verified.');must(/^[a-f0-9]{64}$/.test(a.sourceHash||''),'Original screenshot verification hash is missing.');must(a.sourceUid===String(row.uid),'Original screenshot UID does not match this player.');must(a.sourceSlots?.length===5,'Original server OCR slots are missing.');
  const evidence=(await db.execute({sql:'SELECT image,source_hash FROM submission_source_evidence WHERE submission_id=?',args:[String(row.id)]})).rows[0];
@@ -31,8 +32,8 @@ async function rebuild(tx,row,data){
    reason=next.assessment.reason||'Equipment validated.';
   }catch(e){next.assessment.eligible=false;reason=e.message||'Scoring evaluation failed.';}
  }
- const active=(await tx.execute({sql:'SELECT v.id,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[String(row.character)]})).rows[0];
- const valid=Boolean(calculation&&calculation.engineVersion===ENGINE_VERSION&&calculation.dataVersion===DATA_VERSION&&calculation.policyId===(active?.policy_id||POLICY_VERSION)&&Number.isFinite(calculation.score)&&calculation.score>0);
+ const active=(await tx.execute({sql:'SELECT v.id,v.kind,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[String(row.character)]})).rows[0];
+ const valid=isRankableUnderActiveRotation(calculation,active);
  const player=(await tx.execute({sql:'SELECT identity_verified FROM players WHERE uid=?',args:[String(row.uid)]})).rows[0];
  const verified=Number(player?.identity_verified)===1,ranked=valid&&verified;
  if(valid)Object.assign(next.assessment,{eligible:true,awaitingRotation:false,calculation,reason:verified?'Moderator correction validated; approved and scored under the active policy.':'Player UID verification is required before automatic approval and ranking.'});
