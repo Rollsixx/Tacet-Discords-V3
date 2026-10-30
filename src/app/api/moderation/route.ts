@@ -1,3 +1,5 @@
+import {catalogCompleteness} from "@/lib/server/catalog-completeness.mjs";
+import {verifyHistoricalCorrections} from "@/lib/server/correction-workflow.mjs";
 import { authorize, failure, json, readJson } from "@/lib/server/http";
 import { HttpError, record } from "@/lib/server/validation";
 import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild, correctEchoSubstat } from "@/lib/server/store";
@@ -5,6 +7,7 @@ export async function GET(request: Request) {
   try {
     authorize(request);
     const params=new URL(request.url).searchParams;
+    if(params.get("view")==="catalog")return json(await catalogCompleteness());
     const page=Number(params.get("page"))||1;
     const search=params.get("search")||"";
     if(params.get('view')==='players')return json({...await listAdminPlayers({page,search,character:params.get('character')||''}),overview:await adminOverview()});
@@ -56,7 +59,11 @@ export async function DELETE(request: Request) {
 
 export async function PUT(request:Request){
  try{
-  authorize(request);const input=await readJson(request,4096);if(record(input)&&input.note===undefined)input.note="";
+  authorize(request);const input=await readJson(request,65536);if(record(input)&&input.note===undefined)input.note="";
+  if(record(input)&&input.action==='verify-corrections'){
+   if(typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id)||!Array.isArray(input.expectedCorrections)||typeof input.reviewer!=='string'||typeof input.note!=='string')throw new HttpError(400,'Invalid correction verification.');
+   return json({ok:true,...await verifyHistoricalCorrections(input.id,input.expectedCorrections,input.reviewer,input.verified,input.note)});
+  }
   if(!record(input)||typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id)||typeof input.slot!=='number'||typeof input.position!=='number'||typeof input.expected!=='string'||typeof input.replacement!=='string'||typeof input.reviewer!=='string'||typeof input.note!=='string')throw new HttpError(400,'Invalid Echo substat correction.');
   return json({ok:true,...await correctEchoSubstat(input.id,input.slot,input.position,input.expected,input.replacement,input.reviewer,input.note)});
  }catch(error){return failure(error);}

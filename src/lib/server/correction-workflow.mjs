@@ -9,13 +9,18 @@ async function proof(row,data,db){const a=data.assessment;must(a?.statsVerified=
  const evidence=(await db.execute({sql:'SELECT image,source_hash FROM submission_source_evidence WHERE submission_id=?',args:[String(row.id)]})).rows[0];
  if(evidence)must(evidence.source_hash===a.sourceHash&&createHash('sha256').update(Buffer.from(evidence.image)).digest('hex')===a.sourceHash,'Stored screenshot and verification hash disagree. Original evidence must be reviewed.');
 }
+export function correctionLedgerVerified(data){
+ const ledger=data.substatCorrections||[];
+ return ledger.every((c,i)=>allowedSubstatCorrection(c.replacement)&&(c.adminVerifiedSubstat===true||(data.correctionVerifications||[]).some(v=>v.verified===true&&JSON.stringify(v.corrections?.[i])===JSON.stringify(c))));
+}
 async function rebuild(tx,row,data){
  await proof(row,data,tx);const a=data.assessment,slots=data.slots;
  const issues=slots.flatMap(s=>validateEchoSlot(s).map(i=>({slot:s.slot,...i})));
  const next={...data,assessment:{...a,eligible:false,awaitingRotation:false,rollsVerified:issues.length===0,catalogReview:issues.length>0,calculation:undefined}};
  let reason=issues.length?'Echo '+issues[0].slot+': '+issues[0].message:'';
  let calculation=null;
- if(!issues.length){
+ if(!issues.length&&!correctionLedgerVerified(data))reason='Historical corrections require moderator verification against original evidence.';
+ if(!issues.length&&correctionLedgerVerified(data)){
   if(a.maxMainStatsVerified!==true)reason='Maximum main-stat amounts are not source-verified.';
   else if(!SUPPORTED.includes(String(row.character)))reason='This resonator has no integrated scoring data.';
   else try{
@@ -85,9 +90,31 @@ export async function revalidateCorrectedBuilds(db,{uid,character}={}){
  const results=[];
  for(const item of rows){const tx=await db.transaction('write');try{
   const row=(await tx.execute({sql:'SELECT * FROM submissions WHERE id=?',args:[String(item.id)]})).rows[0],data=JSON.parse(String(row.data));
-  must(data.substatCorrections.every(c=>c.adminVerifiedSubstat===true&&allowedSubstatCorrection(c.replacement)),'Correction ledger lacks a verified moderator attestation.');
+  must(correctionLedgerVerified(data),'Historical corrections require moderator verification against original evidence.');
   const result=await rebuild(tx,row,data);
   if(result.changed)await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),String(row.id),'corrected_build_revalidated','system',JSON.stringify(result),new Date().toISOString()]});await tx.commit();results.push({id:String(row.id),...result});
  }catch(e){results.push({id:String(item.id),ranked:false,reason:e.message});}finally{tx.close();}}
  return results;
+}
+
+// Append a separate attestation; never rewrite a historical correction or OCR.
+export async function verifyHistoricalCorrections(id,expectedCorrections,reviewer,verified,note='',db){
+ if(!db){const {database}=await import('./database.ts');db=database();}
+ must(verified===true,'Compare the saved corrections against original evidence and confirm verification.',400);
+ must(typeof reviewer==='string'&&reviewer.trim().length>=2&&reviewer.length<=64&&typeof note==='string'&&note.length<=500,'Valid moderator and optional note required.',400);
+ await initializeRotations(db);const tx=await db.transaction('write');try{
+  const row=(await tx.execute({sql:"SELECT * FROM submissions WHERE id=? AND status IN ('pending','approved')",args:[id]})).rows[0];must(row,'Submission not found.',404);
+  const data=JSON.parse(String(row.data)),ledger=data.substatCorrections||[];
+  must(ledger.length>0,'No saved corrections require verification.',400);
+  must(JSON.stringify(ledger)===JSON.stringify(expectedCorrections),'Correction history changed. Reload before verifying.',409);
+  await proof(row,data,tx);
+  must(ledger.every(c=>Number.isInteger(c.slot)&&c.slot>=1&&c.slot<=5&&Number.isInteger(c.position)&&c.position>=1&&c.position<=5&&allowedSubstatCorrection(c.replacement)),'Historical correction contains an invalid field or illegal roll. Review the source data first.');
+  const next=structuredClone(data),at=new Date().toISOString();
+  if(!correctionLedgerVerified(data))next.correctionVerifications=[...(next.correctionVerifications||[]),{corrections:structuredClone(ledger),verified:true,reviewer:reviewer.trim(),note:note.trim(),at}];
+  // All other fields are validated from canonical server inputs by rebuild.
+  next.slots=structuredClone(next.assessment.sourceSlots);
+  const result=await rebuild(tx,row,next);
+  if(result.changed)await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'historical_corrections_verified',reviewer.trim(),JSON.stringify({corrections:ledger,note:note.trim(),...result}),at]});
+  await tx.commit();return result;
+ }finally{tx.close();}
 }

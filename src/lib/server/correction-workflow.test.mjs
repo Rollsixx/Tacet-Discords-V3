@@ -32,3 +32,23 @@ test('corrected pending build automatically approves when the owner later publis
 test('missing owner rotation is reported and an existing valid draft is privately previewed, never published',async()=>{
  const {prepareCorrectionPreviews}=await import('./authorized-corrections.mjs'),{rotationWorkspace,saveRotationDraft}=await import('./rotations/store.mjs');const db=createClient({url:'file::memory:'});try{await migrate(db);const f=await seedCorrection(db,'Lucilla');await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);assert.match((await prepareCorrectionPreviews(db))[0].reason,/no owner-saved draft/);const w=await rotationWorkspace(db,'Lucilla'),a=w.catalog.find(a=>!a.mainEcho&&!['Healing','Shield','ElementalEffect'].includes(a.damageType));await saveRotationDraft(db,'Lucilla',{name:'Owner draft test',mode:'admin-reviewed',actions:[{type:a.type,key:a.key,count:1}]},0);const p=(await prepareCorrectionPreviews(db))[0];assert.equal(p.state,'ready');assert.equal(p.testInputs.pending,1);assert.equal((await prepareCorrectionPreviews(db))[0].runId,p.runId);assert.equal((await listLeaderboard({character:'Lucilla'},db)).rotationReady,false);}finally{db.close();}
 });
+
+for(const character of ['Carlotta','Lucilla','Rebecca'])test(character+' historical verification is explicit, empty-note, audited and preserves originals',async()=>{
+ const {verifyHistoricalCorrections}=await import('./correction-workflow.mjs');const db=createClient({url:'file::memory:'});try{
+ await migrate(db);await ensureTestRotation(db,character);const f=await seedCorrection(db,character);
+ await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);
+ let row=(await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0];const data=JSON.parse(row.data);delete data.substatCorrections[0].adminVerifiedSubstat;
+ await db.execute({sql:"UPDATE submissions SET data=?,status='pending',reviewed_at=NULL WHERE id=?",args:[JSON.stringify(data),f.id]});await db.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[f.id]});
+ const originals=structuredClone(data.assessment.originalSourceSlots),ledger=structuredClone(data.substatCorrections);
+ assert.equal((await revalidateCorrectedBuilds(db,{uid:f.uid}))[0].ranked,false);
+ await assert.rejects(verifyHistoricalCorrections(f.id,ledger,'QA',false,'',db),/confirm verification/);
+ await assert.rejects(verifyHistoricalCorrections(f.id,[],'QA',true,'',db),e=>e.status===409);
+ const r=await verifyHistoricalCorrections(f.id,ledger,'QA',true,'',db);assert.equal(r.ranked,true,r.reason);
+ const after=JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0].data);
+ assert.deepEqual(after.substatCorrections,ledger);assert.deepEqual(after.assessment.originalSourceSlots,originals);assert.equal(after.correctionVerifications[0].reviewer,'QA');assert.equal(after.correctionVerifications[0].note,'');assert.equal((await listLeaderboard({character,search:f.uid},db)).builds[0].id,f.id);
+ assert.equal((await revalidateCorrectedBuilds(db,{uid:f.uid}))[0].ranked,true);
+ }finally{db.close();}
+});
+test('historical verification never bypasses other invalid canonical fields',async()=>{
+ const {verifyHistoricalCorrections}=await import('./correction-workflow.mjs');const db=createClient({url:'file::memory:'});try{await migrate(db);const f=await seedCorrection(db);const d=structuredClone(f.data);d.substatCorrections=[{slot:f.slot,position:f.position,original:'DEF 8.1%',replacement:'DEF 11.8%'}];d.assessment.sourceSlots[f.slot-1].substats[0].value='DEF 13.7%';await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(d),f.id]});const r=await verifyHistoricalCorrections(f.id,d.substatCorrections,'QA',true,'',db);assert.equal(r.ranked,false);assert.match(r.reason,/13.7/);}finally{db.close();}
+});
