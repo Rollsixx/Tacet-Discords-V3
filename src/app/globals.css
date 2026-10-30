@@ -1083,3 +1083,26 @@ input[readonly] { opacity: .75; cursor: default; }
 
 .rotation-defaults,.rotation-paste,.rotation-range,.rotation-legacy{border:1px solid #354b61;border-radius:12px;padding:16px;margin:18px 0;background:#0d1926;min-width:0}.rotation-defaults>summary,.rotation-paste>summary,.rotation-range>summary{cursor:pointer;font-weight:700;color:#a7d5ff}.rotation-moves{min-width:0}.rotation-moves>.rotation-add{display:grid;grid-template-columns:minmax(0,1fr) 84px auto;align-items:end}.rotation-moves .field{min-width:0}.rotation-moves input,.rotation-moves select,.rotation-moves textarea{max-width:100%;min-width:0;box-sizing:border-box}.rotation-paste textarea{width:100%;resize:vertical;padding:12px;background:#09111b;border:1px solid #354b61;border-radius:8px;color:inherit;font:inherit}.rotation-paste-line{padding:10px 0;border-bottom:1px solid #273b50;display:grid;gap:6px;overflow-wrap:anywhere}.rotation-paste-line>span{font-size:12px;color:#a1b8cf}.rotation-inherited{margin:16px 0;padding:12px;border:1px dashed #4c7088;border-radius:8px}.rotation-inherited article{display:grid;gap:6px;margin:12px 0;font-size:12px;overflow-wrap:anywhere}.rotation-inherited small{color:#9bb4c9}.rotation-inherited button{justify-self:start}.rotation-range-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.rotation-defaults .rotation-effect-workspace{margin-top:16px}.rotation-moves .rotation-actions .bs-pill{display:inline-flex;margin-top:6px;white-space:normal;font-size:10px}
 @media(max-width:620px){.rotation-moves>.rotation-add{grid-template-columns:minmax(0,1fr) 72px}.rotation-moves>.rotation-add>button{grid-column:1/-1}.rotation-range-fields{grid-template-columns:1fr}.rotation-defaults,.rotation-paste,.rotation-range{padding:12px}}
+
+/* UI polish: restrained surfaces, readable hierarchy and consistent controls. */
+:root{--ui-success:#76d8bd;--ui-attention:#e5ba70;--ui-error:#f19a9a;--ui-pending:#b5c0cc}
+.panel,.bs-panel,.profile-card,.build-card,.echo-detail,.scoring-readiness,.rotation-effect,.rotation-actions li{border-color:transparent;background-color:var(--surface);}
+.panel:hover{border-color:transparent}
+.selector-item:not(.selected),.bs-row:not(.selected),.bs-player-builds>button:not(.selected){border-color:transparent}
+.selector-item.selected,.bs-row.selected,.bs-player-builds>button.selected,.rotation-effect-categories button.selected,.rotation-echo-costs button.selected{border-color:var(--accent)}
+.profile-card h3,.bs-row strong,.bs-player-builds strong,.ranking-table td strong{font-size:clamp(14px,1.2vw,18px);font-weight:750;line-height:1.35;color:var(--text)}
+.resonator-info h3,.leaderboard-heading h2,.rotation-summary h2{font-weight:800;letter-spacing:-.035em}
+.score-cell,.home-ranked-score{font-variant-numeric:tabular-nums;font-weight:800;color:var(--accent)}
+.profile-uid,.ranking-table td small,.echo-detail small,.bs-row small{color:#a9b7c5;font-size:12px}
+.action,.outline-button,.bs-review-actions button,.rotation-action-buttons button{min-height:42px;padding:10px 16px;border-radius:10px;line-height:1.35;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.field input,.field select,.rotation-actions input,.rotation-manager textarea,textarea{min-height:42px;border-radius:10px;border-color:#344351;background:#0e151d;color:var(--text)}
+.field input:focus-visible,.field select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.scan-chip.passed,.bs-success{color:var(--ui-success)}
+.scan-chip.needs-review,.rotation-warning,.rotation-validation-issue{color:var(--ui-attention)}
+.field-error,[role=alert]{color:var(--ui-error)}
+.echo-detail{display:grid;align-content:start;gap:8px;padding:14px;background:var(--surface-raised)}
+.echo-detail strong,.echo-detail b{font-variant-numeric:tabular-nums}
+.echo-detail .correction,.correction{color:var(--ui-success)!important;font-weight:750}
+.echo-detail .tag,.echo-detail small{display:inline-block;max-width:100%;overflow-wrap:anywhere}
+.hero-visual,.orbit,.orbit-two{pointer-events:none}
+@media(max-width:600px){.hero-visual{opacity:.08}.echo-detail{padding:12px}.action,.outline-button,.bs-review-actions button{min-height:44px}}
