@@ -5,7 +5,8 @@
   "git": {
     "deploymentEnabled": {
       "development/verified-uid-auto-publish": false,
-      "development/build-replacement-and-correction-retention": false
+      "development/build-replacement-and-correction-retention": false,
+      "development/corrected-roll-revalidation": false
     }
   }
 }
