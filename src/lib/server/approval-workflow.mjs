@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {HttpError} from './validation.ts';
 import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from './scoring-versions.mjs';
 import {scoreActiveRotation,recordRotationScore,applyPublishedRotation} from './rotations/store.mjs';
-import {isRankableUnderActiveRotation} from './approval-policy.mjs';
+import {isRankableUnderActiveRotation,isAutomaticApprovalReady} from './approval-policy.mjs';
 import {replacePriorResonatorBuilds} from './replacement-workflow.mjs';
 
 export async function applyUidVerification(tx,uid,verified,reviewer,note,now){
@@ -32,7 +32,7 @@ export async function approvePendingBuildTx(tx,id,{reviewer,note,identityVerifie
  const identityIsVerified=Number(player?.identity_verified)===1;
  if(requireRanked){
   if(!identityIsVerified)throw new HttpError(422,'UID verification is required before automatic approval.');
-  if(!assessment?.eligible||!isRankableUnderActiveRotation(calculation,active))throw new HttpError(422,'This build is not fully scoring-ready under the active published rotation.');
+  if(!isAutomaticApprovalReady({identityVerified:identityIsVerified,assessment,calculation,rotation:active,hasCorrections:Array.isArray(data.substatCorrections)&&data.substatCorrections.length>0}))throw new HttpError(422,'This build is not fully scoring-ready under the active published rotation.');
   assessment={...assessment,eligible:true,awaitingRotation:false,calculation,reason:'Automatically approved: verified UID and current scoring checks passed.'};
   data={...data,assessment};calculation=assessment.calculation;
  }

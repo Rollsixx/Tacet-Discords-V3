@@ -20,10 +20,18 @@ function PatchCharacterPicker({version,resonators,selected,onSelect}:{version:st
  const selectedResonator=resonators.find(item=>item.name===selected);
  useEffect(()=>{
   if(!open)return;
-  const dismiss=(event:PointerEvent)=>{const target=event.target as Node;if(!trigger.current?.contains(target)&&!menu.current?.contains(target))setOpen(false);};
-  const closeOnScroll=()=>setOpen(false);
-  document.addEventListener("pointerdown",dismiss);window.addEventListener("scroll",closeOnScroll,true);
-  return()=>{document.removeEventListener("pointerdown",dismiss);window.removeEventListener("scroll",closeOnScroll,true);};
+  const dismiss=(event:PointerEvent)=>{
+   const target=event.target as Node,rect=menu.current?.getBoundingClientRect();
+   const withinMenu=Boolean(menu.current?.contains(target)||(rect&&event.clientX>=rect.left&&event.clientX<=rect.right&&event.clientY>=rect.top&&event.clientY<=rect.bottom));
+   if(!trigger.current?.contains(target)&&!withinMenu)setOpen(false);
+  };
+  const closeOnScroll=(event:Event)=>{
+   const target=event.target;
+   if(target instanceof Node&&menu.current?.contains(target))return;
+   setOpen(false);
+  };
+  document.addEventListener("pointerdown",dismiss);document.addEventListener("scroll",closeOnScroll,true);
+  return()=>{document.removeEventListener("pointerdown",dismiss);document.removeEventListener("scroll",closeOnScroll,true);};
  },[open]);
  function toggle(){
   if(open){setOpen(false);return;}
@@ -50,10 +58,18 @@ function StatColumn({title,metric,onChange}: {title:string;metric:LeaderboardMet
  const trigger=useRef<HTMLButtonElement>(null),menu=useRef<HTMLDivElement>(null);
  useEffect(()=>{
   if(!open)return;
-  const dismiss=(event:PointerEvent)=>{const target=event.target as Node;if(!trigger.current?.contains(target)&&!menu.current?.contains(target))setOpen(false);};
-  const closeOnScroll=()=>setOpen(false);
-  document.addEventListener("pointerdown",dismiss);window.addEventListener("scroll",closeOnScroll,true);
-  return()=>{document.removeEventListener("pointerdown",dismiss);window.removeEventListener("scroll",closeOnScroll,true);};
+  const dismiss=(event:PointerEvent)=>{
+   const target=event.target as Node,rect=menu.current?.getBoundingClientRect();
+   const withinMenu=Boolean(menu.current?.contains(target)||(rect&&event.clientX>=rect.left&&event.clientX<=rect.right&&event.clientY>=rect.top&&event.clientY<=rect.bottom));
+   if(!trigger.current?.contains(target)&&!withinMenu)setOpen(false);
+  };
+  const closeOnScroll=(event:Event)=>{
+   const target=event.target;
+   if(target instanceof Node&&menu.current?.contains(target))return;
+   setOpen(false);
+  };
+  document.addEventListener("pointerdown",dismiss);document.addEventListener("scroll",closeOnScroll,true);
+  return()=>{document.removeEventListener("pointerdown",dismiss);document.removeEventListener("scroll",closeOnScroll,true);};
  },[open]);
  function toggle(){
   if(open){setOpen(false);return;}

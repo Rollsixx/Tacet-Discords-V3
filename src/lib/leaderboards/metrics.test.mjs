@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {attributeMetric,defaultLeaderboardColumns,formatLeaderboardMetric} from './metrics.mjs';
+import {attributeMetric,defaultLeaderboardColumns,formatLeaderboardMetric,selectableLeaderboardMetrics} from './metrics.mjs';
 
 test('defaults attribute and kit damage stats from each Resonator',()=>{
  const hiyuki=defaultLeaderboardColumns({element:'Glacio',leaderboardDamageStat:'resonanceLiberationDMGBonus'});
@@ -20,4 +20,9 @@ test('format percent stats from fraction or percentage-point calculation values'
 test('format raw and missing stats without inventing values',()=>{
  assert.equal(formatLeaderboardMetric(2589),'2,589');
  assert.equal(formatLeaderboardMetric(undefined),'—');
+});
+
+test('damage bonus labels use compact Resonance abbreviations',()=>{
+ assert.equal(selectableLeaderboardMetrics.find(item=>item.id==='resonanceSkillDMGBonus').label,'RES. Skill');
+ assert.equal(selectableLeaderboardMetrics.find(item=>item.id==='resonanceLiberationDMGBonus').label,'RES. Liberation');
 });

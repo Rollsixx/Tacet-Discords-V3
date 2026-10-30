@@ -2,22 +2,26 @@
 import type {Client,Row} from '@libsql/client';
 import {database} from './database.ts';
 import {HttpError} from './validation.ts';
-import {latestResonators} from '../resonators.ts';
+import {featuredResonators,latestResonators} from '../resonators.ts';
 import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 import {scoringReadiness} from './scoring-info.ts';
 import {rotationPolicyReady} from '../game-data/scoring-policies.mjs';
-export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean } = {}, db: Client = database()) {
+export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean; patchMajor?: string } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
   const character = (options.character || "").slice(0, 64).trim();
+  const patchMajor = (options.patchMajor || "").match(/^\d{1,2}$/)?.[0] || "";
+  const patchCharacters = patchMajor ? featuredResonators.filter(item => item.patchVersion.startsWith(patchMajor + ".")).map(item => item.name) : [];
+  if (patchMajor && !patchCharacters.length) return {builds:[],page,hasMore:false,scoring:scoringReadiness};
+  const patchSql = patchMajor ? ` AND s.character IN (${patchCharacters.map(() => "?").join(",")})` : "";
   const result = await db.execute({
     sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,(SELECT avatar_character FROM players p WHERE p.uid=s.uid) AS avatar_character,
       CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.score ELSE NULL END AS verified_score
        ,CASE WHEN c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.details END AS current_calculation
       FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE replaced_by IS NULL AND (status=? OR (?=1 AND status IN ('pending','approved'))) AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
-      AND (?='' OR character=?) AND (?='' OR s.id=?) AND (?='' OR uid=?)
+      AND (?='' OR character=?) AND (?='' OR s.id=?) AND (?='' OR uid=?)${patchSql}
       ORDER BY created_at DESC,s.id DESC LIMIT 21 OFFSET ?`,
-    args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", (page - 1) * 20],
+    args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", ...patchCharacters, (page - 1) * 20],
   });
   return {
     builds: result.rows.slice(0, 20).map(publicBuild),
