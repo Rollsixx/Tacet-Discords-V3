@@ -10,7 +10,7 @@
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mts",
     "test": "node --test src/lib/scanner/*.test.mjs src/lib/server/*.test.mjs src/lib/leaderboards/*.test.mjs",
     "predev": "node scripts/build-scoring-engine.mjs && node scripts/prepare-ocr.mjs",
-    "prebuild": "node scripts/build-scoring-engine.mjs && node scripts/check-scanner-coverage.mjs && node scripts/prepare-ocr.mjs",
+    "prebuild": "node scripts/build-scoring-engine.mjs && npm run catalog:check && node scripts/prepare-ocr.mjs",
     "test:browser": "npm run build && playwright test",
     "test:reference": "node scripts/fetch-reference-fixture.mjs && npm run test:browser",
     "pretest": "node scripts/build-scoring-engine.mjs",
@@ -19,7 +19,8 @@
     "start:production": "node scripts/start-production.mjs",
     "db:rescore": "node --env-file-if-exists=.env.local scripts/rescore.mts",
     "verify": "npm test && npm run lint && npm run build",
-    "db:backup": "node --env-file-if-exists=.env.local scripts/backup.mts"
+    "db:backup": "node --env-file-if-exists=.env.local scripts/backup.mts",
+    "catalog:check": "node scripts/check-catalog-completeness.mjs && node scripts/check-scanner-coverage.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

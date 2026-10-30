@@ -23,6 +23,16 @@ if(process.env.FIRST_ROTATION_BROWSER_FIXTURE==='true'){
 if(process.env.CORRECTION_BROWSER_FIXTURE==='true'){
  const {seedCorrection,ensureTestRotation}=await import('../tests/fixtures/corrected-build.mjs');
  for(const [character,uid]of [['Carlotta','833333335'],['Rebecca','833333337']]){await ensureTestRotation(db,character);await seedCorrection(db,character,{uid});}
+ const {correctEchoSubstat}=await import('../src/lib/server/correction-workflow.mjs');
+ for(const [character,uid]of [['Carlotta','833333340'],['Rebecca','833333341']]){
+  const f=await seedCorrection(db,character,{uid});await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);
+  const d=JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0].data);delete d.substatCorrections[0].adminVerifiedSubstat;d.assessment.eligible=false;d.assessment.reason='Historical corrections require moderator verification against original evidence.';
+  await db.execute({sql:"UPDATE submissions SET data=?,status='pending',reviewed_at=NULL WHERE id=?",args:[JSON.stringify(d),f.id]});await db.execute({sql:'DELETE FROM calculation_results WHERE submission_id=?',args:[f.id]});
+ }
+ const pending=await seedCorrection(db,'Lucilla',{uid:'833333342',incorrect:false});
+ pending.data.assessment.eligible=false;delete pending.data.assessment.awaitingRotation;pending.data.assessment.reason="Equipment verified. Awaiting the owner's first published rotation; this build remains unranked.";
+ await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(pending.data),pending.id]});
+
 }
 db.close();
 const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", "3100", "--hostname", "127.0.0.1"], {
