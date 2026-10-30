@@ -30,6 +30,22 @@ test('revalidation reapplies saved legal correction when copied OCR stats are st
  }finally{db.close();}
 });
 
+
+test('effective corrected slots revalidate when assessment OCR slots are stale',async()=>{
+ const db=createClient({url:'file::memory:'});try{
+  await migrate(db);await ensureTestRotation(db,'Sigrika');const f=await seedCorrection(db,'Sigrika');
+  const corrected=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);assert.equal(corrected.ranked,true,corrected.reason);
+  const row=(await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0],data=JSON.parse(row.data);
+  data.assessment.sourceSlots[f.slot-1].substats[f.position-1].value='DEF 11.9%';
+  await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(data),f.id]});
+  const result=(await revalidateCorrectedBuilds(db,{uid:f.uid,character:'Sigrika'}))[0];assert.equal(result.ranked,true,result.reason);
+  const saved=JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0].data);
+  assert.equal(saved.slots[f.slot-1].substats[f.position-1].value,'DEF 11.8%');
+  assert.equal(saved.assessment.originalSourceSlots[f.slot-1].substats[f.position-1].value,'DEF 11.9%');
+  assert.equal((await listLeaderboard({character:'Sigrika',search:f.uid},db)).builds[0].id,f.id);
+ }finally{db.close();}
+});
+
 test('correction never verifies a UID; subsequent moderator verification completes approval automatically',async()=>{
  const db=createClient({url:'file::memory:'});try{await migrate(db);await ensureTestRotation(db,'Carlotta');const f=await seedCorrection(db,'Carlotta',{verified:false});const r=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);assert.equal(r.ranked,false);assert.match(r.reason,/UID verification/);assert.equal((await listBuilds({id:f.id,pending:true},db)).builds[0].status,'pending');await setUidVerification(f.uid,true,'QA','',db);assert.equal((await listLeaderboard({character:'Carlotta',search:f.uid},db)).builds[0].id,f.id);}finally{db.close();}
 });

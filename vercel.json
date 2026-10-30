@@ -7,7 +7,8 @@
       "development/verified-uid-auto-publish": false,
       "development/build-replacement-and-correction-retention": false,
       "development/corrected-roll-revalidation": false,
-      "development/sigrika-correction-revalidation": false
+      "development/sigrika-correction-revalidation": false,
+      "development/effective-correction-snapshot": false
     }
   }
 }
