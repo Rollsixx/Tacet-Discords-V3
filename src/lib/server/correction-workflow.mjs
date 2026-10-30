@@ -33,7 +33,7 @@ async function rebuild(tx,row,data){
  // originalSourceSlots and submission_source_evidence as immutable OCR evidence.
  const slots=materializeCorrectedSlots(data),a={...data.assessment,sourceSlots:structuredClone(slots)};
  data={...data,slots,assessment:a};
- const {scoringIssues:_staleScoringIssues,rollTableIssues:_staleRollTableIssues,...freshAssessment}=a;
+ const freshAssessment={...a};delete freshAssessment.scoringIssues;delete freshAssessment.rollTableIssues;
  const issues=slots.flatMap(s=>validateEchoSlot(s).map(i=>({slot:s.slot,...i})));
  const next={...data,assessment:{...freshAssessment,eligible:false,awaitingRotation:false,rollsVerified:issues.length===0,catalogReview:issues.length>0,calculation:undefined}};
  let reason=issues.length?'Echo '+issues[0].slot+': '+issues[0].message:'';
