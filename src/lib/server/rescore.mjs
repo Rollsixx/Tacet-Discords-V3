@@ -16,7 +16,7 @@ export async function rescoreStoredBuilds(db){
   if(managed?.kind==='official'&&!recoverable){result.skipped++;continue;}
   const retained=a?.eligible&&(/^[a-f0-9]{64}$/.test(a.sourceHash||'')||hasRetainedRecovery(a))&&c?.dataVersion===DATA_VERSION&&c.engineVersion?.startsWith('wuthering-tools-b32cdbd+tacet/')&&c.identities?.length===5&&c.character===String(row.character);
   if(!retained&&!recoverable){result.skipped++;continue;}
-  if(retained&&c.engineVersion===ENGINE_VERSION&&c.policyId===POLICY_VERSION){result.skipped++;continue;}
+  if(retained&&c.engineVersion===ENGINE_VERSION&&c.policyId===POLICY_VERSION&&c.displayStats&&typeof c.displayStats==='object'){result.skipped++;continue;}
   try{
    const recovered=recoverable?await recoverVisualEvidence(row,data,db):null;
    if(recoverable&&!recovered){result.skipped++;continue;}
