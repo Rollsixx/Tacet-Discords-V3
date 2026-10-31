@@ -32,7 +32,10 @@ export function normalizeSubstatReading(raw:string):NormalizedReading|null{
  return null;
 }
 
-export function legalSubstatKey(raw:string){const reading=normalizeSubstatReading(raw);return reading?JSON.stringify(reading.stat):null;}
+// This strict key is used by the source-verification agreement checks. Keep
+// non-legal raw readings out of that path; normalization is handled separately
+// and requires three independent source reads before accepting a correction.
+export function legalSubstatKey(raw:string){const stat=parseSubstat(raw);if(!stat||!rollValues[stat.name+(stat.percent?':percent':':flat')]?.some(value=>Math.abs(value-stat.amount)<1e-6))return null;return JSON.stringify(stat);}
 const mainNames=['ATK','DEF','HP','Crit. Rate','Crit. DMG','Energy Regen','Healing Bonus','Glacio DMG Bonus','Fusion DMG Bonus','Aero DMG Bonus','Electro DMG Bonus','Havoc DMG Bonus','Spectro DMG Bonus'];
 export function mainStatKey(raw:string){const normalized=String(raw).toLowerCase().replace(/[.\s]/g,'');return mainNames.find(n=>n.toLowerCase().replace(/[.\s]/g,'')===normalized)||null;}
 

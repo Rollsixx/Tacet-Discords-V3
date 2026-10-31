@@ -6,7 +6,7 @@ import {createWorker,PSM} from 'tesseract.js';
 import {CARD_HEADERS,recoverCardUid,uidTextWidth} from '../scanner/card-layout.ts';
 import {parseCardIdentity} from '../scanner/card-identity.ts';
 import {recoverEchoCost} from '../scanner/cost-recovery.ts';
-import {agreedReading,legalSubstatKey,mainStatKey,sourceFailure} from './ocr-agreement.mjs';
+import {agreedNormalizedCorrection,agreedReading,legalSubstatKey,mainStatKey,sourceFailure} from './ocr-agreement.mjs';
 import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
 import {normalizeSubstatReading} from '../scanner/ocr-readings.ts';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
@@ -37,10 +37,15 @@ export async function assessSource(input){
   async function confirm(primary,region,expected,key,slot,field){
    if(agreedReading(primary,[],expected,key)!==null)return primary;
    let alternatives=[];
-   if(!key(primary)&&retries<12){retries+=2;alternatives=[await read(region,{linear:true}),await read(region,{linear:true,scale:4})];}
+   if(!key(primary)&&retries<60){retries+=2;alternatives=[await read(region,{linear:true}),await read(region,{linear:true,scale:4})];}
    const agreed=agreedReading(primary,alternatives,expected,key);
-   if(agreed===null)throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo stats could not be verified: Echo ${slot}, ${field}. Independent image reads did not agree with the scan. Stats remain locked; retry with the original card.`,{slot,field});
-   return agreed;
+   if(agreed!==null)return agreed;
+   if(key===legalSubstatKey&&!key(primary)&&alternatives.length===2){
+    const normalizedKey=value=>{const reading=normalizeSubstatReading(value);return reading?JSON.stringify(reading.stat):null;};
+    const corrected=agreedNormalizedCorrection(primary,alternatives,expected,normalizedKey);
+    if(corrected!==null)return corrected;
+   }
+   throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo stats could not be verified: Echo ${slot}, ${field}. Independent image reads did not agree with the scan. Stats remain locked; retry with the original card.`,{slot,field});
   }
   const regionOf=({x,y,width,height})=>({left:x,top:y,width,height});
   const header=await read(regionOf(CARD_HEADERS.character));
