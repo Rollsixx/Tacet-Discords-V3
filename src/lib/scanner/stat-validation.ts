@@ -79,8 +79,9 @@ export function parseSubstat(value: string): {
   // speck. Let the pinned optimizer roll table resolve the unit only when the
   // same value is legal for exactly one of the two substat units.
   let percent = Boolean(match[3]);
-  const percentRoll = rollTable.values[name + ":percent"] || [];
-  const flatRoll = rollTable.values[name + ":flat"] || [];
+  const rollValues = rollTable.values as Record<string, number[]>;
+  const percentRoll = rollValues[name + ":percent"] || [];
+  const flatRoll = rollValues[name + ":flat"] || [];
   const matchesPercent = percentRoll.some(value => Math.abs(value - amount) < 1e-6);
   const matchesFlat = flatRoll.some(value => Math.abs(value - amount) < 1e-6);
   if (matchesPercent !== matchesFlat) percent = matchesPercent;
