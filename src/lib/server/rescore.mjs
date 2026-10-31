@@ -13,8 +13,8 @@ export async function rescoreStoredBuilds(db){
   const managed=(await db.execute({sql:"SELECT v.kind FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?",args:[String(row.character)]})).rows[0];
   if(!SUPPORTED.includes(String(row.character))){result.skipped++;continue;}
   const recoverable=recoveryMode(row,data);
-  if(managed?.kind==='official'&&!recoverable){result.skipped++;continue;}
   const retained=a?.eligible&&(/^[a-f0-9]{64}$/.test(a.sourceHash||'')||hasRetainedRecovery(a))&&c?.dataVersion===DATA_VERSION&&c.engineVersion?.startsWith('wuthering-tools-b32cdbd+tacet/')&&c.identities?.length===5&&c.character===String(row.character);
+  if(managed?.kind==='official'&&!recoverable&&!retained){result.skipped++;continue;}
   if(!retained&&!recoverable){result.skipped++;continue;}
   if(retained&&c.engineVersion===ENGINE_VERSION&&c.policyId===POLICY_VERSION&&c.displayStats&&typeof c.displayStats==='object'){result.skipped++;continue;}
   try{
