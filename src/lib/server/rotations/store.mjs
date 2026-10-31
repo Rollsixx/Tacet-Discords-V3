@@ -179,7 +179,6 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
   if(run.draft_revision!==null){const d=(await tx.execute({sql:'SELECT * FROM rotation_drafts WHERE character=?',args:[run.character]})).rows[0];must(d&&Number(d.revision)===Number(run.draft_revision)&&d.spec_hash===version.spec_hash,'Draft changed. Revalidate and preview the new revision.');}
   if(JSON.parse(version.spec).mode===REVIEWED_MODE)must(ownerReviewed===true,'Confirm owner review of combat legality and benchmark assumptions.',400);
   if(version.kind==='official'){const v=await validateSpec(run.character,JSON.parse(version.spec));must(v.valid&&v.mechanicsVersion===version.mechanics_version,'The pinned rotation validation no longer passes.',422);}
-  if(version.kind==='official'){const tested=await testedInputs(tx,run);must(tested.total>0,'No current build with verified scoring inputs was tested. For a first rotation, import a complete card or resolve its source evidence, then create a fresh preview. A source-verified pending build can be used privately; disputed stat rolls cannot.',422);}
   // Independent coverage check, in addition to the approved-build clock.
   const missing=(await tx.execute({sql:`SELECT COUNT(*) n FROM submissions s WHERE s.character=? AND s.status='approved' AND s.replaced_by IS NULL
    AND (json_extract(s.data,'$.assessment.eligible')=1 OR json_extract(s.data,'$.assessment.awaitingRotation')=1) AND json_extract(s.data,'$.assessment.calculation.dataVersion')=?
