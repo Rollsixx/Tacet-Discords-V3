@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import {assessEquipment,diagnoseCrops,identitiesFromReport,DATA_VERSION,ENGINE_VERSION,SUPPORTED} from './scoring.mjs';
 import {HttpError} from './validation.ts';
-import {validateEchoSlot} from '../scanner/stat-validation.ts';
+import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
 import {scoreActiveRotation,recordRotationScore} from './rotations/store.mjs';
 import corrections from '../game-data/fingerprint-corrections.json' with {type:'json'};
 import {visualReadiness} from '../scanner/scoring-readiness.ts';
@@ -20,17 +20,10 @@ function sameVerifiedStatValues(source,submitted){
   if(Number(slot?.cost?.value)!==Number(candidate?.cost?.value)||normalizedMain(slot?.mainStat?.value)!==normalizedMain(candidate?.mainStat?.value))return false;
   if(!Array.isArray(slot?.substats)||!Array.isArray(candidate?.substats)||slot.substats.length!==5||candidate.substats.length!==5)return false;
   return slot.substats.every((field,position)=>{
-   const a=engineStat(field?.value),b=engineStat(candidate.substats[position]?.value);
+   const a=parseSubstat(String(field?.value||'')),b=parseSubstat(String(candidate.substats[position]?.value||''));
    return a&&b&&a.name===b.name&&a.amount===b.amount&&a.percent===b.percent;
   });
  });
-}
-function engineStat(value){
- const text=String(value||'').trim().match(/^(.+?)\\s+([+]?\\d+(?:\\.\\d+)?)\\s*(%)?$/);
- if(!text)return null;
- const aliases={'ATK':'ATK','DEF':'DEF','HP':'HP','Crit. Rate':'Crit. Rate','Crit. DMG':'Crit. DMG','Energy Regen':'Energy Regen','Basic Attack DMG Bonus':'Basic Attack DMG Bonus','Heavy Attack DMG Bonus':'Heavy Attack DMG Bonus','Resonance Skill DMG Bonus':'Resonance Skill DMG Bonus','Resonance Liberation DMG Bonus':'Resonance Liberation DMG Bonus'};
- const name=Object.keys(aliases).find(key=>key.toLowerCase()===text[1].replace(/\\./g,'').replace(/\\s+/g,' ').trim().toLowerCase());
- return name?{name,amount:Number(text[2]),percent:Boolean(text[3])}:null;
 }
 export function repairEvidence(row,data){
  const a=data.assessment,source=a?.sourceSlots;
