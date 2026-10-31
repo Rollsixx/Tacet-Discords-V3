@@ -12,8 +12,33 @@ const hash=x=>createHash('sha256').update(x).digest('hex');
 const must=(c,m,status=422)=>{if(!c)throw new HttpError(status,m);};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
 export function identityCatalog(){return Object.values(engine.mainEchoesData).map(e=>({key:e.key,name:e.name,cost:costByClass[e.class],sets:e.sets,image:corrections.echoes.find(c=>c.key===e.key)?.source||e.image}));}
+function normalizedMain(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
+function sameVerifiedStatValues(source,submitted){
+ if(!Array.isArray(source)||!Array.isArray(submitted)||source.length!==5||submitted.length!==5)return false;
+ return source.every((slot,index)=>{
+  const candidate=submitted[index];
+  if(Number(slot?.cost?.value)!==Number(candidate?.cost?.value)||normalizedMain(slot?.mainStat?.value)!==normalizedMain(candidate?.mainStat?.value))return false;
+  if(!Array.isArray(slot?.substats)||!Array.isArray(candidate?.substats)||slot.substats.length!==5||candidate.substats.length!==5)return false;
+  return slot.substats.every((field,position)=>{
+   const a=engineStat(field?.value),b=engineStat(candidate.substats[position]?.value);
+   return a&&b&&a.name===b.name&&a.amount===b.amount&&a.percent===b.percent;
+  });
+ });
+}
+function engineStat(value){
+ const text=String(value||'').trim().match(/^(.+?)\\s+([+]?\\d+(?:\\.\\d+)?)\\s*(%)?$/);
+ if(!text)return null;
+ const aliases={'ATK':'ATK','DEF':'DEF','HP':'HP','Crit. Rate':'Crit. Rate','Crit. DMG':'Crit. DMG','Energy Regen':'Energy Regen','Basic Attack DMG Bonus':'Basic Attack DMG Bonus','Heavy Attack DMG Bonus':'Heavy Attack DMG Bonus','Resonance Skill DMG Bonus':'Resonance Skill DMG Bonus','Resonance Liberation DMG Bonus':'Resonance Liberation DMG Bonus'};
+ const name=Object.keys(aliases).find(key=>key.toLowerCase()===text[1].replace(/\\./g,'').replace(/\\s+/g,' ').trim().toLowerCase());
+ return name?{name,amount:Number(text[2]),percent:Boolean(text[3])}:null;
+}
 export function repairEvidence(row,data){
- const a=data.assessment;return a?.statsVerified===true&&a.maxMainStatsVerified===true&&a.cropEvidenceVersion==='source-crops/1'&&/^[a-f0-9]{64}$/.test(a.sourceHash||'')&&a.sourceUid===String(row.uid)&&data.slots?.length===5&&JSON.stringify(data.slots)===JSON.stringify(a.sourceSlots)&&data.slots.every(s=>!validateEchoSlot(s).length);
+ const a=data.assessment,source=a?.sourceSlots;
+ // OCR raw text and confidence metadata can differ between the client preview
+ // and server verification. Compare canonical values; the original image hash,
+ // UID, max-level main stats, legal rolls and retained crop dimensions remain
+ // independently checked before identity confirmation.
+ return a?.statsVerified===true&&a.maxMainStatsVerified===true&&/^[a-f0-9]{64}$/.test(a.sourceHash||'')&&a.sourceUid===String(row.uid)&&data.slots?.length===5&&source?.length===5&&data.slots.every(s=>!validateEchoSlot(s).length)&&source.every(s=>!validateEchoSlot(s).length)&&sameVerifiedStatValues(source,data.slots);
 }
 async function snapshot(db,id){const row=(await db.execute({sql:"SELECT * FROM submissions WHERE id=? AND status IN ('pending','approved')",args:[id]})).rows[0];must(row,'Submission not found.',404);return {row,data:JSON.parse(String(row.data))};}
 async function cropsFor(db,row,data){
@@ -59,6 +84,6 @@ export async function repairIdentities(db,id,input){
   const audit=JSON.stringify({note:auditNote,method:input.operation,before,after:identities,sourceHash:proof.sourceHash,cropHash:proof.cropHash});
   await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,input.operation==='confirm'?'echo_identities_confirmed':'echo_recognition_retried',input.reviewer.trim(),audit,at]});
   await tx.execute({sql:'INSERT INTO build_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'rescore',input.reviewer.trim(),'Identity recovery; '+input.operation+'; '+(calculation.policyId||'awaiting-owner-rotation/1'),at]});
-  await tx.commit();if(next.substatCorrections?.length){const {revalidateCorrectedBuilds}=await import('./correction-workflow.mjs');await revalidateCorrectedBuilds(db,{uid:String(row.uid)});}let status=String(row.status),ranked=status==='approved'&&Number(row.identity_verified)===1&&next.assessment.eligible===true;if(status==='pending'&&Number(row.identity_verified)===1&&next.assessment.eligible===true){const {autoApproveVerifiedSubmission}=await import('./approval-workflow.mjs');ranked=await autoApproveVerifiedSubmission(id,db);if(ranked)status='approved';}return {ok:true,id,score:ranked?calculation.score:null,status,eligible:next.assessment.eligible,ranked};
+  await tx.commit();if(next.substatCorrections?.length){const {revalidateCorrectedBuilds}=await import('./correction-workflow.mjs');await revalidateCorrectedBuilds(db,{uid:String(row.uid)});}let status=String(row.status),ranked=status==='approved'&&Number(row.identity_verified)===1&&next.assessment.eligible===true;if(status==='pending'&&Number(row.identity_verified)===1&&next.assessment.eligible===true){const {autoApproveVerifiedSubmission}=await import('./approval-workflow.mjs');ranked=await autoApproveVerifiedSubmission(id,db);if(ranked)status='approved';}return {ok:true,id,score:ranked?calculation.score:null,status,eligible:next.assessment.eligible,ranked,reason:ranked?'Equipment verified; build automatically approved and ranked.':next.assessment.reason||'Identity review saved; remaining scoring requirements are shown in the assessment.'};
  }finally{tx.close();}
 }
