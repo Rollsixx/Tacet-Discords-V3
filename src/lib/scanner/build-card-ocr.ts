@@ -4,6 +4,7 @@ import { createWorker, PSM } from "tesseract.js";
 import { recoverEchoCost } from "./cost-recovery";
 import { parseCardIdentity, type CardIdentity } from "./card-identity";
 import { hasEchoText } from "./slot-presence";
+import { parseSubstat } from "./stat-validation";
 
 export const CARD_WIDTH = 1920;
 export const CARD_HEIGHT = 1080;
@@ -241,6 +242,27 @@ export async function recognizeBuildCard(
       return recoverStatReading(field,async variant=>(await worker.recognize(cropRegion(image,region,variant===0?4:5,variant===1))).data.text,key);
     }
 
+
+    async function recoverSubstatValue(field:RecognizedField,region:Rectangle,label:string):Promise<RecognizedField>{
+      if(legalSubstatKey(field.value))return field;
+      const labelStat=parseSubstat(field.value+" 1");
+      if(!labelStat)return field;
+      const amountRegion={x:region.x+region.width-92,y:region.y-4,width:88,height:region.height+8};
+      const readings:string[]=[];
+      try{
+        for(const variant of [0,1] as const){
+          await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:"0123456789.,%+"});
+          readings.push((await worker.recognize(cropRegion(image,amountRegion,variant===0?5:6,variant===1))).data.text.replace(/\s+/g," ").trim());
+        }
+      }finally{
+        await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ "});
+      }
+      const candidates=readings.map(value=>normalizeSubstatReading(labelStat.name+" "+value)).filter((value):value is NonNullable<typeof value>=>Boolean(value));
+      if(candidates.length!==2||candidates[0].value!==candidates[1].value)return field;
+      onProgress?.({completed,total,label:"Recovered "+label+" value from its source column",identity,slots:[...slots]});
+      return {raw:field.raw||field.value,value:candidates[0].value,autoRecovered:true};
+    }
+
     async function recoverWrappedSubstats(fields:RecognizedField[],region:Rectangle,slotNumber:number){
       if(fields.every(field=>normalizeSubstatReading(field.value)))return fields;
       onProgress?.({completed,total,label:"Echo "+slotNumber+": checking wrapped substat lines",identity,slots:[...slots]});
@@ -302,7 +324,7 @@ export async function recognizeBuildCard(
 
       for (let line = 0; line < regions.substats.length; line += 1) {
         substats.push(
-          await retryField(await read(regions.substats[line],`Echo ${slotNumber}: substat ${line + 1}`),regions.substats[line],legalSubstatKey,`Echo ${slotNumber} substat ${line + 1}`),
+          await recoverSubstatValue(await retryField(await read(regions.substats[line],`Echo ${slotNumber}: substat ${line + 1}`),regions.substats[line],legalSubstatKey,`Echo ${slotNumber} substat ${line + 1}`),regions.substats[line],`Echo ${slotNumber} substat ${line + 1}`),
         );
       }
 
