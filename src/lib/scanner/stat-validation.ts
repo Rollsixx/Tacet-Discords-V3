@@ -20,10 +20,20 @@ const STAT_NAMES: Record<string, string> = {
   // Build cards wrap these labels across two lines. A single-line OCR region
   // can omit the suffix; these exact aliases are unambiguous in a substat field.
   "basic attack dmg": "Basic Attack DMG Bonus",
+  "basic atk dmg bonus": "Basic Attack DMG Bonus",
+  "basic atk dmg": "Basic Attack DMG Bonus",
   "heavy attack dmg": "Heavy Attack DMG Bonus",
+  "heavy atk dmg bonus": "Heavy Attack DMG Bonus",
+  "heavy atk dmg": "Heavy Attack DMG Bonus",
   "resonance skill dmg": "Resonance Skill DMG Bonus",
+  "res skill dmg bonus": "Resonance Skill DMG Bonus",
+  "res skill dmg": "Resonance Skill DMG Bonus",
   "resonance liberation dmg": "Resonance Liberation DMG Bonus",
   "resonance liberation": "Resonance Liberation DMG Bonus",
+  "resonance lib dmg bonus": "Resonance Liberation DMG Bonus",
+  "resonance lib dmg": "Resonance Liberation DMG Bonus",
+  "res lib dmg bonus": "Resonance Liberation DMG Bonus",
+  "res lib dmg": "Resonance Liberation DMG Bonus",
 };
 
 const PERCENT_ONLY = new Set([
@@ -54,7 +64,7 @@ export function parseSubstat(value: string): {
   // Tesseract sometimes appends a short icon artifact to the label (for
   // example, "Crit. DMG PAR 21%"). Keep the numeric tail strict, then resolve
   // the label against the known game stat aliases below.
-  const match = text.match(/^(.+?)\s+([+]?\d+(?:\.\d+)?)\s*(%)?\s*$/);
+  const match = text.match(/^(.+?)\s+([+]?\d+(?:[.,]\d+)?)\s*(%)?\s*$/);
 
   if (!match) return null;
 
@@ -62,13 +72,23 @@ export function parseSubstat(value: string): {
   const name = resolveStatName(label);
   if (!name) return null;
 
-  const amount = Number(match[2]);
+  const amount = Number(match[2].replace(",", "."));
   if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  // OCR can lose the percent glyph on one row, or mistake it for a trailing
+  // speck. Let the pinned optimizer roll table resolve the unit only when the
+  // same value is legal for exactly one of the two substat units.
+  let percent = Boolean(match[3]);
+  const percentRoll = rollTable.values[name + ":percent"] || [];
+  const flatRoll = rollTable.values[name + ":flat"] || [];
+  const matchesPercent = percentRoll.some(value => Math.abs(value - amount) < 1e-6);
+  const matchesFlat = flatRoll.some(value => Math.abs(value - amount) < 1e-6);
+  if (matchesPercent !== matchesFlat) percent = matchesPercent;
 
   return {
     name,
     amount,
-    percent: Boolean(match[3]),
+    percent,
   };
 }
 

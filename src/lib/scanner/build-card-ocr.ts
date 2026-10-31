@@ -1,5 +1,5 @@
 import {CARD_HEADERS,recoverCardUid,playerTextWidth,uidTextWidth} from "./card-layout";
-import {legalSubstatKey,mainStatKey,recoverStatReading} from "./ocr-readings";
+import {legalSubstatKey,mainStatKey,normalizeSubstatReading,parseSubstatBlock,recoverStatReading} from "./ocr-readings";
 import { createWorker, PSM } from "tesseract.js";
 import { recoverEchoCost } from "./cost-recovery";
 import { parseCardIdentity, type CardIdentity } from "./card-identity";
@@ -71,6 +71,7 @@ function regionsForSlot(index: number) {
       { x: 64 + offset, y: 984, width: 320, height: 28 },
       { x: 64 + offset, y: 1019, width: 320, height: 28 },
     ],
+    substatBlock: { x: 56 + offset, y: 872, width: 334, height: 194 },
   };
 }
 
@@ -240,6 +241,52 @@ export async function recognizeBuildCard(
       return recoverStatReading(field,async variant=>(await worker.recognize(cropRegion(image,region,variant===0?4:5,variant===1))).data.text,key);
     }
 
+    async function recoverWrappedSubstats(fields:RecognizedField[],region:Rectangle,slotNumber:number){
+      if(fields.every(field=>normalizeSubstatReading(field.value)))return fields;
+      onProgress?.({completed,total,label:"Echo "+slotNumber+": checking wrapped substat lines",identity,slots:[...slots]});
+      const readings=[];
+      try{
+        for(let variant=0;variant<2;variant+=1){
+          await worker.setParameters({
+            tessedit_pageseg_mode:PSM.SINGLE_BLOCK,
+            tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ ",
+          });
+          const result=await worker.recognize(cropRegion(image,region,variant===0?4:5,variant===1));
+          readings.push(parseSubstatBlock(result.data.text));
+        }
+      }finally{
+        await worker.setParameters({
+          tessedit_pageseg_mode:PSM.SINGLE_LINE,
+          tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ ",
+        });
+      }
+      const [first,second]=readings;
+      if(!first||!second||first.length!==5||second.length!==5)return fields;
+      const signature=(value:{name:string;amount:number;percent:boolean})=>value.name+":"+(value.percent?"percent":"flat")+":"+value.amount;
+      if(first.some((value,index)=>signature(value.stat)!==signature(second[index].stat)))return fields;
+      const keys=first.map(value=>value.stat.name+(value.stat.percent?":percent":":flat"));
+      if(new Set(keys).size!==5)return fields;
+
+      // Keep every trustworthy narrow-crop reading as an anchor. Wrapped rows
+      // may shift later lines down, so anchors must match in order, not at the
+      // same crop index. The two complete block reads must agree on all five.
+      let cursor=0;
+      for(const field of fields){
+        const original=normalizeSubstatReading(field.value);
+        if(!original)continue;
+        const found=first.findIndex((candidate,index)=>index>=cursor&&signature(candidate.stat)===signature(original.stat));
+        if(found<0)return fields;
+        cursor=found+1;
+      }
+      return first.map((candidate,index)=>{
+        const field=fields[index];
+        const original=normalizeSubstatReading(field.value);
+        if(original&&signature(original.stat)===signature(candidate.stat))return field;
+        const raw=field.raw?field.raw+" | block OCR: "+candidate.raw:candidate.raw;
+        return {raw,value:candidate.value,autoRecovered:true};
+      });
+    }
+
     for (let index = 0; index < SLOT_COUNT; index += 1) {
       const regions = regionsForSlot(index);
       const slotNumber = index + 1;
@@ -251,13 +298,15 @@ export async function recognizeBuildCard(
 
       const mainStat = await retryField(await read(regions.mainStat,`Echo ${slotNumber}: main stat`),regions.mainStat,mainStatKey,`Echo ${slotNumber} main stat`);
 
-      const substats: RecognizedField[] = [];
+      let substats: RecognizedField[] = [];
 
       for (let line = 0; line < regions.substats.length; line += 1) {
         substats.push(
           await retryField(await read(regions.substats[line],`Echo ${slotNumber}: substat ${line + 1}`),regions.substats[line],legalSubstatKey,`Echo ${slotNumber} substat ${line + 1}`),
         );
       }
+
+      substats=await recoverWrappedSubstats(substats,regions.substatBlock,slotNumber);
 
       if (!/^[134]$/.test(cost.value) && hasEchoText("", mainStat.value, substats.map(stat => stat.value))) {
         onProgress?.({ completed, total, label: `Echo ${slotNumber}: retrying cost from image` });

@@ -49,3 +49,27 @@ export async function recoverStatReading(primary:{raw:string;value:string},read:
  const recovered=key===legalSubstatKey?normalizeSubstatReading(first):null;
  return {raw:primary.raw,value:recovered?.value||first.replace(/\s+/g,' ').trim(),autoRecovered:true};
 }
+
+
+type BlockReading=NormalizedReading&{raw:string};
+
+/**
+ * Rebuild five ordered substats from a taller Echo text block. Wuthering Waves
+ * wraps long damage labels onto a second line, which can make fixed-height
+ * per-row OCR crops return only half of the label. Values are accepted only
+ * when they normalize to a legal optimizer roll.
+ */
+export function parseSubstatBlock(raw:string):BlockReading[]{
+ const lines=String(raw||"").split(/\r?\n/).map(line=>line.replace(/^[^a-zA-Z0-9]+/,"").replace(/\s+/g," ").trim()).filter(Boolean);
+ const result:BlockReading[]=[];let pending:string[]=[];
+ for(const line of lines){
+  const match=line.match(/^(.*?)([+]?\d+(?:[.,]\d+)?)\s*(%)?\s*$/);
+  if(!match){pending.push(line);continue;}
+  const prefix=[...pending,match[1]].filter(Boolean).join(" ").trim();
+  const candidateRaw=(prefix+" "+match[2].replace(",",".")+(match[3]||"")).trim();
+  const normalized=normalizeSubstatReading(candidateRaw);
+  if(normalized){result.push({...normalized,raw:candidateRaw});pending=[];}
+  else pending.push(line);
+ }
+ return result;
+}
