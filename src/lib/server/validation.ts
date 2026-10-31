@@ -15,9 +15,9 @@ function text(value: unknown, max: number, min = 1): string {
   }
   return value.trim();
 }
-function field(value: unknown) {
+function field(value: unknown, allowEmpty = false) {
   if (!record(value)) throw new HttpError(400, "Invalid OCR field.");
-  return { raw: text(value.raw, 160, 0), value: text(value.value, 160) };
+  return { raw: text(value.raw, 160, 0), value: text(value.value, 160, 0) };
 }
 export function pngCrop(value: unknown, width: number, height: number) {
   if (typeof value !== "string" || value.length > 204822 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) throw new HttpError(400, "Missing or oversized PNG crop.");
@@ -38,10 +38,10 @@ export function validateSubmission(input: unknown) {
     if (!record(item) || item.slot !== index + 1 || !Array.isArray(item.substats) || item.substats.length !== 5) throw new HttpError(400, "Five ordered Echo slots with five substats are required.");
     if (item.presence === "empty") throw new HttpError(400, "All five Echoes must be equipped. Missing slots cannot be submitted.");
     const stats: RecognizedSlot = {
-      slot: index + 1, cost: field(item.cost), mainStat: field(item.mainStat), substats: item.substats.map(field),
+      slot: index + 1, cost: field(item.cost), mainStat: field(item.mainStat), substats: item.substats.map(stat => field(stat, true)),
     };
     const issues = validateEchoSlot(stats);
-    if (issues.length && (!input.sourceImage || issues.some(issue=>issue.code!=="UNSUPPORTED_ROLL"))) throw new HttpError(400, `Echo ${index + 1}: ${issues[0].message}`);
+    // Keep every screenshot-backed scan reviewable. Scoring remains fail-closed until moderators resolve these issues.
     return { ...stats, portrait: pngCrop(item.portrait, 192, 182), sonata: pngCrop(item.sonata, 56, 56) };
   });
   let sourceImage: Buffer | undefined;

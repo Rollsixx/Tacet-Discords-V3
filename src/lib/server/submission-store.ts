@@ -15,11 +15,9 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
   const assessment = {...retainedAssessment, ...(sourceAssessment.statsVerified && input.sourceImage ? {cropEvidenceVersion:'source-crops/1'} : {})};
   if (requireSourceUid && assessment.reason.startsWith("Scoring worker busy")) throw new HttpError(429, "Scanner is busy. Please try again in a moment.");
   if (requireSourceUid && assessment.failure?.code==='OCR_SERVICE_UNAVAILABLE')throw new HttpError(503,assessment.failure.message);
-  if (requireSourceUid && !assessment.statsVerified&&assessment.failure)throw new HttpError(400,assessment.failure.message);
   if (requireSourceUid && assessment.sourceUid !== input.uid) throw new HttpError(400, "Screenshot UID could not be confirmed. Upload a clear original card; UID cannot be changed.");
-  if (requireSourceUid && !assessment.statsVerified) throw new HttpError(400, "Echo stats could not be verified against the screenshot. Values cannot be edited; upload a clear original card and scan again.");
   // Retain server-derived visual evidence. Client crops never establish scoring identity.
-  const sourceCrops = assessment.statsVerified && input.sourceImage ? await Promise.all(input.slots.map(async (slot,index)=>({
+  const sourceCrops = input.sourceImage && assessment.sourceUid === input.uid ? await Promise.all(input.slots.map(async (slot,index)=>({
     ...slot,
     portrait:await sharp(input.sourceImage).extract({left:22+index*374,top:650,width:192,height:182}).png().toBuffer(),
     sonata:await sharp(input.sourceImage).extract({left:264+index*374,top:660,width:56,height:56}).png().toBuffer(),
@@ -27,7 +25,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
   let data = {
     assessment,
     character: input.character,
-    slots: requireSourceUid ? assessment.sourceSlots : input.slots.map(({ slot, cost, mainStat, substats }) => ({ slot, cost, mainStat, substats })),
+    slots: requireSourceUid && assessment.statsVerified ? assessment.sourceSlots : input.slots.map(({ slot, cost, mainStat, substats }) => ({ slot, cost, mainStat, substats })),
     recognition: "unverified",
   };
   data=await applyPublishedRotation(db,input.character,data);
@@ -50,7 +48,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     await tx.execute({ sql: "INSERT INTO players(uid,created_at) VALUES (?,?) ON CONFLICT(uid) DO NOTHING", args: [input.uid, createdAt] });
     if(input.avatarCharacter && assessment.sourceUid === input.uid) await tx.execute({sql:"UPDATE players SET avatar_character=? WHERE uid=?",args:[input.avatarCharacter,input.uid]});
     await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at,identity_verified) VALUES (?,?,?,?,?,?,?,(SELECT identity_verified FROM players WHERE uid=?))", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt, input.uid] });
-    if(input.sourceImage&&assessment.statsVerified&&assessment.sourceHash)await tx.execute({sql:'INSERT INTO submission_source_evidence VALUES (?,?,?,?,?,?,?)',args:[id,input.sourceImage,assessment.sourceHash,JSON.stringify(sourceAssessment.ocrReadings||[]),JSON.stringify(assessment.sourceSlots),JSON.stringify(input.slots.map(({slot,cost,mainStat,substats})=>({slot,cost,mainStat,substats}))),createdAt]});
+    if(input.sourceImage&&assessment.sourceUid===input.uid)await tx.execute({sql:'INSERT INTO submission_source_evidence VALUES (?,?,?,?,?,?,?)',args:[id,input.sourceImage,assessment.sourceHash||createHash('sha256').update(input.sourceImage).digest('hex'),JSON.stringify(sourceAssessment.ocrReadings||[]),JSON.stringify(assessment.sourceSlots||[]),JSON.stringify(input.slots.map(({slot,cost,mainStat,substats})=>({slot,cost,mainStat,substats}))),createdAt]});
     for (const slot of sourceCrops) {
       for (const kind of ["portrait", "sonata"] as const) {
         await tx.execute({ sql: "INSERT INTO assets(id,submission_id,slot,kind,png) VALUES (?,?,?,?,?)", args: [`${id}-${slot.slot}-${kind}`, id, slot.slot, kind, slot[kind]] });

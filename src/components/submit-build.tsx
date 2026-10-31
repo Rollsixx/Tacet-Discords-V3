@@ -29,7 +29,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   const catalogReview=issues.length>0&&structuralIssues.length===0;
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy || checking || id || structuralIssues.length || !uid || !character || !confirmed) return;
+    if (busy || checking || id || !uid || !character || !confirmed) return;
     setBusy(true); setError("");
     try {
       const bitmap = await createImageBitmap(file);
@@ -82,7 +82,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
       {onReset && <button type="button" className="action" onClick={onReset}>Import another build</button>}
     </div>
   </section>;
-  const scanValid = !structuralIssues.length && Boolean(uid && character);
+  const scanValid = Boolean(uid && character);
   const ready = scanValid && ign.trim().length >= 2;
   return <section className="player-details-card" aria-busy={busy} aria-labelledby="player-details-title">
     <div className="player-details-heading"><div><span className="eyebrow">Finish your import</span><h2 id="player-details-title">Player details</h2><p className="muted">Check your name, confirm your card, then send it for review.</p></div><span className="scan-chip passed"><LockIcon /> Echo stats locked</span></div>
@@ -99,7 +99,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
       </div>
       <div className="profile-avatar-choice"><div><ResonatorPortrait name={avatarCharacter||character} className="lb-monogram"/><label htmlFor="profile-avatar">Profile avatar <small>Change this to any supported Resonator</small></label></div><select id="profile-avatar" value={avatarCharacter} onChange={event=>setAvatarCharacter(event.target.value)}><option value="">Keep current avatar</option>{[...new Set(featuredResonators.map(item=>item.patchVersion))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(version=><optgroup key={version} label={`${version} Characters`}>{featuredResonators.map(item=>item.patchVersion===version?<option key={item.name} value={item.name}>{item.displayName||item.name}</option>:null)}</optgroup>)}</select></div>
       <label className="publish-consent"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>I checked all five Echoes against my screenshot and agree to submit this build for verification and review if needed.</span></label>
-      <div className="import-submit-bar"><p>{busy ? "Verifying your screenshot and saving the build…" : "Verified accounts with scoring-ready builds are published automatically; other builds stay private until required checks are complete."}</p><button className="action" disabled={busy || checking || !confirmed || !ready}>{busy ? "Verifying screenshot…" : "Submit build"}</button></div>
+      <div className="import-submit-bar"><p>{busy ? "Verifying your screenshot and saving the build…" : "Readable screenshots can be submitted for moderator review. Builds with unresolved scanner issues stay unranked until verified."}</p><button className="action" disabled={busy || checking || !confirmed || !ready}>{busy ? "Verifying screenshot…" : "Submit build"}</button></div>
     </fieldset></form>
     {error && <div className="import-submit-error"><p className="field-error" role="alert">{error}</p>{onRetryScan&&<button type="button" className="outline-button" disabled={busy||checking} onClick={onRetryScan}>Rescan same screenshot</button>}</div>}
   </section>;
