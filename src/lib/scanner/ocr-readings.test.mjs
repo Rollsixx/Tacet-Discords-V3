@@ -27,6 +27,9 @@ test('recovers a short OCR artifact appended to a substat label',()=>{
  const result=readings.normalizeSubstatReading('Crit. DMG PAR 21%');
  assert.equal(result.value,'Crit. DMG 21%');
 });
+test('does not fuzzy-correct short ambiguous stat labels',()=>{
+ assert.equal(validation.parseSubstat('ATE 5.6%'),null);
+});
 test('normalizes every entry in the pinned roll table and refuses unsafe guesses',()=>{
  for(const [key,values] of Object.entries(rolls.values)){
   const split=key.lastIndexOf(':');const name=key.slice(0,split),percent=key.slice(split+1)==='percent';

@@ -104,9 +104,9 @@ function resolveStatName(label: string): string | undefined {
   // Recover a single-character label OCR slip only when one stat alias is the
   // unique nearest match. This path is shared by every Resonator.
   const compact = label.replace(/[^a-z]/g, "");
-  const candidates = aliases
+  const candidates = compact.length >= 5 ? aliases
     .map(([alias, name]) => ({ alias, name, distance: editDistance(compact, alias.replace(/[^a-z]/g, "")) }))
-    .filter(candidate => candidate.distance <= (compact.length >= 15 ? 2 : 1));
+    .filter(candidate => candidate.distance <= (compact.length >= 15 ? 2 : 1)) : [];
   const best = Math.min(...candidates.map(candidate => candidate.distance));
   const names = [...new Set(candidates.filter(candidate => candidate.distance === best).map(candidate => candidate.name))];
   return names.length === 1 ? names[0] : undefined;
