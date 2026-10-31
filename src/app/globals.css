@@ -1173,3 +1173,5 @@ input[readonly] { opacity: .75; cursor: default; }
 .lb-profile-stat-heading{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .lb-profile-stat-heading img{width:16px;height:16px;object-fit:contain}
 @media(max-width:650px){.pp-profile-filters{width:100%;flex-direction:column;align-items:stretch}.pp-profile-filters label,.pp-profile-filters select,.pp-profile-filters input{width:100%}}
+
+.pp-stat-label{display:block;color:var(--muted);font-size:9px;line-height:1.1;text-align:right;white-space:nowrap}.lb-stat-chips dt{display:inline-flex;align-items:center;gap:5px}.lb-stat-chips dt img{width:14px;height:14px;object-fit:contain;flex-shrink:0}

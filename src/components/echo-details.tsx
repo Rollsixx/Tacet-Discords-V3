@@ -1,6 +1,10 @@
 "use client";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { featuredResonators } from "@/lib/resonators";
+import { defaultLeaderboardColumns, formatLeaderboardMetric } from "@/lib/leaderboards/metrics.mjs";
 import type { listBuilds } from "@/lib/server/queries";
 import { compactNumber, echoCritValue, mainStatAmount, readableName, shortStat } from "@/lib/leaderboards/display";
 type Build=Awaited<ReturnType<typeof listBuilds>>['builds'][number];
@@ -12,9 +16,12 @@ export function PublicImage({src,alt,className}:{src:string;alt:string;className
 }
 export function EchoDetails({build,profile=false}:{build:Build;profile?:boolean}){
  const calculation=build.data.assessment?.calculation;
- const stats=calculation?.finalStats;
+ const stats=calculation?.displayStats||calculation?.finalStats;
+ const resonator=featuredResonators.find(item=>item.name===build.character)||featuredResonators[0];
+ const metrics=defaultLeaderboardColumns(resonator);
  const cv=build.data.slots.reduce((total,slot)=>total+echoCritValue(slot.substats),0);
- const statsPanel=<dl className="lb-stat-chips"><div><dt>Echo CV</dt><dd>{cv.toFixed(1)}</dd></div><div><dt>Crit. Rate</dt><dd>{compactNumber(stats?.totalCritRate,true)}</dd></div><div><dt>Crit. DMG</dt><dd>{compactNumber(stats?.totalCritDMG,true)}</dd></div><div><dt>HP</dt><dd>{compactNumber(stats?.totalHp)}</dd></div><div><dt>ATK</dt><dd>{compactNumber(stats?.totalAtk)}</dd></div><div><dt>DEF</dt><dd>{compactNumber(stats?.totalDef)}</dd></div><div><dt>Energy Regen</dt><dd>{compactNumber(stats?.energyRegen,true)}</dd></div><div><dt>Benchmark damage</dt><dd>{build.score===null?'Unranked':build.score.toLocaleString(undefined,{maximumFractionDigits:2})}</dd></div></dl>;
+ const chip=(label:string,icon:string,value:ReactNode)=><div><dt><Image src={icon} alt="" width={15} height={15} unoptimized/>{label}</dt><dd>{value}</dd></div>;
+ const statsPanel=<dl className="lb-stat-chips">{chip("Echo CV","/stat-icons/critdamage.png",cv.toFixed(1))}{chip("Crit. Rate","/stat-icons/critrate.png",compactNumber(stats?.totalCritRate,true))}{chip("Crit. DMG","/stat-icons/critdamage.png",compactNumber(stats?.totalCritDMG,true))}{chip("HP","/stat-icons/hp.png",compactNumber(stats?.totalHp))}{chip("ATK","/stat-icons/atk.png",compactNumber(stats?.totalAtk))}{chip("DEF","/stat-icons/def.png",compactNumber(stats?.totalDef))}{chip(metrics.attribute.label,metrics.attribute.icon,formatLeaderboardMetric(stats?.[metrics.attribute.field],metrics.attribute.percent))}{chip("Energy Regen","/stat-icons/energyregen.png",compactNumber(stats?.energyRegen,true))}{chip(metrics.damage.label,metrics.damage.icon,formatLeaderboardMetric(stats?.[metrics.damage.field],metrics.damage.percent))}{chip("Benchmark damage","/stat-icons/damages.png",build.score===null?'Unranked':build.score.toLocaleString(undefined,{maximumFractionDigits:2}))}</dl>;
  return <section className="lb-expanded" id={'echo-details-'+build.id} aria-label={`${build.ign} Echo build`}>
   <header className="lb-expanded-heading"><div><span className="eyebrow">{build.character} · {build.ign}</span><h2>Equipped Echoes</h2><p>UID {build.uid} · Submitted {new Date(build.createdAt).toLocaleDateString()}</p></div>{!profile&&<Link className="outline-button" href={`/profiles?uid=${build.uid}&build=${build.id}`}>View profile ↗</Link>}</header>
   {profile&&statsPanel}
