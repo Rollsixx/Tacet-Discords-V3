@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {HistoricalCorrectionReview} from "./historical-correction-review";
 import {SubstatCorrection} from "./substat-correction";
+import {MainStatEvidenceReview} from "./main-stat-evidence-review";
 import {IdentityReview} from "./identity-review";
 import {ScoringReadinessCard} from "./scoring-readiness";
 import {assessmentReadiness} from "@/lib/scanner/scoring-readiness";
@@ -161,6 +162,7 @@ export function ModerationPanel() {
       <div className="bs-panel-heading"><div><span className="eyebrow">Selected submission</span><h2>{selected.character} · {selected.ign}</h2></div><span className="bs-pill">Stats locked</span></div>
       {!selected.data.assessment?.eligible&&!assessmentReadiness(selected.data.assessment).awaitingRotation&&<p className="bs-action-help" role="status"><strong>Scoring blocked:</strong> {selected.data.assessment?.reason||'No validated scoring evidence.'} Approval makes this build visible in Profiles, but approval and UID verification cannot resolve this scoring issue.</p>}
       <ScoringReadinessCard value={assessmentReadiness(selected.data.assessment)} moderation={{approved:selected.status==='approved',verified:selected.identityVerified,scored:typeof selected.score==='number'&&selected.score>0,policyId:selected.data.assessment?.calculation?.policyId}}/>
+      {selected.data.assessment?.statsVerified===true&&selected.data.assessment?.maxMainStatsVerified!==true&&<MainStatEvidenceReview id={selected.id} token={token.trim()} reviewer={reviewer} onUpdated={refreshRecovered}/>}
       <HistoricalCorrectionReview id={selected.id} corrections={(selected.data as unknown as {substatCorrections?:Record<string,unknown>[]}).substatCorrections||[]} verifications={(selected.data as unknown as {correctionVerifications?:{corrections:Record<string,unknown>[]}[]}).correctionVerifications||[]} token={token.trim()} reviewer={reviewer} onUpdated={refreshRecovered}/>
       {assessmentReadiness(selected.data.assessment).awaitingRotation&&<section className="identity-review" aria-label="Official rotation required"><h3>Equipment verified · awaiting official rotation</h3><p>All five Echoes and Sonata sets are confirmed. Identity recognition does not need to be repeated. You can approve this build as unranked now; it will be included in the first rotation preview and scored after you confirm publication.</p><button className="outline-button" disabled={busy} onClick={()=>{setRotationCharacter(selected.character);void navigate('rotations');}}>Open {selected.character} rotation</button></section>}
       {selected.data.assessment?.statsVerified===true&&<SubstatCorrection id={selected.id} slots={selected.data.slots} sourceSlots={selected.data.assessment?.originalSourceSlots||selected.data.assessment?.sourceSlots} corrections={(selected.data as unknown as {substatCorrections?:{slot:number;position:number;replacement:string}[]}).substatCorrections||[]} token={token.trim()} reviewer={reviewer} onUpdated={refreshRecovered}/>}

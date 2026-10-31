@@ -13,6 +13,8 @@ const hash=x=>createHash('sha256').update(x).digest('hex');
 const must=(c,m,status=422)=>{if(!c)throw new HttpError(status,m);};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
 export function identityCatalog(){return Object.values(engine.mainEchoesData).map(e=>({key:e.key,name:e.name,cost:costByClass[e.class],sets:e.sets,image:corrections.echoes.find(c=>c.key===e.key)?.source||e.image}));}
+const mainStatKeys={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Healing Bonus':'HealingBonus'};
+function mainStatChecks(slots=[]){return (slots||[]).map((slot,i)=>{const stat=slot.mainStat?.value||'',key=mainStatKeys[stat]||stat.replace(' DMG Bonus',''),cost=Number(slot.cost?.value),expected=engine.statsTable[cost]?.[key]?.[5];return {slot:i+1,cost,stat,expected:typeof expected==='number'?expected:null,display:typeof expected==='number'?expected+'%':'Unavailable'};});}
 export function repairEvidence(row,data){
  const a=data.assessment,source=a?.sourceSlots;
  // OCR raw text and confidence metadata can differ between the client preview
@@ -31,7 +33,7 @@ async function cropsFor(db,row,data){
 export async function identityWorkspace(db,id){
  const {row,data}=await snapshot(db,id);const statIssues=data.slots?.flatMap(s=>validateEchoSlot(s).map(i=>'Echo '+s.slot+': '+i.message))||[];const evidence=repairEvidence(row,data);let report=[],crops=[],cropHash=null;
  if(data.slots?.length===5){try{const retained=await cropsFor(db,row,data);report=await diagnoseCrops(retained.crops);cropHash=retained.cropHash;crops=retained.crops.map(c=>({slot:c.slot,portrait:'data:image/png;base64,'+c.portrait.toString('base64'),sonata:'data:image/png;base64,'+c.sonata.toString('base64')}));}catch{/* Keep the submission reviewable when retained images are incomplete. */}}
- return {id,revision:hash(String(row.data)),evidence,evidenceReason:statIssues.length?statIssues.join(' '):evidence?'Source UID, numeric stats, maximum main stats and canonical crops were verified.':'Verified canonical source evidence is incomplete. Reimport a clear original screenshot; identity correction cannot bypass missing proof.',supported:SUPPORTED.includes(String(row.character)),report,crops,cropHash,catalog:identityCatalog(),sets:Object.entries(engine.echoSetLabelMap).map(([key,name])=>({key,name})),readiness:{...visualReadiness(report,data.assessment?.statsVerified===true),ready:data.assessment?.eligible===true,reason:data.assessment?.reason||'No scoring evidence.'}};
+ return {id,revision:hash(String(row.data)),evidence,evidenceReason:statIssues.length?statIssues.join(' '):evidence?'Source UID, numeric stats, maximum main stats and canonical crops were verified.':'Verified canonical source evidence is incomplete. Reimport a clear original screenshot; identity correction cannot bypass missing proof.',supported:SUPPORTED.includes(String(row.character)),mainStatChecks:mainStatChecks(data.slots),report,crops,cropHash,catalog:identityCatalog(),sets:Object.entries(engine.echoSetLabelMap).map(([key,name])=>({key,name})),readiness:{...visualReadiness(report,data.assessment?.statsVerified===true),ready:data.assessment?.eligible===true,reason:data.assessment?.reason||'No scoring evidence.'}};
 }
 export function validateIdentities(input,slots){
  must(Array.isArray(input)&&input.length===5,'Confirm all five ordered identities.',400);
@@ -57,6 +59,26 @@ function sourceProofProblems(row,data){
  if(Array.isArray(source)&&source.length===5&&Array.isArray(data.slots)&&data.slots.length===5&&!sameScoringSlotValues(source,data.slots))issues.push('Parsed stat values do not match the independent screenshot readings. Correct the affected Echo stat before ranking.');
  if(!issues.length)issues.push(a.reason||'The source evidence is incomplete; reload this review and inspect the retained screenshot.');
  return [...new Set(issues)];
+}
+export async function verifyMainStatEvidence(db,id,input){
+ must(input&&input.operation==='verify-main-stats'&&input.confirmed===true,'Compare all five main-stat amounts with the original screenshot and confirm.',400);
+ must(typeof input.reviewer==='string'&&input.reviewer.trim().length>=2&&input.reviewer.length<=64,'Reviewer name required.',400);
+ input={...input,note:input.note??''};must(typeof input.note==='string'&&input.note.length<=500,'Optional note must contain at most 500 characters.',400);
+ const {row,data}=await snapshot(db,id);must(input.revision===hash(String(row.data)),'This build changed. Reload the main-stat review.',409);
+ const a=data.assessment||{};must(a.statsVerified===true&&a.sourceUid===String(row.uid)&&/^[a-f0-9]{64}$/.test(a.sourceHash||''),'Server-verified screenshot stats and UID are required before this review.');
+ must(a.sourceSlots?.length===5&&data.slots?.length===5&&sameScoringSlotValues(a.sourceSlots,data.slots),'Submitted Echo values must match the independent screenshot readings before main-stat confirmation.');
+ const checks=mainStatChecks(data.slots);must(checks.length===5&&checks.every(c=>Number.isFinite(c.expected)),'Expected main-stat values are unavailable for this equipment.');
+ const stored=(await db.execute({sql:'SELECT image,source_hash FROM submission_source_evidence WHERE submission_id=?',args:[String(id)]})).rows[0];
+ must(stored&&stored.source_hash===a.sourceHash&&hash(Buffer.from(stored.image))===a.sourceHash,'The original screenshot is unavailable or does not match verified source evidence.');
+ const at=new Date().toISOString(),next={...data,assessment:{...a,maxMainStatsVerified:true,mainStatEvidenceReview:{version:'moderator-main-stat-review/1',sourceHash:a.sourceHash,confirmedAt:at,reviewer:input.reviewer.trim(),note:input.note.trim(),checks:checks.map(({slot,cost,stat,expected})=>({slot,cost,stat,expected}))}};
+ const tx=await db.transaction('write');let savedData;
+ try{const fresh=(await tx.execute({sql:'SELECT data,status FROM submissions WHERE id=?',args:[String(id)]})).rows[0];must(fresh&&fresh.data===row.data,'Build changed during main-stat review. Reload before confirming.',409);
+  savedData=JSON.stringify(next);await tx.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[savedData,String(id)]});await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),String(id),'main_stats_verified',input.reviewer.trim(),JSON.stringify({note:input.note.trim(),sourceHash:a.sourceHash,checks:checks.map(({slot,cost,stat,expected})=>({slot,cost,stat,expected}))}),at]});await tx.commit();
+ }finally{tx.close();}
+ const {correctionLedgerVerified,revalidateCorrectedBuilds}=await import('./correction-workflow.mjs');
+ if(!correctionLedgerVerified(next)){const results=await revalidateCorrectedBuilds(db,{uid:String(row.uid),character:String(row.character)});return {ok:true,id,ranked:false,eligible:false,reason:results.find(r=>r.id===id)?.reason||'Verify the saved corrections before ranking.'};}
+ const identities=(next.assessment.visualReport||[]).map((s,i)=>({slot:i+1,echo:s.echo,set:s.set}));
+ return {...await repairIdentities(db,id,{operation:'confirm',revision:hash(savedData),reviewer:input.reviewer,note:input.note,confirmed:true,identities})};
 }
 export async function repairIdentities(db,id,input){
  must(input&&['retry','confirm'].includes(input.operation),'Choose retry or confirm.',400);
