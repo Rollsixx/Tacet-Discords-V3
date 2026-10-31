@@ -17,7 +17,7 @@ function text(value: unknown, max: number, min = 1): string {
 }
 function field(value: unknown, allowEmpty = false) {
   if (!record(value)) throw new HttpError(400, "Invalid OCR field.");
-  return { raw: text(value.raw, 160, 0), value: text(value.value, 160, 0) };
+  return { raw: text(value.raw, 160, 0), value: text(value.value, 160, allowEmpty ? 0 : 1) };
 }
 export function pngCrop(value: unknown, width: number, height: number) {
   if (typeof value !== "string" || value.length > 204822 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) throw new HttpError(400, "Missing or oversized PNG crop.");
