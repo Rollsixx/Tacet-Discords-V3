@@ -55,6 +55,22 @@ export function diagnoseFingerprints(features){
    echo=matchRanked(joint,.18,.025,i>0)||disambiguateSpatial(ef,joint,cost);
    if(echo)set=matchRanked(rankedSets.filter(s=>engine.mainEchoesData[echo.key].sets.includes(s.key)),.20,.015);
   }
+  if(!echo){
+   // A near-tied Sonata can be misclassified even when the Echo portrait is
+   // clear. Re-evaluate both identities from their compatible references;
+   // keep the same score/margin gates so this never becomes a blind fallback.
+   const echoLed=matchRanked(rankedEchoes,.18,.025,i>0)||disambiguateSpatial(ef,rankedEchoes,cost);
+   if(echoLed){
+    const compatibleSets=rankedSets.filter(s=>engine.mainEchoesData[echoLed.key]?.sets.includes(s.key));
+    const verifiedSet=matchRanked(compatibleSets,.20,.015);
+    if(verifiedSet){echo=echoLed;set=verifiedSet;}
+    else if(compatibleSets.some(s=>s.difference<=.20)){
+     // Keep a confidently identified Echo even when its Sonata icon is still
+     // ambiguous. Ranking remains blocked until the Sonata itself is verified.
+     echo=echoLed;set=null;
+    }
+   }
+  }
   const candidates=rankedEchoes.filter(e=>!set||e.sets.includes(set.key)).slice(0,5).map(e=>({key:e.key,name:engine.getEchoData(e.key)?.name||e.key,difference:e.difference}));
   const sonatas=rankedSets.filter(s=>!echo||engine.mainEchoesData[echo.key].sets.includes(s.key)).slice(0,3).map(s=>({key:s.key,name:engine.echoSetLabelMap[s.key]||s.key,difference:s.difference}));
   return {slot:i+1,cost,echo:echo?.key||null,set:set?.key||null,echoMatch:echo,setMatch:set,echoCandidates:candidates,sonataCandidates:sonatas,problem:!echo?'Echo '+(i+1)+' is unknown or ambiguous.':!set?'Sonata '+(i+1)+' is unknown or ambiguous.':null};

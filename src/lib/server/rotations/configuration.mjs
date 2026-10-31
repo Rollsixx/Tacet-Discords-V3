@@ -55,7 +55,7 @@ export function compileReviewed(spec,catalog,identities){
  const automaticMain=Object.fromEntries(echoBuffDefinitions(main).map(d=>[d.key,{isEnabled:Boolean(d.alwaysEnabled),stacks:d.alwaysEnabled?d.maxStacks||0:0}]));
  const definitions=new Map(catalog.map(d=>[d.id,d]));
  function compile(effects,mainBuffs=automaticMain){
-  const advancedConfig={},applied=[],inactive=[];
+  const advancedConfig={mainEchoBuff:{buffs:structuredClone(mainBuffs)}},applied=[],inactive=[];
   for(const e of effects){
    const d=definitions.get(e.id);if(!d)throw new HttpError(400,'Unknown optimizer effect.');
    const config={isEnabled:e.isEnabled,...(d.hasStacks?{stacks:e.stacks}:{})};

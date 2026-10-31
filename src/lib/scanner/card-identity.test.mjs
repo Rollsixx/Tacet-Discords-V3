@@ -37,3 +37,9 @@ test('internal Resonator keys always render using their canonical public names',
  assert.equal(resonatorDisplayName('XiangliYao'),'Xiangli Yao');
  assert.equal(resonatorDisplayName('Zani'),'Zani');
 });
+
+test('single-character OCR loss in a roster name resolves to its canonical key', () => {
+ assert.equal(parseCardIdentity('Jinhs mw LV.90', '', '').character, 'Jinhsi');
+ assert.equal(parseCardIdentity('Jinhsi LV.90', '', '').character, 'Jinhsi');
+ assert.equal(parseCardIdentity('Unknown Resonator LV.90', '', '').character, 'Unknown Resonator');
+});

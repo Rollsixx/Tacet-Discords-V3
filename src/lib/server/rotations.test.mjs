@@ -83,7 +83,7 @@ test('owner-reviewed optimizer workflow validates definitions, gates gear, stage
  const stacked=catalog.find(d=>d.hasStacks);assert.ok(stacked);await assert.rejects(normalizeSpec('Carlotta',{...reviewed,actions:[{...spec.actions[0],effects:[{id:stacked.id,isEnabled:true,stacks:stacked.maxStacks+1}]}]}));
  const set=catalog.find(d=>d.category==='echoSetPassives'&&d.scope==='Freezing Frost 5 Set');const echo=catalog.find(d=>d.category==='mainEchoBuff');assert.ok(set&&echo);
  const identity=cases.cases.find(c=>c.character==='Carlotta').echoes;
- const gear=compileReviewed({...reviewed,actions:[{...spec.actions[0],effects:[{id:set.id,isEnabled:true,...(set.hasStacks?{stacks:set.maxStacks}:{})},{id:echo.id,isEnabled:true,...(echo.hasStacks?{stacks:echo.maxStacks}:{})}]}]},catalog,identity);assert.equal(gear.trace[0].inactive.length,2);assert.deepEqual(gear.actions[0].advancedConfig,{});
+ const gear=compileReviewed({...reviewed,actions:[{...spec.actions[0],effects:[{id:set.id,isEnabled:true,...(set.hasStacks?{stacks:set.maxStacks}:{})},{id:echo.id,isEnabled:true,...(echo.hasStacks?{stacks:echo.maxStacks}:{})}]}]},catalog,identity);assert.equal(gear.trace[0].inactive.length,2);assert.ok(gear.actions[0].advancedConfig.mainEchoBuff,'every action carries the selected Echo defaults');
  const equipped=catalog.find(d=>d.category==='echoSetPassives'&&d.scope==='Frosty Resolve 5 Set'&&!d.hasStacks);const activeGear=compileReviewed({...reviewed,actions:[{...spec.actions[0],effects:[{id:equipped.id,isEnabled:true}]}]},catalog,identity);assert.equal(activeGear.trace[0].applied.length,1);assert.equal(activeGear.actions[0].advancedConfig.echoSetPassives[equipped.key].isEnabled,true);
  await saveRotationDraft(db,'Carlotta',reviewed,0);assert.equal((await validateRotationDraft(db,'Carlotta',1)).valid,true);const samples=await sampleRotationDraft(db,'Carlotta',1);assert.equal(samples.provisional,false);assert.ok(samples.builds[0].trace[0].applied.length===2);
  const off={...reviewed,actions:[{...spec.actions[0],effects:[]}]};await saveRotationDraft(db,'Carlotta',off,1);const without=await sampleRotationDraft(db,'Carlotta',2);assert.ok(samples.builds[0].score>without.builds[0].score,'real optimizer buffs increase expected damage');
@@ -99,4 +99,26 @@ test('owner-reviewed optimizer workflow validates definitions, gates gear, stage
 
 test('owner-reviewed publication cannot activate an untested empty scoring cohort',async()=>{
  const db=createClient({url:'file::memory:'});try{await migrate(db);await rotationWorkspace(db,'Carlotta');await saveRotationDraft(db,'Carlotta',{...spec,mode:'admin-reviewed',conditions:'Owner-reviewed complete start and end conditions with sufficient resources.'},0);const job=await startRotationPreview(db,'Carlotta',1);const preview=await stepRotationPreview(db,job.id);assert.equal(preview.run.state,'ready');await assert.rejects(activateRotation(db,job.id,preview.confirmation,true),e=>e.status===422);assert.equal((await rotationWorkspace(db,'Carlotta')).active.kind,'baseline');}finally{db.close();}
+});
+
+
+test('each Main Echo receives its pinned optimizer buff defaults on every rotation action',async()=>{
+ const {modifierCatalog,compileReviewed,echoBuffDefinitions}=await import('./rotations/configuration.mjs');
+ const engine=await import('../../../vendor/wuthering-tools/dist/index.mjs');
+ const catalog=await modifierCatalog('Carlotta',true);
+ const actions=[{type:'skill',key:'ArtofViolenceDMG',count:1,effects:[]},{type:'skill',key:'ArtofViolenceDMG',count:1,effects:[]}];
+ let checked=0;
+ for(const [key,echo] of Object.entries(engine.mainEchoesData)){
+  const defs=echoBuffDefinitions(echo);if(!defs.length)continue;
+  const set=echo.sets[0];const identities=Array.from({length:5},()=>({echo:key,set}));
+  const compiled=compileReviewed({effectMode:'admin-reviewed',defaults:[],actions},catalog,identities);
+  for(const action of compiled.actions){
+   const buffs=action.advancedConfig.mainEchoBuff?.buffs;
+   assert.ok(buffs, key+' Main Echo defaults missing');
+   assert.deepEqual(Object.keys(buffs).sort(),defs.map(d=>d.key).sort(),key+' optimizer buff keys');
+   for(const d of defs)assert.equal(buffs[d.key].isEnabled,Boolean(d.alwaysEnabled),key+' '+d.key+' default state');
+  }
+  checked++;
+ }
+ assert.ok(checked>0);
 });

@@ -6,9 +6,10 @@ import {createClient} from '@libsql/client';
 import sharp from 'sharp';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import cases from '../game-data/scoring-cases.json' with {type:'json'};
+import fingerprintCatalog from '../game-data/fingerprints.json' with {type:'json'};
 import baseCases from '../game-data/upstream-base-cases.json' with {type:'json'};
 import manifest from '../game-data/manifest.json' with {type:'json'};
-import {identifySlots,identifyFingerprints,calculateStandard,matchVisual,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from './scoring.mjs';
+import {identifySlots,identifyFingerprints,diagnoseFingerprints,calculateStandard,matchVisual,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from './scoring.mjs';
 import visualFeatures from '../../../tests/fixtures/carlotta-visual-features.json' with {type:'json'};
 import {migrate} from './database.ts';
 import {submit} from './submission-store.ts';import {moderate,listLeaderboard,listBuilds} from './store.ts';
@@ -144,4 +145,32 @@ test('locked Echo evidence rejects altered values and stores canonical source cr
 test('accepted original screenshots and full OCR traces are retained immutably',{skip:!originals||!process.env.USER_BUILD_CARD_UID,timeout:60000},async()=>{
  const card=cards.find(c=>c.file.startsWith('Carlotta')),image=await readFile(originals+'/'+card.file),db=createClient({url:'file::memory:'});
  try{await migrate(db);const body=fixture(process.env.USER_BUILD_CARD_UID);const fields=inputFor(card);body.character='Carlotta';body.slots=body.slots.map((s,i)=>({...s,...fields.slots[i]}));body.sourceImage='data:image/png;base64,'+image.toString('base64');const saved=await submit(validateSubmission(body),db,true);const evidence=(await db.execute({sql:'SELECT * FROM submission_source_evidence WHERE submission_id=?',args:[saved.id]})).rows[0];assert.deepEqual(Buffer.from(evidence.image),image);assert.ok(JSON.parse(evidence.original_ocr).length>35);assert.deepEqual(JSON.parse(evidence.original_slots),JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[saved.id]})).rows[0].data).assessment.sourceSlots);await assert.rejects(db.execute({sql:"UPDATE submission_source_evidence SET source_hash='changed' WHERE submission_id=?",args:[saved.id]}),/immutable/);}finally{db.close();}
+});
+
+
+
+test('a Sonata misread cannot suppress a clear Echo with an independently verified compatible Sonata',()=>{
+ const echo=fingerprintCatalog.echoes.find(item=>item.key==='AbyssalGladius');
+ const compatible=fingerprintCatalog.sets.find(item=>item.key==='MidnightVeil');
+ const misleading=fingerprintCatalog.sets.find(item=>item.key==='FreezingFrost');
+ assert.ok(echo&&compatible&&misleading);
+ // Simulate a near-tied Sonata OCR/image result whose hash favors the wrong set,
+ // while the color histogram and Echo identity support the compatible set.
+ const report=diagnoseFingerprints([{cost:echo.cost,portrait:echo.fingerprint,sonata:{hash:misleading.fingerprint.hash,hist:compatible.fingerprint.hist}}])[0];
+ assert.equal(report.echo,echo.key);
+ assert.equal(report.set,compatible.key);
+ assert.equal(report.problem,null);
+});
+
+
+test('a confident Echo remains identified when its Sonata references tie',()=>{
+ const echo=fingerprintCatalog.echoes.find(item=>item.key==='AbyssalPatricius');
+ const compatible=echo?.sets.map(key=>fingerprintCatalog.sets.find(item=>item.key===key));
+ const misleading=fingerprintCatalog.sets.find(item=>item.key==='LawofHarmony');
+ assert.ok(echo&&compatible?.length===2&&compatible.every(Boolean)&&misleading);
+ const blendedHistogram=compatible[0].fingerprint.hist.map((value,index)=>(value+compatible[1].fingerprint.hist[index])/2);
+ const report=diagnoseFingerprints([{cost:echo.cost,portrait:echo.fingerprint,sonata:{hash:misleading.fingerprint.hash,hist:blendedHistogram}}])[0];
+ assert.equal(report.echo,echo.key);
+ assert.equal(report.set,null);
+ assert.match(report.problem,/Sonata/);
 });
