@@ -2,6 +2,7 @@ import { createClient, type Client } from "@libsql/client";
 import { migrations } from "./schema.ts";
 
 let client: Client | undefined;
+const migrationRuns = new WeakMap<Client,Promise<void>>();
 export function database() {
   if (!client) {
     const url = process.env.TURSO_DATABASE_URL;
@@ -33,4 +34,14 @@ export async function migrate(db: Client = database()) {
       await tx.commit();
     } finally { tx.close(); }
   }
+}
+
+// Apply additive migrations once per warm runtime and database client. This
+// keeps the public Home request from repeating the full migration scan.
+export function migrateOnce(db:Client=database()) {
+  const ready=migrationRuns.get(db);
+  if(ready)return ready;
+  const pending=migrate(db).catch(error=>{migrationRuns.delete(db);throw error;});
+  migrationRuns.set(db,pending);
+  return pending;
 }

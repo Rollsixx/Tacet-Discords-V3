@@ -6,6 +6,7 @@ import {featuredResonators,latestResonators} from '../resonators.ts';
 import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 import {scoringReadiness} from './scoring-info.ts';
 import {rotationPolicyReady} from '../game-data/scoring-policies.mjs';
+import {resolveHomeFeatured} from './home-featured.mjs';
 export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean; patchMajor?: string } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
@@ -93,11 +94,23 @@ export async function findPlayers(search = "", db: Client = database()) {
 // Reuse the ranking policy, including one best build per verified UID and stable ties.
 // Return only the fields needed on Home, never full Echo records or private submissions.
 export async function homeRankings(db: Client = database()) {
- const boards=await Promise.all(latestResonators.map(async character=>{
+ const configuration=await homeFeaturedSettings(db);
+ const boards=await Promise.all(configuration.featured.map(async character=>{
   const result=await listLeaderboard({character:character.name},db);
   return {character:character.name,players:result.builds.slice(0,5).map(build=>({id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}))};
  }));
- return {boards};
+ return {boards,featured:configuration.featured};
+}
+
+export async function homeFeaturedSettings(db:Client=database()) {
+ const supported=featuredResonators.map(character=>character.name);
+ const fallback=latestResonators.map(character=>character.name);
+ const result=await db.execute({sql:"SELECT value FROM app_settings WHERE key='home_latest_resonators'",args:[]});
+ let saved:unknown;
+ try{saved=JSON.parse(String(result.rows[0]?.value||'null'));}catch{saved=null;}
+ const names=resolveHomeFeatured(saved,supported,fallback);
+ const byName=new Map(featuredResonators.map(character=>[character.name,character]));
+ return {selected:names,featured:names.map(name=>byName.get(name)!).filter(Boolean),options:featuredResonators.map(character=>({name:character.name,label:character.displayName||character.name,element:character.element}))};
 }
 
 export async function listAdminPlayers(options:{search?:string;character?:string;page?:number}={},db:Client=database()){

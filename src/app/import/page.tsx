@@ -104,7 +104,7 @@ export default function ImportPage() {
               {slot.substats.map((stat, i) => <label key={i}>Substat {i + 1}<textarea aria-label={`Echo ${slot.slot} substat ${i + 1}`} value={stat.value} readOnly aria-readonly="true" rows={2} /></label>)}
             </fieldset><span className={`scan-chip ${warnings.length ? "needs-review" : "passed"}`}>{warnings.length ? "Needs review" : "Stats passed"}</span>
               {warnings.map(issue => <p key={issue.code} className="field-error">{issue.message}</p>)}
-              <details><summary>Original OCR</summary><p className="muted">Cost: {slot.cost.raw || "Unreadable"}{slot.cost.autoRecovered ? ` (recovered from image: ${slot.cost.value})` : ""}</p><p className="muted">{slot.mainStat.raw}</p>{slot.substats.map((stat, i) => <p className="muted" key={i}>{stat.raw || "Unreadable"}</p>)}</details></>;
+              <details><summary>Original OCR and automatic corrections</summary><p className="muted">Cost: {slot.cost.raw || "Unreadable"}{slot.cost.autoRecovered ? ` (recovered from image: ${slot.cost.value})` : ""}</p><p className="muted">{slot.mainStat.raw}{slot.mainStat.autoRecovered ? ` (corrected to ${slot.mainStat.value})` : ""}</p>{slot.substats.map((stat, i) => <p className="muted" key={i}>Substat {i+1}: {stat.raw || "Unreadable"}{stat.autoRecovered ? ` (corrected to ${stat.value})` : ""}</p>)}</details></>;
           }} />
           <SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onRetryScan={()=>void scan(file)} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />
         </>}

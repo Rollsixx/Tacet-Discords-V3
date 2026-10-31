@@ -8,6 +8,7 @@ import {parseCardIdentity} from '../scanner/card-identity.ts';
 import {recoverEchoCost} from '../scanner/cost-recovery.ts';
 import {agreedReading,legalSubstatKey,mainStatKey,sourceFailure} from './ocr-agreement.mjs';
 import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
+import {normalizeSubstatReading} from '../scanner/ocr-readings.ts';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import {SUPPORTED,diagnoseSlots,identitiesFromReport,assessEquipment} from './scoring.mjs';
 const languagePath=resolve(process.cwd(),'node_modules/@tesseract.js-data/eng/4.0.0');
@@ -81,7 +82,8 @@ export async function assessSource(input){
      if(!wanted||!reads.every(v=>key(v)===wanted))throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo ${i+1}, substat ${j+1}: source reads do not agree. Retry the original card; stats stay locked.`,{slot:i+1,field:'substat '+(j+1)});
      raw=reads[0];
     }
-    substats.push({raw:primary,value:raw});
+    const normalized=normalizeSubstatReading(raw);
+    substats.push({raw:primary,value:normalized?.value||raw,autoRecovered:normalized?.corrected||undefined});
    }
    slots.push({slot:i+1,cost:{raw:cost,value:cost},mainStat:{raw:main,value:client.mainStat.value},substats});
   }

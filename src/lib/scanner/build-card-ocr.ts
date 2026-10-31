@@ -78,6 +78,7 @@ function cropRegion(
   source: HTMLCanvasElement,
   region: Rectangle,
   scale = 3,
+  threshold = false,
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
 
@@ -122,10 +123,7 @@ function cropRegion(
       0.299 * red + 0.587 * green + 0.114 * blue,
     );
 
-    const adjusted = Math.max(
-      0,
-      Math.min(255, (gray - 128) * 1.5 + 128),
-    );
+    const adjusted = threshold ? (gray >= 158 ? 255 : 0) : Math.max(0, Math.min(255, (gray - 128) * 1.5 + 128));
 
     pixels.data[index] = adjusted;
     pixels.data[index + 1] = adjusted;
@@ -235,9 +233,11 @@ export async function recognizeBuildCard(
     const warnings: string[] = [];
     let statRetries=0;
     async function retryField(field:RecognizedField,region:Rectangle,key:(raw:string)=>string|null,label:string){
-      if(key(field.value)||statRetries>=12)return field;
+      // Retry every unreadable field: the prior global cap stopped after only
+      // six failed fields, leaving later Echoes unparsed on difficult cards.
+      if(key(field.value)||statRetries>=60)return field;
       statRetries+=2;onProgress?.({completed,total,label:"Retrying "+label,identity,slots:[...slots]});
-      return recoverStatReading(field,async variant=>(await worker.recognize(cropRegion(image,region,variant===0?4:5))).data.text,key);
+      return recoverStatReading(field,async variant=>(await worker.recognize(cropRegion(image,region,variant===0?4:5,variant===1))).data.text,key);
     }
 
     for (let index = 0; index < SLOT_COUNT; index += 1) {

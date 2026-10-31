@@ -51,13 +51,15 @@ export function parseSubstat(value: string): {
 } | null {
   const text = value.trim();
 
-  const match = text.match(
-    /^(.+?)\s+([+]?\d+(?:\.\d+)?)\s*(%)?$/,
-  );
+  // Tesseract sometimes appends a short icon artifact to the label (for
+  // example, "Crit. DMG PAR 21%"). Keep the numeric tail strict, then resolve
+  // the label against the known game stat aliases below.
+  const match = text.match(/^(.+?)\s+([+]?\d+(?:\.\d+)?)\s*(%)?\s*$/);
 
   if (!match) return null;
 
-  const name = STAT_NAMES[normalizeName(match[1])];
+  const label = normalizeName(match[1]);
+  const name = resolveStatName(label);
   if (!name) return null;
 
   const amount = Number(match[2]);
@@ -68,6 +70,46 @@ export function parseSubstat(value: string): {
     amount,
     percent: Boolean(match[3]),
   };
+}
+
+function editDistance(left: string, right: string): number {
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    let diagonal = row[0];
+    row[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const above = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, diagonal + (left[i - 1] === right[j - 1] ? 0 : 1));
+      diagonal = above;
+    }
+  }
+  return row[right.length];
+}
+
+function resolveStatName(label: string): string | undefined {
+  const aliases = Object.entries(STAT_NAMES).sort(([a], [b]) => b.length - a.length);
+  const exact = STAT_NAMES[label];
+  if (exact) return exact;
+
+  // Remove only short OCR debris following a complete known label. Longer or
+  // competing stat names are not guessed.
+  const prefixMatches = aliases.filter(([alias]) => {
+    if (!label.startsWith(alias + " ")) return false;
+    const tail = label.slice(alias.length + 1).trim();
+    return tail.length <= 5 && /^[a-z]{1,5}$/.test(tail);
+  });
+  const prefixNames = [...new Set(prefixMatches.map(([, name]) => name))];
+  if (prefixNames.length === 1) return prefixNames[0];
+
+  // Recover a single-character label OCR slip only when one stat alias is the
+  // unique nearest match. This path is shared by every Resonator.
+  const compact = label.replace(/[^a-z]/g, "");
+  const candidates = aliases
+    .map(([alias, name]) => ({ alias, name, distance: editDistance(compact, alias.replace(/[^a-z]/g, "")) }))
+    .filter(candidate => candidate.distance <= (compact.length >= 15 ? 2 : 1));
+  const best = Math.min(...candidates.map(candidate => candidate.distance));
+  const names = [...new Set(candidates.filter(candidate => candidate.distance === best).map(candidate => candidate.name))];
+  return names.length === 1 ? names[0] : undefined;
 }
 
 export function validateEchoSlot(
