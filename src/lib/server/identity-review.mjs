@@ -4,7 +4,8 @@ import sharp from 'sharp';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import {assessEquipment,diagnoseCrops,identitiesFromReport,DATA_VERSION,ENGINE_VERSION,SUPPORTED} from './scoring.mjs';
 import {HttpError} from './validation.ts';
-import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
+import {validateEchoSlot} from '../scanner/stat-validation.ts';
+import {sameScoringSlotValues} from '../scanner/stat-equivalence.mjs';
 import {scoreActiveRotation,recordRotationScore} from './rotations/store.mjs';
 import corrections from '../game-data/fingerprint-corrections.json' with {type:'json'};
 import {visualReadiness} from '../scanner/scoring-readiness.ts';
@@ -12,26 +13,13 @@ const hash=x=>createHash('sha256').update(x).digest('hex');
 const must=(c,m,status=422)=>{if(!c)throw new HttpError(status,m);};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
 export function identityCatalog(){return Object.values(engine.mainEchoesData).map(e=>({key:e.key,name:e.name,cost:costByClass[e.class],sets:e.sets,image:corrections.echoes.find(c=>c.key===e.key)?.source||e.image}));}
-function normalizedMain(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
-function sameVerifiedStatValues(source,submitted){
- if(!Array.isArray(source)||!Array.isArray(submitted)||source.length!==5||submitted.length!==5)return false;
- return source.every((slot,index)=>{
-  const candidate=submitted[index];
-  if(Number(slot?.cost?.value)!==Number(candidate?.cost?.value)||normalizedMain(slot?.mainStat?.value)!==normalizedMain(candidate?.mainStat?.value))return false;
-  if(!Array.isArray(slot?.substats)||!Array.isArray(candidate?.substats)||slot.substats.length!==5||candidate.substats.length!==5)return false;
-  return slot.substats.every((field,position)=>{
-   const a=parseSubstat(String(field?.value||'')),b=parseSubstat(String(candidate.substats[position]?.value||''));
-   return a&&b&&a.name===b.name&&a.amount===b.amount&&a.percent===b.percent;
-  });
- });
-}
 export function repairEvidence(row,data){
  const a=data.assessment,source=a?.sourceSlots;
  // OCR raw text and confidence metadata can differ between the client preview
  // and server verification. Compare canonical values; the original image hash,
  // UID, max-level main stats, legal rolls and retained crop dimensions remain
  // independently checked before identity confirmation.
- return a?.statsVerified===true&&a.maxMainStatsVerified===true&&/^[a-f0-9]{64}$/.test(a.sourceHash||'')&&a.sourceUid===String(row.uid)&&data.slots?.length===5&&source?.length===5&&data.slots.every(s=>!validateEchoSlot(s).length)&&source.every(s=>!validateEchoSlot(s).length)&&sameVerifiedStatValues(source,data.slots);
+ return a?.statsVerified===true&&a.maxMainStatsVerified===true&&/^[a-f0-9]{64}$/.test(a.sourceHash||'')&&a.sourceUid===String(row.uid)&&data.slots?.length===5&&source?.length===5&&data.slots.every(s=>!validateEchoSlot(s).length)&&source.every(s=>!validateEchoSlot(s).length)&&sameScoringSlotValues(source,data.slots);
 }
 async function snapshot(db,id){const row=(await db.execute({sql:"SELECT * FROM submissions WHERE id=? AND status IN ('pending','approved')",args:[id]})).rows[0];must(row,'Submission not found.',404);return {row,data:JSON.parse(String(row.data))};}
 async function cropsFor(db,row,data){

@@ -2,12 +2,13 @@ import {createHash} from 'node:crypto';
 import sharp from 'sharp';
 import {identifyCrops} from './scoring.mjs';
 import corrections from '../game-data/fingerprint-corrections.json' with {type:'json'};
+import {sameScoringSlotValues} from '../scanner/stat-equivalence.mjs';
 
 const identityFailure=/^(Echo|Sonata) ([1-5]) is unknown or ambiguous\.$/;
 const hashPattern=/^[a-f0-9]{64}$/;
 export function recoveryMode(row,data){
  const a=data.assessment;
- if(a?.eligible||!identityFailure.test(a?.reason||'')||a.statsVerified!==true||a.sourceUid!==String(row.uid)||!Array.isArray(data.slots)||data.slots.length!==5||JSON.stringify(a.sourceSlots)!==JSON.stringify(data.slots))return null;
+ if(a?.eligible||!identityFailure.test(a?.reason||'')||a.statsVerified!==true||a.sourceUid!==String(row.uid)||!Array.isArray(data.slots)||data.slots.length!==5||!sameScoringSlotValues(a.sourceSlots,data.slots))return null;
  // New records retain canonical crops and explicit maximum-main-stat proof.
  if(a.cropEvidenceVersion==='source-crops/1'&&hashPattern.test(a.sourceHash||'')&&a.maxMainStatsVerified===true)return 'source-crops/1';
  // Before source-crops/1, this exact failure was reached only AFTER every source

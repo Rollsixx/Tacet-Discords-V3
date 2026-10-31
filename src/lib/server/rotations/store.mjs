@@ -7,6 +7,7 @@ import {calculateStandard,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION} from '../s
 import {actionCatalog,normalizeSpec,validateSpec,simulate,specificationHash} from './mechanics.mjs';
 import {modifierLibrary,modifierCatalog,compileReviewed,REVIEWED_MODE} from './configuration.mjs';
 import {validateEchoSlot} from '../../scanner/stat-validation.ts';
+import {sameScoringSlotValues} from '../../scanner/stat-equivalence.mjs';
 import {HttpError} from '../validation.ts';
 const now=()=>new Date().toISOString();
 const parse=row=>row?Object.fromEntries(Object.entries(row).map(([k,v])=>[k,['spec','validation'].includes(k)&&v?JSON.parse(String(v)):v])):null;
@@ -59,7 +60,7 @@ function sourceCalculation(data){
  const a=data.assessment,c=a?.calculation;
  if(c?.dataVersion!==DATA_VERSION||c.identities?.length!==5)return null;
  if(a.eligible===true)return c;
- const verified=a.awaitingRotation===true&&a.statsVerified===true&&a.rollsVerified===true&&a.maxMainStatsVerified===true&&/^[a-f0-9]{64}$/.test(a.sourceHash||'')&&typeof a.sourceUid==='string'&&JSON.stringify(a.sourceSlots)===JSON.stringify(data.slots)&&data.slots?.length===5&&data.slots.every(s=>!validateEchoSlot(s).length);
+ const verified=a.awaitingRotation===true&&a.statsVerified===true&&a.rollsVerified===true&&a.maxMainStatsVerified===true&&/^[a-f0-9]{64}$/.test(a.sourceHash||'')&&typeof a.sourceUid==='string'&&a.sourceSlots?.length===5&&data.slots?.length===5&&sameScoringSlotValues(a.sourceSlots,data.slots)&&a.sourceSlots.every(s=>!validateEchoSlot(s).length)&&data.slots.every(s=>!validateEchoSlot(s).length);
  if(!verified)return null;
  for(let i=0;i<5;i++){const e=engine.getEchoData(c.identities[i].echo);if(!e||({Calamity:4,Overlord:4,Elite:3,Common:1})[e.class]!==Number(data.slots[i].cost.value)||!e.sets.includes(c.identities[i].set))return null;}
  return c;
