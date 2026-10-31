@@ -8,7 +8,7 @@ import {parseCardIdentity} from '../scanner/card-identity.ts';
 import {recoverEchoCost} from '../scanner/cost-recovery.ts';
 import {agreedNormalizedCorrection,agreedReading,legalSubstatKey,mainStatKey,sourceFailure} from './ocr-agreement.mjs';
 import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
-import {normalizeSubstatReading} from '../scanner/ocr-readings.ts';
+import {parseSubstatBlock,normalizeSubstatReading} from '../scanner/ocr-readings.ts';
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
 import {SUPPORTED,diagnoseSlots,identitiesFromReport,assessEquipment} from './scoring.mjs';
 const languagePath=resolve(process.cwd(),'node_modules/@tesseract.js-data/eng/4.0.0');
@@ -26,12 +26,12 @@ export async function assessSource(input){
   worker=await createWorker('eng',1,{langPath:languagePath,gzip:true,cacheMethod:'none',errorHandler:()=>{}});
   await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
   stage='verify';
-  async function readResult(region,{scale=3,linear=false,padded=false}={}){
+  async function readResult(region,{scale=3,linear=false,padded=false,preserveLines=false}={}){
    const {data,info}=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).extract(region).resize(region.width*scale,region.height*scale,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
    for(let i=0;i<data.length;i+=4){const gray=Math.round(.299*data[i]+.587*data[i+1]+.114*data[i+2]);const value=Math.max(0,Math.min(255,(gray-128)*1.5+128));data[i]=data[i+1]=data[i+2]=value;}
    let png=await sharp(data,{raw:{width:info.width,height:info.height,channels:4}}).png().toBuffer();
    if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:info.width+32,height:info.height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
-   try{const {data:result}=await worker.recognize(png);const reading={text:result.text.replace(/\s+/g,' ').trim(),confidence:result.confidence};ocrReadings.push({region,scale,linear,padded,...reading});return reading;}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
+   try{const {data:result}=await worker.recognize(png);const reading={text:preserveLines?result.text.trim():result.text.replace(/\\s+/g,' ').trim(),confidence:result.confidence};ocrReadings.push({region,scale,linear,padded,...reading});return reading;}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
   }
   const read=async(region,options)=>(await readResult(region,options)).text;
   async function confirm(primary,region,expected,key,slot,field){
@@ -74,21 +74,38 @@ export async function assessSource(input){
    const stat={ATK:'ATK',DEF:'DEF',HP:'HP','Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Healing Bonus':'HealingBonus'}[client.mainStat.value]||client.mainStat.value.replace(' DMG Bonus','');
    const expected=engine.statsTable[Number(cost)]?.[stat]?.[5];
    if(!expected||!numbers.some(n=>Math.abs(Number(n)-expected)<.01))levelIssue='Max-level main-stat amount could not be confirmed in slot '+(i+1)+'.';
-   const substats=[];
+   const substats=[],sourceReads=[];let substatReadFailure=null;
    for(const [j,top] of [880,918,950,984,1019].entries()){
     const region={left:64+offset,top,width:320,height:28};
-    const primary=await read(region);let raw;
-    if(legalSubstatKey(client.substats[j].value))raw=await confirm(primary,region,client.substats[j].value,legalSubstatKey,i+1,'substat '+(j+1));
-    else{
-     // Out-of-table values may be retained for unranked review only. All three
-     // server image reads must exactly match the locked client reading.
-     const key=v=>{const s=parseSubstat(v);return s?JSON.stringify(s):null;};
-     const wanted=key(client.substats[j].value),reads=[primary,await read(region,{linear:true}),await read(region,{linear:true,scale:4})];
-     if(!wanted||!reads.every(v=>key(v)===wanted))throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo ${i+1}, substat ${j+1}: source reads do not agree. Retry the original card; stats stay locked.`,{slot:i+1,field:'substat '+(j+1)});
-     raw=reads[0];
+    const primary=await read(region);sourceReads.push(primary);let accepted=primary;
+    try{
+     if(legalSubstatKey(client.substats[j].value))accepted=await confirm(primary,region,client.substats[j].value,legalSubstatKey,i+1,'substat '+(j+1));
+     else{
+      const key=v=>{const s=parseSubstat(v);return s?JSON.stringify(s):null;};
+      const wanted=key(client.substats[j].value),reads=[primary,await read(region,{linear:true}),await read(region,{linear:true,scale:4})];
+      if(!wanted||!reads.every(v=>key(v)===wanted))throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo ${i+1}, substat ${j+1}: source reads do not agree. Retry the original card; stats stay locked.`,{slot:i+1,field:'substat '+(j+1)});
+      accepted=reads[0];
+     }
+    }catch(error){substatReadFailure??=error;}
+    const normalized=normalizeSubstatReading(accepted);
+    substats.push({raw:primary,value:normalized?.value||client.substats[j].value,autoRecovered:normalized?.corrected||undefined});
+   }
+   if(substatReadFailure){
+    // Long damage labels can wrap across rows. Two complete block reads must
+    // recover the same five legal values in order as the client scan.
+    const blockRegion={left:56+offset,top:872,width:334,height:194};let first,second;
+    try{
+     await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_BLOCK,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
+     first=parseSubstatBlock((await readResult(blockRegion,{linear:true,scale:4,preserveLines:true})).text);
+     second=parseSubstatBlock((await readResult(blockRegion,{linear:true,scale:5,preserveLines:true})).text);
+    }finally{
+     await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
     }
-    const normalized=normalizeSubstatReading(raw);
-    substats.push({raw:primary,value:normalized?.value||raw,autoRecovered:normalized?.corrected||undefined});
+    const signature=value=>JSON.stringify(parseSubstat(value));
+    const expected=client.substats.map(field=>signature(field.value));
+    const recovered=values=>values.map(field=>signature(field.value));
+    if(first?.length!==5||second?.length!==5||expected.some(value=>!value)||recovered(first).some((value,index)=>value!==expected[index])||recovered(second).some((value,index)=>value!==expected[index]))throw substatReadFailure;
+    for(let j=0;j<5;j++)substats[j]={raw:sourceReads[j],value:first[j].value,autoRecovered:true};
    }
    slots.push({slot:i+1,cost:{raw:cost,value:cost},mainStat:{raw:main,value:client.mainStat.value},substats});
   }
