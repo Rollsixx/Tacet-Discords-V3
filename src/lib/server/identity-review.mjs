@@ -37,6 +37,27 @@ export function validateIdentities(input,slots){
  must(Array.isArray(input)&&input.length===5,'Confirm all five ordered identities.',400);
  return input.map((s,i)=>{must(s&&s.slot===i+1&&Object.keys(s).every(k=>['slot','echo','set'].includes(k)),'Invalid identity correction fields.',400);const echo=engine.getEchoData(s.echo);must(echo&&costByClass[echo.class]===Number(slots[i].cost.value),'Selected Echo does not match the source-verified cost.',400);must(echo.sets.includes(s.set),'Selected Sonata is not supported by this Echo.',400);return {echo:s.echo,set:s.set};});
 }
+function sourceProofProblems(row,data){
+ const a=data.assessment||{},source=a.sourceSlots;
+ const issues=[];
+ if(a.statsVerified!==true)issues.push('The server has not verified every numeric stat from the original screenshot.');
+ if(a.maxMainStatsVerified!==true)issues.push('A maximum-level Echo main-stat amount still needs screenshot verification.');
+ if(a.sourceUid!==String(row.uid))issues.push('The screenshot UID does not match this player.');
+ if(!/^[a-f0-9]{64}$/.test(a.sourceHash||''))issues.push('The verified screenshot hash is missing.');
+ if(!Array.isArray(source)||source.length!==5)issues.push('The server OCR readings for all five Echoes are incomplete.');
+ if(!Array.isArray(data.slots)||data.slots.length!==5)issues.push('The submitted values for all five Echoes are incomplete.');
+ if(Array.isArray(source)&&source.length===5){
+  const sourceIssues=source.flatMap(s=>validateEchoSlot(s).map(i=>'Echo '+s.slot+': '+i.message));
+  if(sourceIssues.length)issues.push('Server OCR requires review: '+sourceIssues.join(' '));
+ }
+ if(Array.isArray(data.slots)&&data.slots.length===5){
+  const submittedIssues=data.slots.flatMap(s=>validateEchoSlot(s).map(i=>'Echo '+s.slot+': '+i.message));
+  if(submittedIssues.length)issues.push('Parsed Echo values require correction: '+submittedIssues.join(' '));
+ }
+ if(Array.isArray(source)&&source.length===5&&Array.isArray(data.slots)&&data.slots.length===5&&!sameScoringSlotValues(source,data.slots))issues.push('Parsed stat values do not match the independent screenshot readings. Correct the affected Echo stat before ranking.');
+ if(!issues.length)issues.push(a.reason||'The source evidence is incomplete; reload this review and inspect the retained screenshot.');
+ return [...new Set(issues)];
+}
 export async function repairIdentities(db,id,input){
  must(input&&['retry','confirm'].includes(input.operation),'Choose retry or confirm.',400);
  must(typeof input.reviewer==='string'&&input.reviewer.trim().length>=2&&input.reviewer.length<=64,'Reviewer name required.',400);
@@ -44,7 +65,7 @@ export async function repairIdentities(db,id,input){
  must(typeof input.note==='string'&&input.note.length<=500,'Optional note must contain at most 500 characters.',400);
  const auditNote=input.note.trim()||'Retried strict equipment recognition from retained source evidence.';
  const {row,data}=await snapshot(db,id);must(input.revision===hash(String(row.data)),'This build changed. Reload its identity review.',409);
- const sourceProofComplete=repairEvidence(row,data);if(!sourceProofComplete){must(input.operation==='confirm'&&input.confirmed===true,'Compare and confirm all five retained Echo identities.',400);must(data.assessment?.sourceUid===String(row.uid),'Screenshot UID must be verified before recording manual identities.');const retained=await cropsFor(db,row,data);must(retained.crops.length===5,'All retained Echo portraits and Sonata crops are required.');const identities=validateIdentities(input.identities,data.slots);const at=new Date().toISOString();const before=data.assessment?.calculation?.identities||[];const next={...data,assessment:{...data.assessment,eligible:false,rollsVerified:false,identityReview:{version:'moderator-identity-review/unverified',confirmedAt:at,method:'manual-unverified'},visualReport:identities.map((s,i)=>({slot:i+1,echo:s.echo,set:s.set,problem:'Pending source proof; manual identity is not scoring evidence.'})),reason:'Moderator recorded equipment identities. Screenshot stat proof is still required before ranking.'}};const tx=await db.transaction('write');try{const fresh=(await tx.execute({sql:'SELECT data,status,identity_verified FROM submissions WHERE id=?',args:[id]})).rows[0];must(fresh&&fresh.data===row.data,'Build changed during identity review. Reload before confirming.',409);await tx.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(next),id]});await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'echo_identities_recorded_unverified',input.reviewer.trim(),JSON.stringify({note:input.note.trim()||'Moderator compared the retained images; source proof remains incomplete.',before,after:identities}),at]});await tx.commit();return {ok:true,id,status:row.status,eligible:false,ranked:false};}finally{tx.close();}}must(SUPPORTED.includes(String(row.character)),'This resonator does not have an integrated scoring policy.');
+ const sourceProofComplete=repairEvidence(row,data);if(!sourceProofComplete){must(input.operation==='confirm'&&input.confirmed===true,'Compare and confirm all five retained Echo identities.',400);must(data.assessment?.sourceUid===String(row.uid),'Screenshot UID must be verified before recording manual identities.');const retained=await cropsFor(db,row,data);must(retained.crops.length===5,'All retained Echo portraits and Sonata crops are required.');const identities=validateIdentities(input.identities,data.slots);const at=new Date().toISOString();const before=data.assessment?.calculation?.identities||[];const next={...data,assessment:{...data.assessment,eligible:false,rollsVerified:false,identityReview:{version:'moderator-identity-review/unverified',confirmedAt:at,method:'manual-unverified'},visualReport:identities.map((s,i)=>({slot:i+1,echo:s.echo,set:s.set,problem:'Pending source proof; manual identity is not scoring evidence.'})),reason:'Moderator recorded equipment identities. '+sourceProofProblems(row,data).join(' ')}};const tx=await db.transaction('write');try{const fresh=(await tx.execute({sql:'SELECT data,status,identity_verified FROM submissions WHERE id=?',args:[id]})).rows[0];must(fresh&&fresh.data===row.data,'Build changed during identity review. Reload before confirming.',409);await tx.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(next),id]});await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'echo_identities_recorded_unverified',input.reviewer.trim(),JSON.stringify({note:input.note.trim()||'Moderator compared the retained images; source proof remains incomplete.',before,after:identities}),at]});await tx.commit();return {ok:true,id,status:row.status,eligible:false,ranked:false};}finally{tx.close();}}must(SUPPORTED.includes(String(row.character)),'This resonator does not have an integrated scoring policy.');
  const retained=await cropsFor(db,row,data),report=await diagnoseCrops(retained.crops);
  let identities;
  if(input.operation==='confirm'){must(input.confirmed===true,'Confirm visual comparison of all five Echoes and Sonatas.',400);identities=validateIdentities(input.identities,data.slots);}
