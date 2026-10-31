@@ -1,1 +1,3 @@
 Leaderboard stat icons are sourced from the Wuthering Waves game assets maintained at https://github.com/ryanbenson/wuthering-waves-assets. The icons are game artwork © KURO GAMES. They are included to identify the stat shown in each leaderboard column.
+
+The matching in-game stat icon artwork is mirrored from the public icon set used by [DommyMM/wuwabuild](https://github.com/DommyMM/wuwabuild), under `public/assets/UIResources/Common/Image/IconAttribute/`. The mapping is cross-checked against that project's `public/Data/Stats.json`. These are Wuthering Waves game assets © KURO GAMES; attribution does not imply endorsement.
