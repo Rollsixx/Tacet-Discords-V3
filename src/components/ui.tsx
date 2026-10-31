@@ -12,7 +12,7 @@ export function Navigation({ pathname = "/" }: { pathname?: string }) {
     <header className="site-header">
       <div className="nav-inner">
         <Link href="/" className="brand">
-          <span className="brand-mark">T</span>
+          <span className="brand-mark"><img src="/tacet-logo.png" alt="" /></span>
           <span>TACET<span className="brand-light">DISCORDS</span></span>
         </Link>
         <nav className="nav-links" aria-label="Main navigation">
