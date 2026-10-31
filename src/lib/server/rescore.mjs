@@ -7,7 +7,7 @@ import {calculateStandard,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} 
 // Old unsupported/no-evidence submissions must be resubmitted with an original.
 export async function rescoreStoredBuilds(db){
  const rows=await db.execute("SELECT id,uid,character,status,identity_verified,reviewed_at,data FROM submissions WHERE status IN ('pending','approved') AND replaced_by IS NULL");
- const result={updated:0,skipped:0,failed:0};
+ const result={updated:0,skipped:0,failed:0,failedRecords:[]};
  for(const row of rows.rows){
   const data=JSON.parse(String(row.data)),a=data.assessment,c=a?.calculation;
   const managed=(await db.execute({sql:"SELECT v.kind FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?",args:[String(row.character)]})).rows[0];
@@ -46,7 +46,7 @@ export async function rescoreStoredBuilds(db){
     await tx.execute({sql:'INSERT INTO build_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),String(row.id),'rescore','system',ENGINE_VERSION+'; '+currentCalculation.policyId+(recovered?'; '+recovered.evidence.version+'; '+(recovered.evidence.correction||recovered.evidence.referenceVersion):''),new Date().toISOString()]});
     await tx.commit();result.updated++;
    }finally{tx.close();}
-  }catch{result.failed++;}
+  }catch(error){result.failed++;result.failedRecords.push({id:String(row.id),character:String(row.character),reason:(error instanceof Error?error.message:String(error)).slice(0,500)});}
  }
  return result;
 }
