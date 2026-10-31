@@ -31,7 +31,7 @@ export async function assessSource(input){
    for(let i=0;i<data.length;i+=4){const gray=Math.round(.299*data[i]+.587*data[i+1]+.114*data[i+2]);const value=Math.max(0,Math.min(255,(gray-128)*1.5+128));data[i]=data[i+1]=data[i+2]=value;}
    let png=await sharp(data,{raw:{width:info.width,height:info.height,channels:4}}).png().toBuffer();
    if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:info.width+32,height:info.height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
-   try{const {data:result}=await worker.recognize(png);const reading={text:preserveLines?result.text.trim():result.text.replace(/\\s+/g,' ').trim(),confidence:result.confidence};ocrReadings.push({region,scale,linear,padded,...reading});return reading;}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
+   try{const {data:result}=await worker.recognize(png);const reading={text:preserveLines?result.text.trim():result.text.replace(/\s+/g,' ').trim(),confidence:result.confidence};ocrReadings.push({region,scale,linear,padded,...reading});return reading;}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
   }
   const read=async(region,options)=>(await readResult(region,options)).text;
   async function confirm(primary,region,expected,key,slot,field){
