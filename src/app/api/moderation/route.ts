@@ -17,7 +17,7 @@ export async function GET(request: Request) {
       return json(await adminPlayerBuilds(uid,page));
     }
     if(params.get("view")==="audit")return json(await listAdminAudit(page,search,undefined,params.get("reviewer")||"",params.get("action")||""));
-    if(params.get("view")==="rank-changes")return json(await listLeaderboardRankChanges(Number(params.get("limit"))||100));
+    if(params.get("view")==="rank-changes")return json(await listLeaderboardRankChanges(Number(params.get("limit"))||100,undefined,{character:params.get("character")||"",player:params.get("player")||"",from:params.get("from")||"",to:params.get("to")||""}));
     const [builds,overview,activity]=await Promise.all([
       listBuilds({ pending:params.get("status")!=="approved",search,page,character:params.get("character")||"" }),
       adminOverview(),listAdminAudit(1)
