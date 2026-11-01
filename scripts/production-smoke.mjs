@@ -1,0 +1,46 @@
+import assert from "node:assert/strict";
+
+const base = (process.env.DEPLOYMENT_URL || process.env.BASE_URL || "").replace(/\/$/, "");
+if (!base) throw new Error("Set DEPLOYMENT_URL to the successful production deployment URL.");
+const parsed = new URL(base);
+if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".vercel.app")) {
+  throw new Error("Refusing production smoke checks against a non-HTTPS Vercel deployment URL.");
+}
+
+async function readJson(path) {
+  const response = await fetch(new URL(path, base), { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20000) });
+  const body = await response.json().catch(() => null);
+  assert.equal(response.ok, true, `${path} returned HTTP ${response.status}: ${JSON.stringify(body)}`);
+  assert.ok(body && typeof body === "object", `${path} did not return JSON`);
+  return body;
+}
+
+const health = await readJson("/api/health");
+assert.equal(health.ok, true, "Production health reports that the database or migration is not ready.");
+
+let rankedBuild = null;
+for (const character of ["Brant", "Mornye", "Carlotta"]) {
+  const leaderboard = await readJson(`/api/public/leaderboards?character=${encodeURIComponent(character)}&page=1`);
+  assert.ok(Array.isArray(leaderboard.builds), "Leaderboard response is missing its builds array.");
+  rankedBuild = leaderboard.builds.find(build => build && build.uid && build.id && Number.isFinite(Number(build.score)));
+  if (rankedBuild) break;
+}
+assert.ok(rankedBuild, "No eligible scored build was found in the smoke-check leaderboards.");
+
+const profile = await readJson(`/api/public/players?uid=${encodeURIComponent(rankedBuild.uid)}`);
+assert.ok(Array.isArray(profile.builds), "Player profile response is missing its builds array.");
+const profileBuild = profile.builds.find(build => build.id === rankedBuild.id && build.character === rankedBuild.character);
+assert.ok(profileBuild, "The current leaderboard build is missing from its player's profile.");
+assert.equal(Number(profileBuild.score), Number(rankedBuild.score), "Profile and leaderboard scores disagree.");
+assert.equal(Number(profileBuild.data?.assessment?.calculation?.score), Number(rankedBuild.score), "Displayed score disagrees with the stored calculation.");
+assert.ok(Number(rankedBuild.rank) >= 1, "Leaderboard rank is invalid.");
+
+console.log(JSON.stringify({
+  ok: true,
+  release: health.release,
+  database: health.database,
+  checked: ["health", "leaderboard-to-profile build identity", "leaderboard-to-profile score", "stored calculation score", "rank"],
+  character: rankedBuild.character,
+  buildId: rankedBuild.id,
+  rank: rankedBuild.rank,
+}, null, 2));

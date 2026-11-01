@@ -1,0 +1,38 @@
+name: Production reliability checks
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  production-checks:
+    if: github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out deployed revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.deployment.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run isolated desktop and mobile workflow checks
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:browser
+
+      - name: Verify production health and score consistency
+        run: node scripts/production-smoke.mjs
+        env:
+          DEPLOYMENT_URL: ${{ github.event.deployment_status.target_url }}
