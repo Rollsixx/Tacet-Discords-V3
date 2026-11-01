@@ -3,6 +3,7 @@ import type {Client,Row} from '@libsql/client';
 import {createHash} from 'node:crypto';
 import {nextRankHistory,rankHistoryEvents} from '../leaderboards/rank-history.mjs';
 import {aggregateMedalStandings} from '../leaderboards/medal-standings.mjs';
+import {orderProfileBuildsByRank} from '../leaderboards/profile-rank-order.mjs';
 import {buildDataConsistencyReport} from '../leaderboards/consistency-report.mjs';
 import {database} from './database.ts';
 import {HttpError} from './validation.ts';
@@ -20,16 +21,17 @@ export async function listBuilds(options: { search?: string; character?: string;
   const patchCharacters = patchMajor ? featuredResonators.filter(item => item.patchVersion.startsWith(patchMajor + ".")).map(item => item.name) : [];
   if (patchMajor && !patchCharacters.length) return {builds:[],page,hasMore:false,scoring:scoringReadiness};
   const patchSql = patchMajor ? ` AND s.character IN (${patchCharacters.map(() => "?").join(",")})` : "";
+  const rankedProfile = Boolean(options.uid&&!options.includePending&&!options.pending&&!options.id);
   const result = await db.execute({
     sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,(SELECT avatar_character FROM players p WHERE p.uid=s.uid) AS avatar_character,
       CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.score ELSE NULL END AS verified_score
        ,CASE WHEN c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.details END AS current_calculation
       FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE replaced_by IS NULL AND (status=? OR (?=1 AND status IN ('pending','approved'))) AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
       AND (?='' OR character=?) AND (?='' OR s.id=?) AND (?='' OR uid=?)${patchSql}
-      ORDER BY created_at DESC,s.id DESC LIMIT 21 OFFSET ?`,
-    args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", ...patchCharacters, (page - 1) * 20],
+      ORDER BY created_at DESC,s.id DESC ${rankedProfile?"":"LIMIT 21 OFFSET ?"}`,
+    args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", ...patchCharacters, ...(rankedProfile?[]:[(page - 1) * 20])],
   });
-  let builds=result.rows.slice(0,20).map(publicBuild);
+  let builds=rankedProfile?result.rows.map(publicBuild):result.rows.slice(0,20).map(publicBuild);
   // A player's profile uses the same live rank and movement record as the boards.
   if(!options.includePending&&!options.pending&&(options.uid||options.id)&&builds.length){
     // This client may be an in-memory SQLite database with a single connection;
@@ -45,6 +47,11 @@ export async function listBuilds(options: { search?: string; character?: string;
       return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.rankHasHistory??false};
     });
   }
+  let hasMore=rankedProfile?builds.length>page*20:result.rows.length>20;
+  if(rankedProfile){
+    builds=orderProfileBuildsByRank(builds);
+    builds=builds.slice((page-1)*20,page*20);
+  }
   let medalStanding=null;
   if(options.uid&&!options.includePending&&!options.pending){
     const overall=(await medalStandings(db)).players.find(player=>player.uid===options.uid);
@@ -52,7 +59,7 @@ export async function listBuilds(options: { search?: string; character?: string;
   }
   const medals={top1:medalStanding?.gold||0,top2:medalStanding?.silver||0,top3:medalStanding?.bronze||0,total:medalStanding?.total||0};
   const rankHistory=options.uid&&!options.includePending&&!options.pending?(await listPlayerRankHistory(options.uid,db)).events:[];
- return {builds,page,hasMore:result.rows.length>20,scoring:scoringReadiness,medals,medalStanding,rankHistory};
+ return {builds,page,hasMore,scoring:scoringReadiness,medals,medalStanding,rankHistory};
 }
 function publicBuild(row: Row) {
  const data=JSON.parse(String(row.data));
