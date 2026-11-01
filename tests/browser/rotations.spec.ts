@@ -35,7 +35,7 @@ test('expanded leaderboard categories load with local portraits',async({page},in
  let selected=false;
   for(const patch of ['1','2','3']){
    await page.getByRole('button',{name:`Choose a ${patch}.x Resonator`}).click();
-   const option=page.getByRole('option',{name:new RegExp('^'+name+' ·')});
+   const option=page.getByRole('option',{name:new RegExp('^'+name+' portrait')});
    if(await option.count()){await option.click();selected=true;break;}
    await page.keyboard.press('Escape');
   }
