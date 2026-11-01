@@ -67,7 +67,8 @@ export async function listBuilds(options: { search?: string; character?: string;
     const overall=(await medalStandings(db)).players.find(player=>player.uid===options.uid);
     if(overall)medalStanding=overall;
   }
-  return {builds,page,hasMore:result.rows.length>20,scoring:scoringReadiness,medals,medalStanding};
+  const rankHistory=options.uid&&!options.includePending&&!options.pending?(await listPlayerRankHistory(options.uid,db)).events:[];
+ return {builds,page,hasMore:result.rows.length>20,scoring:scoringReadiness,medals,medalStanding,rankHistory};
 }
 function publicBuild(row: Row) {
  const data=JSON.parse(String(row.data));
@@ -111,7 +112,8 @@ export async function medalStandings(db:Client=database()){
  const standings=aggregateMedalStandings(result.rows.map(row=>({id:String(row.id),uid:String(row.uid),ign:String(row.ign),character:String(row.character),avatarCharacter:row.avatar_character==null?null:String(row.avatar_character),rank:Number(row.global_rank),score:Number(row.verified_score)})));
  const historyRows=standings.map(player=>({uid:player.uid,global_rank:player.rank,id:player.buildId,score:player.points,verified_score:player.points} as unknown as Row));
  const history=await synchronizeRankHistory("__medal_standings__",historyRows,db,false),now=Date.now();
- return {players:standings.map(player=>{const saved=history[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
+ const timestamp=await db.execute({sql:"SELECT updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
+ return {updatedAt:String(timestamp.rows[0]?.updated_at||new Date(now).toISOString()),players:standings.map(player=>{const saved=history[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
 }
 export async function refreshLeaderboardRankHistory(db:Client=database()){
  const characters=SUPPORTED;
@@ -142,11 +144,20 @@ export async function listLeaderboard(options: {character?: string;search?: stri
   }),page,hasMore:matching.length>page*20,scoring:scoringReadiness,rotationReady};
 }
 
-export async function listLeaderboardRankChanges(limit=100,db:Client=database()){
- const result=await db.execute({sql:`SELECT e.id,e.character,e.uid,COALESCE(s.ign,e.uid) AS ign,e.event_type,e.old_rank,e.new_rank,e.old_score,e.new_score,COALESCE(e.new_build_id,e.old_build_id,'') AS build_id,e.changed_at FROM leaderboard_rank_events e LEFT JOIN submissions s ON s.id=COALESCE(e.new_build_id,e.old_build_id)
- UNION ALL SELECT -h.id,h.character,h.uid,COALESCE(s.ign,h.uid),'moved',h.old_rank,h.new_rank,NULL,h.score,h.build_id,h.changed_at FROM leaderboard_rank_changes h LEFT JOIN submissions s ON s.id=h.build_id
- ORDER BY changed_at DESC,id DESC LIMIT ?`,args:[Math.min(200,Math.max(1,Math.floor(limit)))]});
+export async function listLeaderboardRankChanges(limit=100,db:Client=database(),filters:{character?:string;player?:string;from?:string;to?:string}={}){
+ const character=(filters.character||"").trim().slice(0,64).toLowerCase(),player=(filters.player||"").trim().slice(0,64).toLowerCase();
+ const from=/^\\d{4}-\\d{2}-\\d{2}$/.test(filters.from||"")?filters.from!:"",to=/^\\d{4}-\\d{2}-\\d{2}$/.test(filters.to||"")?filters.to!:"";
+ const result=await db.execute({sql:`WITH events AS (
+  SELECT e.id,e.character,e.uid,COALESCE(s.ign,e.uid) AS ign,e.event_type,e.old_rank,e.new_rank,e.old_score,e.new_score,COALESCE(e.new_build_id,e.old_build_id,'') AS build_id,e.changed_at FROM leaderboard_rank_events e LEFT JOIN submissions s ON s.id=COALESCE(e.new_build_id,e.old_build_id)
+  UNION ALL SELECT -h.id,h.character,h.uid,COALESCE(s.ign,h.uid),'moved',h.old_rank,h.new_rank,NULL,h.score,h.build_id,h.changed_at FROM leaderboard_rank_changes h LEFT JOIN submissions s ON s.id=h.build_id
+ ) SELECT * FROM events WHERE (?='' OR lower(character)=?) AND (?='' OR instr(lower(uid||' '||ign),?)>0) AND (?='' OR date(changed_at)>=date(?)) AND (?='' OR date(changed_at)<=date(?))
+ ORDER BY changed_at DESC,id DESC LIMIT ?`,args:[character,character,player,player,from,from,to,to,Math.min(200,Math.max(1,Math.floor(limit)))]});
  return {changes:result.rows.map(row=>({id:Number(row.id),character:String(row.character),uid:String(row.uid),ign:String(row.ign),type:String(row.event_type) as "moved"|"entered"|"left",oldRank:row.old_rank==null?null:Number(row.old_rank),newRank:row.new_rank==null?null:Number(row.new_rank),oldScore:row.old_score==null?null:Number(row.old_score),newScore:row.new_score==null?null:Number(row.new_score),buildId:String(row.build_id),changedAt:String(row.changed_at)}))};
+}
+
+export async function listPlayerRankHistory(uid:string,db:Client=database()){
+ const result=await db.execute({sql:`SELECT e.id,e.character,e.event_type,e.old_rank,e.new_rank,e.old_score,e.new_score,COALESCE(e.new_build_id,e.old_build_id,'') AS build_id,e.changed_at FROM leaderboard_rank_events e WHERE e.uid=? ORDER BY e.changed_at DESC,e.id DESC LIMIT 100`,args:[uid]});
+ return {events:result.rows.map(row=>({id:Number(row.id),character:String(row.character),type:String(row.event_type) as "moved"|"entered"|"left",oldRank:row.old_rank==null?null:Number(row.old_rank),newRank:row.new_rank==null?null:Number(row.new_rank),oldScore:row.old_score==null?null:Number(row.old_score),newScore:row.new_score==null?null:Number(row.new_score),buildId:String(row.build_id),changedAt:String(row.changed_at)}))};
 }
 
 export async function adminOverview(db: Client = database()) {
@@ -196,7 +207,7 @@ export async function homeRankings(db: Client = database()) {
   const result=await listLeaderboard({character:character.name},db);
   boards.push({character:character.name,players:result.builds.slice(0,5).map(build=>({id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}))});
  }
- return {boards,featured:configuration.featured,topPlayers:(await medalStandings(db)).players};
+ const standings=await medalStandings(db);\n return {boards,featured:configuration.featured,topPlayers:standings.players,topPlayersUpdatedAt:standings.updatedAt};
 }
 
 export async function homeFeaturedSettings(db:Client=database()) {
