@@ -14,9 +14,9 @@ import {SUPPORTED,diagnoseSlots,identitiesFromReport,assessEquipment} from './sc
 const languagePath=resolve(process.cwd(),'node_modules/@tesseract.js-data/eng/4.0.0');
 let active=false;
 export async function assessSource(input){
- if(!input.sourceImage)return {eligible:false,reason:'Original screenshot evidence is required for scoring.'};
- if(active)return {eligible:false,reason:'Scoring worker busy; resubmit later for scoring.'};
- active=true;const ocrReadings=[];let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;let stage='image';let retries=0;
+ if(!input.sourceImage){console.info(JSON.stringify({event:'scanner.verification',outcome:'rejected',reason_code:'MISSING_SCREENSHOT',duration_ms:0}));return {eligible:false,reason:'Original screenshot evidence is required for scoring.'};}
+ if(active){console.warn(JSON.stringify({event:'scanner.verification',outcome:'deferred',reason_code:'WORKER_BUSY',duration_ms:0}));return {eligible:false,reason:'Scoring worker busy; resubmit later for scoring.'};}
+ active=true;const startedAt=Date.now();let metricOutcome='blocked';let metricCode='';const ocrReadings=[];let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;let stage='image';let retries=0;
  try{
   const image=input.sourceImage;
   const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
@@ -118,16 +118,19 @@ export async function assessSource(input){
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
   visualReport=await diagnoseSlots(decoded,slots.map(x=>Number(x.cost.value)));
-  if(!SUPPORTED.includes(input.character))return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};
-  if(levelIssue)return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:levelIssue};
-  if(rollIssues.length)return {eligible:false,catalogReview:true,sourceUid,statsVerified,rollsVerified:false,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:'Source numbers verified; optimizer roll-table review required. This build can be approved as unranked, but cannot score. '+rollIssues.map(i=>'Echo '+i.slot+': '+i.message).join(' ')};
+  if(!SUPPORTED.includes(input.character)){metricOutcome='awaiting_rotation';metricCode='NO_PUBLISHED_ROTATION';return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};}
+  if(levelIssue){metricOutcome='main_stat_unverified';metricCode='MAIN_STAT_AMOUNT_UNVERIFIED';return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:levelIssue};}
+  if(rollIssues.length){metricOutcome='catalog_review';metricCode='ROLL_TABLE_REVIEW';return {eligible:false,catalogReview:true,sourceUid,statsVerified,rollsVerified:false,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:'Source numbers verified; optimizer roll-table review required. This build can be approved as unranked, but cannot score. '+rollIssues.map(i=>'Echo '+i.slot+': '+i.message).join(' ')};}
   const identities=identitiesFromReport(visualReport);
   const equipment=await assessEquipment(input.character,slots,identities);
+  metricOutcome=equipment.eligible?'verified':equipment.awaitingRotation?'awaiting_rotation':equipment.catalogReview?'catalog_review':'blocked';
+  metricCode=equipment.eligible?'VERIFIED':equipment.awaitingRotation?'NO_PUBLISHED_ROTATION':equipment.catalogReview?'ROLL_TABLE_REVIEW':'SCORING_BLOCKED';
   return {...equipment,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,ocrReadings,maxMainStatsVerified,visualReport,reason:equipment.reason||'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash};
  }catch(error){
   const failure=error?.sourceFailure||(statsVerified?{code:'SCORING_BLOCKED',message:error instanceof Error?error.message:'Scoring validation failed.'}:stage==='worker'?{code:'OCR_SERVICE_UNAVAILABLE',message:'Screenshot verification could not start. Please try again shortly.'}:{code:'SOURCE_UNREADABLE',message:'Echo stats could not be verified from this image. Retry with the original 1920 × 1080 card; stats remain locked.'});
+  metricOutcome=failure.code==='OCR_SERVICE_UNAVAILABLE'?'service_error':'rejected';metricCode=failure.code;
   console.warn('Source verification failed',JSON.stringify({code:failure.code,slot:failure.slot,field:failure.field}));
   return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,failure,reason:failure.message};
  }
- finally{try{await worker?.terminate();}catch{/* Keep the original diagnostic. */}active=false;}
+ finally{try{await worker?.terminate();}catch{/* Keep the original diagnostic. */}console.info(JSON.stringify({event:'scanner.verification',outcome:metricOutcome,reason_code:metricCode||'UNCLASSIFIED',stage,duration_ms:Date.now()-startedAt,retries,stats_verified:statsVerified,max_main_stats_verified:maxMainStatsVerified}));active=false;}
 }
