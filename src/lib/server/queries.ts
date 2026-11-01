@@ -111,7 +111,7 @@ export async function medalStandings(db:Client=database()){
  const standings=aggregateMedalStandings(result.rows.map(row=>({id:String(row.id),uid:String(row.uid),ign:String(row.ign),character:String(row.character),avatarCharacter:row.avatar_character==null?null:String(row.avatar_character),rank:Number(row.global_rank),score:Number(row.verified_score)})));
  const historyRows=standings.map(player=>({uid:player.uid,global_rank:player.rank,id:player.buildId,score:player.points,verified_score:player.points} as unknown as Row));
  const history=await synchronizeRankHistory("__medal_standings__",historyRows,db,false),now=Date.now();
- return {players:standings.map(player=>{const saved=history[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
+ return {players:standings.map(player=>{const saved=history[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
 }
 export async function refreshLeaderboardRankHistory(db:Client=database()){
  const characters=SUPPORTED;
