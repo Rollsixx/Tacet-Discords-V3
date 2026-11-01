@@ -15,11 +15,12 @@ export function attributeMetric(resonator) {
 }
 export function damageMetric(resonator) { return metric(resonator.leaderboardDamageStat); }
 export function defaultLeaderboardColumns(resonator) { return {primary:metric("atk"),attribute:attributeMetric(resonator),damage:damageMetric(resonator),recovery:metric("energyRegen")}; }
-export function formatLeaderboardMetric(value,percent=false) {
+const fractionPercentFields=new Set(["energyRegen","totalCritRate","totalCritDMG","healingBonus"]);
+export function formatLeaderboardMetric(value,percent=false,field="") {
  if(value===undefined||!Number.isFinite(value)) return "—";
- // Scoring calculations store percentage stats as fractions (for example 2.862
- // Energy Regen means 286.2%). Keep the same contract as compactNumber() used
- // by the expanded build view; a magnitude heuristic misread values above 2.
- const normalized=percent?value*100:value;
+ // The optimizer returns Crit, Energy Regen, and Healing Bonus as fractions
+ // (2.862 Energy Regen = 286.2%). Elemental/attack damage bonuses are already
+ // percentage points when above 2 (12 means 12%), while small values are fractions.
+ const normalized=percent?(fractionPercentFields.has(field)||Math.abs(value)<=2?value*100:value):value;
  return normalized.toLocaleString(undefined,{maximumFractionDigits:percent?1:0})+(percent?"%":"");
 }

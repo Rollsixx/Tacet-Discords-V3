@@ -13,16 +13,19 @@ test('defaults attribute and kit damage stats from each Resonator',()=>{
 test('metric icons resolve to bundled stat icons',()=>{
  assert.equal(attributeMetric({element:'Glacio'}).icon,'/stat-icons/glacio.png');
 });
-test('format percentage stats from the scoring fraction contract',()=>{
- assert.equal(formatLeaderboardMetric(.82,true),'82%');
- assert.equal(formatLeaderboardMetric(2.862,true),'286.2%');
- assert.equal(formatLeaderboardMetric(2.938,true),'293.8%');
+test('fraction-valued stats retain full percentages above 2',()=>{
+ assert.equal(formatLeaderboardMetric(.82,true,'energyRegen'),'82%');
+ assert.equal(formatLeaderboardMetric(2.862,true,'energyRegen'),'286.2%');
+ assert.equal(formatLeaderboardMetric(2.938,true,'energyRegen'),'293.8%');
+ assert.equal(formatLeaderboardMetric(2.798,true,'totalCritDMG'),'279.8%');
+ assert.equal(formatLeaderboardMetric(1.914,true,'totalCritDMG'),'191.4%');
 });
 
-test('every percentage metric scales higher fraction values consistently',()=>{
- for(const metric of selectableLeaderboardMetrics.filter(item=>item.percent)){
-  assert.equal(formatLeaderboardMetric(2.862,metric.percent),'286.2%',metric.id);
- }
+test('attribute and damage bonuses preserve optimizer percentage-point values',()=>{
+ assert.equal(formatLeaderboardMetric(12,true,'fusion'),'12%');
+ assert.equal(formatLeaderboardMetric(9.4,true,'resonanceLiberationDMGBonus'),'9.4%');
+ assert.equal(formatLeaderboardMetric(.12,true,'fusion'),'12%');
+ assert.equal(formatLeaderboardMetric(.094,true,'resonanceLiberationDMGBonus'),'9.4%');
 });
 test('format raw and missing stats without inventing values',()=>{
  assert.equal(formatLeaderboardMetric(2589),'2,589');
