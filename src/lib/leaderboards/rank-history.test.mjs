@@ -53,3 +53,21 @@ test("preserves the best rank and longest completed #1 tenure across later chang
  const next=nextRankHistory([{uid:"a",global_rank:4}],prior,"2026-11-01T00:00:00.000Z");
  assert.equal(next.a.bestRank,1);assert.equal(next.a.bestTop1Days,12);
 });
+
+test("players leaving a leaderboard retain best rank and close a completed #1 tenure once",()=>{
+ const prior={a:{rank:1,previousRank:2,movement:1,rankSince:"2026-10-01T00:00:00.000Z",trackingSince:"2026-09-01T00:00:00.000Z",bestRank:1,bestTop1Days:4,active:true,buildId:"a1",score:120}};
+ const first=nextRankHistory([],prior,"2026-10-11T00:00:00.000Z");
+ assert.equal(first.a.active,false);assert.equal(first.a.rank,null);assert.equal(first.a.bestRank,1);assert.equal(first.a.bestTop1Days,10);
+ assert.deepEqual(rankHistoryEvents([],prior,true,"2026-10-11T00:00:00.000Z").map(e=>[e.type,e.oldRank,e.newRank]),[["left",1,null]]);
+ const later=nextRankHistory([],first,"2026-10-20T00:00:00.000Z");
+ assert.equal(later.a.bestTop1Days,10);
+ assert.deepEqual(rankHistoryEvents([],first,true,"2026-10-20T00:00:00.000Z"),[]);
+});
+test("a returning player starts fresh movement tracking while retaining achievements",()=>{
+ const archived={a:{rank:null,previousRank:1,movement:null,rankSince:null,trackingSince:"2026-09-01T00:00:00.000Z",bestRank:1,bestTop1Days:10,active:false,buildId:"a1",score:120}};
+ const rows=[{uid:"a",global_rank:4,id:"a2",score:90}];
+ const next=nextRankHistory(rows,archived,"2026-10-20T00:00:00.000Z");
+ assert.equal(next.a.active,true);assert.equal(next.a.rank,4);assert.equal(next.a.previousRank,null);assert.equal(next.a.movement,null);
+ assert.equal(next.a.bestRank,1);assert.equal(next.a.bestTop1Days,10);assert.equal(next.a.trackingSince,"2026-10-20T00:00:00.000Z");
+ assert.equal(rankHistoryEvents(rows,archived,true,"2026-10-20T00:00:00.000Z")[0].type,"entered");
+});
