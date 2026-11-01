@@ -9,8 +9,15 @@ test("four pages render without overflow or browser errors", async ({ page }, te
     await expect(page.locator("h1")).toBeVisible();
     if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table, .pp-player-list, .home-ranking-card").first()).toBeVisible();
     if(route === '/leaderboards') {
-      await expect(page.getByLabel('Choose a Resonator').locator('optgroup')).toHaveCount(3);
-      await expect(page.getByLabel('Choose a Resonator')).toHaveValue('Carlotta');
+      await expect(page.locator('.lb-patch-picker')).toHaveCount(3);
+      await expect(page.getByRole('button',{name:'Choose a 1.x Resonator'})).toBeVisible();
+      await expect(page.getByRole('button',{name:'Choose a 2.x Resonator'})).toBeVisible();
+      await expect(page.getByRole('button',{name:'Choose a 3.x Resonator'})).toBeVisible();
+      await page.getByRole('button',{name:'Choose a 1.x Resonator'}).click();
+      await expect(page.getByRole('listbox',{name:'Choose a 1.x Resonator'})).toBeVisible();
+      await expect(page.locator('.popover-listbox-menu .resonator-portrait').first()).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('button',{name:'Choose a 1.x Resonator'})).toHaveAttribute('aria-expanded','false');
       await expect(page.locator('.placeholder,.lb-table').first()).toBeVisible();
     }
     await expect(page.locator('nav[aria-label="Main navigation"] a')).toHaveCount(4);
@@ -64,10 +71,12 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   const evidenceLayout = await page.evaluate(() => {
     const screenshot = document.querySelector(".source-preview")!.getBoundingClientRect();
     const echoes = document.querySelector(".import-results-heading")!.getBoundingClientRect();
-    return { screenshotBottom: screenshot.bottom, echoesTop: echoes.top, screenshotWidth: screenshot.width };
+    const workspace = document.querySelector(".import-workspace")!.getBoundingClientRect();
+    return { screenshotBottom: screenshot.bottom, echoesTop: echoes.top, screenshotWidth: screenshot.width, centerOffset: Math.abs((screenshot.left + screenshot.right) / 2 - (workspace.left + workspace.right) / 2) };
   });
   expect(evidenceLayout.screenshotBottom).toBeLessThanOrEqual(evidenceLayout.echoesTop);
   expect(evidenceLayout.screenshotWidth).toBeGreaterThan(500);
+  expect(evidenceLayout.centerOffset).toBeLessThanOrEqual(2);
   // Duplicate slot 4 into slot 5 for workflow coverage only. This is a derived
   // test image, never described as an authentic complete five-Echo game card.
   const dataUrl = await page.locator('img[alt="Selected build screenshot"]').evaluate(image => {

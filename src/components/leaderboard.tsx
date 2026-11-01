@@ -14,10 +14,13 @@ import { RankIndicator, RankMovement } from "./rank-indicators";
 type Result=Awaited<ReturnType<typeof listLeaderboard>>;
 type Build=Result['builds'][number];
 function PatchCharacterPicker({resonators,selected,onSelect}:{resonators:typeof featuredResonators;selected:string;onSelect:(name:string)=>void}) {
- return <label className="lb-patch-picker"><span className="visually-hidden">Choose a Resonator</span><select aria-label="Choose a Resonator" value={selected} onChange={event=>onSelect(event.target.value)}>{["1","2","3"].map(group=>{
+ return <>{["1","2","3"].map(group=>{
   const options=resonators.filter(value=>value.patchVersion?.startsWith(group+".")).sort((a,b)=>(a.displayName||a.name).localeCompare(b.displayName||b.name));
-  return options.length?<optgroup key={group} label={`${group}.x Characters`}>{options.map(value=><option key={value.name} value={value.name}>{value.displayName||value.name} · {value.element}</option>)}</optgroup>:null;
- })}</select></label>;
+  if(!options.length)return null;
+  const active=options.find(value=>value.name===selected);
+  const listOptions=options.map(value=>({value:value.name,label:`${value.displayName||value.name} · ${value.element}`,content:<><ResonatorPortrait name={value.name} className="lb-patch-option-avatar"/><span className="lb-patch-option-text"><strong>{value.displayName||value.name}</strong><small>{value.element} · {group}.x</small></span></>}));
+  return <PopoverListbox key={group} className="lb-patch-picker" options={listOptions} value={active?.name||""} onChange={onSelect} label={`Choose a ${group}.x Resonator`} trigger={<><span className="lb-patch-group-label">{group}.x Characters</span><span className="lb-patch-current">{active?<ResonatorPortrait name={active.name} className="lb-patch-avatar"/>:<span className="lb-patch-placeholder" aria-hidden="true">{group}.x</span>}<span className="lb-patch-current-text"><strong>{active?.displayName||active?.name||"Choose a Resonator"}</strong><small>{active?.element||"Select from this patch"}</small></span></span><span className="lb-patch-chevron" aria-hidden="true">⌄</span></>}/>;
+ })}</>;
 }
 function StatColumn({title,metric,onChange}: {title:string;metric:LeaderboardMetric;onChange:(metric:LeaderboardMetric)=>void}) {
  const options=selectableLeaderboardMetrics.map(option=>({value:option.id,label:option.label,content:<><Image src={option.icon} alt="" width={17} height={17} unoptimized/>{option.label}</>}));
