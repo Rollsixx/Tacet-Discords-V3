@@ -108,4 +108,13 @@ export const migrations = [
   {version:11,statements:[
     `CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   ]},
+
+  {version:12,statements:[
+    `CREATE TABLE leaderboard_rank_history (
+      character TEXT PRIMARY KEY,
+      generation_hash TEXT NOT NULL,
+      state TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+  ]},
 ];

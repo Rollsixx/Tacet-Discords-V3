@@ -1245,3 +1245,17 @@ input[readonly] { opacity: .75; cursor: default; }
 
 /* Actionable rank-readiness checklist */
 .readiness-requirements{margin:18px 0;padding:16px;border:1px solid #29445a;border-radius:14px;background:linear-gradient(145deg,rgba(24,44,62,.72),rgba(13,23,34,.92))}.readiness-requirements h4{margin:0;font-size:1rem}.readiness-requirements ul{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:8px}.readiness-requirements li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid #26394a;border-radius:10px;background:rgba(8,15,23,.56)}.readiness-requirements li>div{min-width:0}.readiness-requirements li p{margin:3px 0 0;color:#a7bdd3;font-size:.88rem;line-height:1.45}.requirement-state{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;font-weight:800;background:#25394a;color:#adc8e4}.requirement-complete .requirement-state{background:#123e36;color:#7fe8c8}.requirement-blocked .requirement-state{background:#493717;color:#ffd074}.requirement-waiting .requirement-state{background:#26313c;color:#afc0d1}.readiness-requirements .outline-button{white-space:nowrap}@media(max-width:640px){.readiness-requirements li{grid-template-columns:26px minmax(0,1fr)}.readiness-requirements li>a{grid-column:2;justify-self:start}}
+
+/* Rank medals, tenure and movement */
+.lb-rank-cell{display:flex;align-items:center;gap:6px;min-width:68px}
+.lb-rank-composite{display:inline-flex;align-items:center;gap:5px;position:relative;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.lb-rank-composite .lb-rank{display:inline-flex;align-items:center;justify-content:center;gap:3px;min-width:29px;height:29px;padding:0 5px;border-radius:8px}
+.lb-rank-composite .lb-rank svg{width:14px;height:14px;fill:currentColor;stroke:currentColor;stroke-width:.7}
+.lb-rank-composite .lb-medal-1{color:#ffd66e;border:1px solid #c89c36;background:linear-gradient(145deg,#493814,#241d10);box-shadow:0 0 12px #dca82d20}
+.lb-rank-composite .lb-medal-2{color:#d9e2eb;border:1px solid #9cabb9;background:linear-gradient(145deg,#33414e,#1b232c)}
+.lb-rank-composite .lb-medal-3{color:#e6a878;border:1px solid #a4653b;background:linear-gradient(145deg,#442b20,#251b16)}
+.lb-rank-days{font-size:10px;font-weight:700;line-height:1;color:var(--gold,#e4c16d);white-space:nowrap}
+.lb-rank-movement{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:750;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lb-rank-up{color:#65d5a6}.lb-rank-down{color:#f08b83}
+.pp-build-table th:first-child{width:8%}.pp-build-table th:nth-child(2){width:20%}
+@media(max-width:650px){.lb-rank-cell{gap:3px;min-width:54px}.lb-rank-days{font-size:9px}.lb-rank-composite .lb-rank{min-width:26px;height:27px}}
