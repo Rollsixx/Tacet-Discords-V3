@@ -27,10 +27,13 @@ export async function assessSource(input){
   await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
   stage='verify';
   async function readResult(region,{scale=3,linear=false,padded=false,preserveLines=false}={}){
-   const {data,info}=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).extract(region).resize(region.width*scale,region.height*scale,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
-   for(let i=0;i<data.length;i+=4){const gray=Math.round(.299*data[i]+.587*data[i+1]+.114*data[i+2]);const value=Math.max(0,Math.min(255,(gray-128)*1.5+128));data[i]=data[i+1]=data[i+2]=value;}
-   let png=await sharp(data,{raw:{width:info.width,height:info.height,channels:4}}).png().toBuffer();
-   if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:info.width+32,height:info.height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
+   const width=Math.round(region.width*scale),height=Math.round(region.height*scale);
+   // Keep the existing grayscale/contrast transformation, but run it in libvips
+   // instead of iterating every output pixel in JavaScript for every OCR crop.
+   let png=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}})
+    .extract(region).resize(width,height,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3})
+    .greyscale().linear(1.5,-64).png().toBuffer();
+   if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:width+32,height:height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
    try{const {data:result}=await worker.recognize(png);const reading={text:preserveLines?result.text.trim():result.text.replace(/\s+/g,' ').trim(),confidence:result.confidence};ocrReadings.push({region,scale,linear,padded,...reading});return reading;}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
   }
   const read=async(region,options)=>(await readResult(region,options)).text;
