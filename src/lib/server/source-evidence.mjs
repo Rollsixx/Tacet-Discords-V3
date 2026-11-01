@@ -64,9 +64,9 @@ export async function assessSource(input){
   for(let i=0;i<5;i++){
    const offset=i*374,client=input.slots[i];
    let cost=await read({left:336+offset,top:674,width:18,height:24});
-   if(!/^[134]$/.test(cost)){
+   if(!/^[134]$/.test(cost)||cost!==client.cost.value){
     await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_CHAR,tessedit_char_whitelist:'134'});
-    const recovered=await recoverEchoCost({raw:cost,value:cost},async variant=>readResult(variant===0?{left:333+offset,top:671,width:24,height:30}:{left:336+offset,top:674,width:18,height:24},{linear:true,padded:true}));cost=recovered.value;
+    const recovered=await recoverEchoCost({raw:cost,value:cost},async variant=>readResult(variant===0?{left:333+offset,top:671,width:24,height:30}:{left:336+offset,top:674,width:18,height:24},{linear:true,padded:true}),client.cost.value);cost=recovered.value;
     await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
    }
    if(cost!==client.cost.value)throw sourceFailure('SOURCE_FIELD_MISMATCH',`Echo stats could not be verified: Echo ${i+1}, cost. Independent image reads did not agree with the scan. Stats remain locked; retry with the original card.`,{slot:i+1,field:'cost'});
