@@ -44,6 +44,16 @@ assert.ok(profileBuild, "The current leaderboard build is missing from its playe
 assert.equal(Number(profileBuild.score), Number(rankedBuild.score), "Profile and leaderboard scores disagree.");
 assert.equal(Number(profileBuild.data?.assessment?.calculation?.score), Number(rankedBuild.score), "Displayed score disagrees with the stored calculation.");
 assert.ok(Number(rankedBuild.rank) >= 1, "Leaderboard rank is invalid.");
+const medalResponse = await readJson("/api/public/players");
+assert.ok(Array.isArray(medalResponse.topPlayers), "Player standings response is missing its topPlayers array.");
+assert.ok(Number.isFinite(Date.parse(medalResponse.topPlayersUpdatedAt)), "Medal standings update time is invalid.");
+for (const player of medalResponse.topPlayers) {
+  const gold = Number(player.gold), silver = Number(player.silver), bronze = Number(player.bronze);
+  assert.ok([gold, silver, bronze].every(Number.isFinite), `Medal counts are invalid for UID ${player.uid}.`);
+  assert.equal(Number(player.total), gold + silver + bronze, `Medal total disagrees for UID ${player.uid}.`);
+  assert.equal(Number(player.points), gold * 3 + silver * 2 + bronze, `Weighted medal points disagree for UID ${player.uid}.`);
+}
+
 
 console.log(JSON.stringify({
   ok: true,
