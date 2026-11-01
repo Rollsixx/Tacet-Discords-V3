@@ -15,7 +15,7 @@ test("four pages render without overflow or browser errors", async ({ page }, te
       await expect(page.getByRole('button',{name:'Choose a 3.x Resonator'})).toBeVisible();
       await page.getByRole('button',{name:'Choose a 1.x Resonator'}).click();
       await expect(page.getByRole('listbox',{name:'Choose a 1.x Resonator'})).toBeVisible();
-      await expect(page.locator('.popover-listbox-menu .resonator-portrait').first()).toBeVisible();
+      await expect(page.locator('.popover-listbox-menu .lb-patch-option-avatar').first()).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('button',{name:'Choose a 1.x Resonator'})).toHaveAttribute('aria-expanded','false');
       await expect(page.locator('.placeholder,.lb-table').first()).toBeVisible();
