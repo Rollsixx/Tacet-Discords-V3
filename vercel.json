@@ -22,5 +22,8 @@
       "development/verified-auto-approval-profile-avatar": false,
       "development/fix-profile-avatar-endpoint-type": false
     }
+  },
+  "deploymentEnabled": {
+    "fix/mobile-browser-check-selectors": false
   }
 }

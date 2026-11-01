@@ -42,7 +42,7 @@ test('Home Top 5 panels, player links, beta navigation and local portraits',asyn
  await expect.poll(()=>page.locator('img.lb-board-mark').evaluate((image:HTMLImageElement)=>image.complete&&image.naturalWidth>0)).toBe(true);
  await expect(page.locator('.lb-player-row')).toHaveCount(1);
  await expect(page.locator('.lb-score')).toContainText('123,457');
- for(const width of [360,768,1280]){await page.setViewportSize({width,height:900});await expect(page.locator('.lb-score')).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+ for(const width of [360,768,1280]){await page.setViewportSize({width,height:900});await expect(width<=1100?page.locator('.lb-mobile-rank-card'):page.locator('.lb-score')).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  expect(errors).toEqual([]);
 });
 test('Home ranking failures offer retry and missing portraits fall back cleanly',async({page})=>{
