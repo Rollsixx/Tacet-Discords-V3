@@ -1164,3 +1164,46 @@ input[readonly] { opacity: .75; cursor: default; }
 .lb-resonator-achievements>span:not(.lb-achievement-portrait){font-size:12px;color:var(--muted);white-space:nowrap}
 .lb-resonator-achievements strong{color:var(--text);margin-left:3px}.lb-resonator-achievements small{color:#e8bf53;font-size:12px}
 @media(max-width:600px){.pp-profile-name-row{align-items:flex-start;flex-direction:column;gap:8px}.pp-overall-ranks{flex-wrap:wrap;gap:7px}.lb-resonator-achievements{gap:7px;padding:8px}.lb-resonator-achievements small{width:100%;padding-left:40px}}
+
+/* Mobile standings and new history/report panels */
+.medal-standings-updated{margin:0 0 10px;color:var(--muted);font-size:12px}
+.medal-standings-updated time{color:var(--text)}
+.pp-rank-history{margin:18px 0 24px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-raised)}
+.pp-rank-history h3{margin:0;font-size:15px}
+.pp-rank-history>div>p,.pp-rank-history-empty{margin:5px 0 0;color:var(--muted);font-size:12px}
+.pp-rank-history ol{list-style:none;padding:0;margin:12px 0 0}
+.pp-rank-history li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--border);font-size:13px}
+.pp-rank-history li time{color:var(--muted);font-size:12px;white-space:nowrap}
+.bs-rank-filters{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr)) auto auto;align-items:end;gap:10px;margin-bottom:18px}
+.bs-rank-filters label{display:grid;gap:6px;color:var(--muted);font-size:12px}
+.bs-rank-filters input{min-width:0;width:100%}
+.bs-consistency{margin-top:22px;padding-top:18px;border-top:1px solid var(--border)}
+.bs-consistency>header{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.bs-consistency h3{margin:0}.bs-consistency>header p{margin:6px 0;color:var(--muted);font-size:12px}
+.bs-consistency-ok{color:#76e4b4}.bs-consistency-alert{color:#f6ce83}
+.bs-consistency-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.bs-consistency-counts span{display:flex;justify-content:space-between;gap:8px;padding:12px;border:1px solid var(--border);border-radius:9px}
+.bs-consistency ul{padding-left:20px}.bs-consistency li{padding:6px 0}.bs-consistency li small{display:block;color:var(--muted);margin-top:3px}
+@media(max-width:600px){
+ .medal-standings-wrap{overflow:visible;border:0;background:transparent}
+ .medal-standings-table{display:block}
+ .medal-standings-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+ .medal-standings-table tbody{display:grid;gap:10px}
+ .medal-standings-table tbody tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+ .medal-standings-table td{display:flex;min-width:0;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;padding:10px 9px;font-size:13px;text-align:left!important;border:0}
+ .medal-standings-table td::before{content:attr(data-label);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+ .medal-standings-table td:nth-child(1){grid-column:span 1}
+ .medal-standings-table td:nth-child(2){grid-column:span 3}
+ .medal-standings-table td:nth-child(n+3){border-top:1px solid var(--border)}
+ .medal-player-link{min-width:0;gap:8px}
+ .medal-player-link .lb-player-avatar{display:block;width:34px;height:34px}
+ .medal-player-link strong{max-width:100%;overflow-wrap:anywhere}
+ .medal-standings-table .medal-rank-cell{gap:6px}
+ .pp-rank-history{padding:13px;margin:14px 0 18px}
+ .pp-rank-history li{align-items:flex-start;flex-direction:column;gap:3px}
+ .pp-rank-history li time{white-space:normal}
+ .bs-rank-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .bs-rank-filters button{min-height:42px}
+ .bs-consistency-counts{grid-template-columns:1fr}
+ .bs-consistency>header{align-items:flex-start;flex-direction:column}
+}
