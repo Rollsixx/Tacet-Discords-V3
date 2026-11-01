@@ -1207,3 +1207,7 @@ input[readonly] { opacity: .75; cursor: default; }
  .bs-consistency-counts{grid-template-columns:1fr}
  .bs-consistency>header{align-items:flex-start;flex-direction:column}
 }
+
+
+/* Keep expanded leaderboard builds independent of the table grid on phones. */
+@media(max-width:600px){.lb-table .lb-detail-row{display:block;width:100%;max-width:100%}.lb-table .lb-detail-row>td{box-sizing:border-box;display:block;width:100%;max-width:100%;min-width:0;padding:0!important}.lb-detail-content{width:100%;min-width:0;max-width:100%;overflow:hidden}.lb-detail-content .lb-expanded{width:100%;min-width:0;padding:14px 10px}.lb-detail-content .lb-expanded-heading{align-items:flex-start;gap:10px}.lb-detail-content .lb-expanded-heading>div{min-width:0}.lb-detail-content .lb-resonator-achievements{display:flex;flex-wrap:wrap;gap:8px}.lb-detail-content .lb-stat-chips{justify-content:flex-start;gap:7px}.lb-detail-content .lb-stat-chips>div{max-width:100%;flex-wrap:wrap}.lb-detail-content .lb-echoes{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.lb-detail-content .lb-echo:last-child{justify-self:stretch;width:auto}}
