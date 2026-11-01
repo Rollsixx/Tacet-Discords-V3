@@ -43,6 +43,11 @@ const profileBuild = profile.builds.find(build => build.id === rankedBuild.id &&
 assert.ok(profileBuild, "The current leaderboard build is missing from its player's profile.");
 assert.equal(Number(profileBuild.score), Number(rankedBuild.score), "Profile and leaderboard scores disagree.");
 assert.equal(Number(profileBuild.data?.assessment?.calculation?.score), Number(rankedBuild.score), "Displayed score disagrees with the stored calculation.");
+const echoAsset = await fetch(new URL(`/api/assets/${rankedBuild.id}-1-portrait`, base), { signal: AbortSignal.timeout(20000) });
+assert.equal(echoAsset.status, 200, "An approved leaderboard Echo portrait could not be loaded.");
+assert.equal(echoAsset.headers.get("content-type"), "image/png", "Echo portrait response has the wrong content type.");
+assert.match(echoAsset.headers.get("cache-control") || "", /public, s-maxage=30, stale-while-revalidate=60/, "Approved Echo portrait is not using the short CDN cache.");
+
 assert.ok(Number(rankedBuild.rank) >= 1, "Leaderboard rank is invalid.");
 const medalResponse = await readJson("/api/public/players");
 assert.ok(Array.isArray(medalResponse.topPlayers), "Player standings response is missing its topPlayers array.");
