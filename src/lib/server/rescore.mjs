@@ -8,11 +8,11 @@ import {correctionLedgerVerified} from './correction-workflow.mjs';
 // Old unsupported/no-evidence submissions must be resubmitted with an original.
 export async function rescoreStoredBuilds(db){
  await initializeRotations(db);
- const rows=await db.execute("SELECT id,uid,character,status,identity_verified,reviewed_at,data FROM submissions WHERE status IN ('pending','approved') AND replaced_by IS NULL");
+ const rows=await db.execute("SELECT s.id,s.uid,s.character,s.status,s.identity_verified,s.reviewed_at,s.data,v.id AS active_rotation_id,v.kind AS active_rotation_kind,v.policy_id AS active_policy_id FROM submissions s LEFT JOIN rotation_active a ON a.character=s.character LEFT JOIN rotation_versions v ON v.id=a.version_id WHERE s.status IN ('pending','approved') AND s.replaced_by IS NULL");
  const result={updated:0,skipped:0,failed:0,awaitingRotationRecords:[],failedRecords:[]};
  for(const row of rows.rows){
   const data=JSON.parse(String(row.data)),a=data.assessment,c=a?.calculation;
-  const managed=(await db.execute({sql:"SELECT v.id,v.kind,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?",args:[String(row.character)]})).rows[0];
+  const managed=row.active_rotation_id?{id:String(row.active_rotation_id),kind:String(row.active_rotation_kind),policy_id:String(row.active_policy_id)}:null;
   if(!SUPPORTED.includes(String(row.character))){result.skipped++;continue;}
   if((data.substatCorrections||[]).length&&!correctionLedgerVerified(data)){result.skipped++;continue;}
   if(a?.statsVerified!==true||a?.maxMainStatsVerified!==true){result.skipped++;continue;}

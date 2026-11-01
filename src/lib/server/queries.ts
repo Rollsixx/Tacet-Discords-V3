@@ -45,29 +45,12 @@ export async function listBuilds(options: { search?: string; character?: string;
       return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.rankHasHistory??false};
     });
   }
-  const medals={top1:0,top2:0,top3:0,total:0};
-  if(options.uid&&!options.includePending&&!options.pending){
-    const marks=SUPPORTED.map(()=>"?").join(",");
-    const medalRows=await db.execute({sql:`WITH eligible AS (
-      SELECT s.id,s.uid,s.character,c.score,
-        row_number() OVER(PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
-      FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
-      WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1
-        AND s.character IN (${marks}) AND c.engine_version=? AND c.data_version=?
-        AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
-    ), ranked AS (
-      SELECT uid,character,row_number() OVER(PARTITION BY character ORDER BY score DESC,id ASC) AS global_rank
-      FROM eligible WHERE player_best=1
-    )
-    SELECT global_rank,COUNT(*) AS medals FROM ranked WHERE uid=? AND global_rank<=3 GROUP BY global_rank`,args:[...SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,options.uid]});
-    for(const row of medalRows.rows){const rank=Number(row.global_rank),count=Number(row.medals);if(rank===1)medals.top1=count;if(rank===2)medals.top2=count;if(rank===3)medals.top3=count;}
-    medals.total=medals.top1+medals.top2+medals.top3;
-  }
   let medalStanding=null;
   if(options.uid&&!options.includePending&&!options.pending){
     const overall=(await medalStandings(db)).players.find(player=>player.uid===options.uid);
     if(overall)medalStanding=overall;
   }
+  const medals={top1:medalStanding?.gold||0,top2:medalStanding?.silver||0,top3:medalStanding?.bronze||0,total:medalStanding?.total||0};
   const rankHistory=options.uid&&!options.includePending&&!options.pending?(await listPlayerRankHistory(options.uid,db)).events:[];
  return {builds,page,hasMore:result.rows.length>20,scoring:scoringReadiness,medals,medalStanding,rankHistory};
 }
