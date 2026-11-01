@@ -7,7 +7,7 @@ test("four pages render without overflow or browser errors", async ({ page }, te
   for (const route of ["/", "/import", "/profiles", "/leaderboards"]) {
     await page.goto(route);
     await expect(page.locator("h1")).toBeVisible();
-    if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table, .pp-player-list, .home-ranking-card").first()).toBeVisible();
+    if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table, .lb-loading, .lb-empty, .pp-player-list, .home-ranking-card, .home-ranking-loading, .home-ranking-empty").first()).toBeVisible();
     if(route === '/leaderboards') {
       await expect(page.locator('.lb-patch-picker')).toHaveCount(3);
       await expect(page.getByRole('button',{name:'Choose a 1.x Resonator'})).toBeVisible();
