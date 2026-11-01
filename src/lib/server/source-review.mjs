@@ -2,8 +2,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {HttpError} from './validation.ts';
 import {validateEchoSlot} from '../scanner/stat-validation.ts';
-import {decodeFingerprintSource} from './image-fingerprint.mjs';
-import {diagnoseSlots} from './scoring.mjs';
 
 const must=(condition,message,status=422)=>{if(!condition)throw new HttpError(status,message);};
 
@@ -51,6 +49,7 @@ export async function confirmSourceStatsManually(db,id,input){
   must(row,'Submission not found.',404);
   const evidence=(await tx.execute({sql:'SELECT image,source_hash,original_slots FROM submission_source_evidence WHERE submission_id=?',args:[id]})).rows[0];
   const prepared=prepareManualSourceReview(row,evidence,input);
+  const [{decodeFingerprintSource},{diagnoseSlots}]=await Promise.all([import('./image-fingerprint.mjs'),import('./scoring.mjs')]);
   const decoded=await decodeFingerprintSource(Buffer.from(evidence.image));
   prepared.data.assessment.visualReport=await diagnoseSlots(decoded,prepared.data.slots.map(slot=>Number(slot.cost.value)));
   const fresh=(await tx.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[id]})).rows[0];
