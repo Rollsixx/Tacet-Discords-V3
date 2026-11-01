@@ -46,7 +46,7 @@ function publicBuild(row: Row) {
  const data=JSON.parse(String(row.data));
  if(row.current_calculation){data.assessment={...data.assessment,calculation:JSON.parse(String(row.current_calculation))};}
  return {
-      id: String(row.id), rank: row.global_rank == null ? null : Number(row.global_rank), rankMovement:null, rankSince:null, uid: String(row.uid), ign: String(row.ign), character: String(row.character), avatarCharacter: row.avatar_character == null ? null : String(row.avatar_character),
+      id: String(row.id), rank: row.global_rank == null ? null : Number(row.global_rank), rankMovement:null as number|null, rankSince:null as string|null, uid: String(row.uid), ign: String(row.ign), character: String(row.character), avatarCharacter: row.avatar_character == null ? null : String(row.avatar_character),
       status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
       identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
       data: data as { assessment?: {eligible: boolean; awaitingRotation?:boolean; reason: string; statsVerified?:boolean; maxMainStatsVerified?:boolean; rollsVerified?:boolean; sourceSlots?:{slot:number;substats:{raw?:string;value:string}[]}[]; originalSourceSlots?:{slot:number;substats:{raw?:string;value:string}[]}[]; visualReport?:import("../scanner/scoring-readiness.ts").VisualReportSlot[]; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: Record<string,number>; displayStats?: Record<string,number>; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
@@ -66,7 +66,7 @@ async function synchronizeRankHistory(character:string,rows:Row[],db:Client):Pro
     const previous=parseRankState(saved?.state),now=new Date().toISOString();
     const next=nextRankHistory(rows.map(row=>({uid:String(row.uid),global_rank:Number(row.global_rank)})),previous,now);
     await tx.execute({sql:"INSERT INTO leaderboard_rank_history(character,generation_hash,state,updated_at) VALUES(?,?,?,?) ON CONFLICT(character) DO UPDATE SET generation_hash=excluded.generation_hash,state=excluded.state,updated_at=excluded.updated_at",args:[character,generation,JSON.stringify(next),now]});
-    saved={generation_hash:generation,state:JSON.stringify(next)} as Row;
+    saved={generation_hash:generation,state:JSON.stringify(next)} as unknown as Row;
    }
    await tx.commit();
   }finally{tx.close();}
