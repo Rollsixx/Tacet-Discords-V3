@@ -62,4 +62,4 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Build and verify responsive leaderboard layouts
-        run: npm run test:browser -- tests/browser/responsive-leaderboard.spec.ts
+        run: npm run test:browser -- tests/browser/responsive-leaderboard.spec.ts tests/browser/profiles.spec.ts
