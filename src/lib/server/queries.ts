@@ -1,7 +1,7 @@
 // Public data access and rank-history snapshots; never import OCR, image processing or the scoring engine.
 import type {Client,Row} from '@libsql/client';
 import {createHash} from 'node:crypto';
-import {nextRankHistory} from '../leaderboards/rank-history.mjs';
+import {nextRankHistory,rankHistoryEvents} from '../leaderboards/rank-history.mjs';
 import {database} from './database.ts';
 import {HttpError} from './validation.ts';
 import {featuredResonators,latestResonators} from '../resonators.ts';
