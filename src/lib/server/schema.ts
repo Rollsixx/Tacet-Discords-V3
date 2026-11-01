@@ -130,4 +130,20 @@ export const migrations = [
     )`,
     `CREATE INDEX leaderboard_rank_changes_recent ON leaderboard_rank_changes(changed_at DESC,id DESC)`,
   ]},
+  {version:14,statements:[
+    `CREATE TABLE leaderboard_rank_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      character TEXT NOT NULL,
+      uid TEXT NOT NULL,
+      event_type TEXT NOT NULL CHECK(event_type IN ('moved','entered','left')),
+      old_rank INTEGER,
+      new_rank INTEGER,
+      old_score REAL,
+      new_score REAL,
+      old_build_id TEXT,
+      new_build_id TEXT,
+      changed_at TEXT NOT NULL
+    )`,
+    `CREATE INDEX leaderboard_rank_events_recent ON leaderboard_rank_events(changed_at DESC,id DESC)`,
+  ]},
 ];

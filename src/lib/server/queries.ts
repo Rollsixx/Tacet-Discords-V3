@@ -40,7 +40,25 @@ export async function listBuilds(options: { search?: string; character?: string;
       return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,rankHasHistory:ranked?.rankHasHistory??false};
     });
   }
-  return {builds,page,hasMore:result.rows.length>20,scoring:scoringReadiness};
+  let medals={top1:0,top2:0,top3:0,total:0};
+  if(options.uid&&!options.includePending&&!options.pending){
+    const marks=SUPPORTED.map(()=>"?").join(",");
+    const medalRows=await db.execute({sql:`WITH eligible AS (
+      SELECT s.id,s.uid,s.character,c.score,
+        row_number() OVER(PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
+      FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
+      WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1
+        AND s.character IN (${marks}) AND c.engine_version=? AND c.data_version=?
+        AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
+    ), ranked AS (
+      SELECT uid,character,row_number() OVER(PARTITION BY character ORDER BY score DESC,id ASC) AS global_rank
+      FROM eligible WHERE player_best=1
+    )
+    SELECT global_rank,COUNT(*) AS medals FROM ranked WHERE uid=? AND global_rank<=3 GROUP BY global_rank`,args:[...SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,options.uid]});
+    for(const row of medalRows.rows){const rank=Number(row.global_rank),count=Number(row.medals);if(rank===1)medals.top1=count;if(rank===2)medals.top2=count;if(rank===3)medals.top3=count;}
+    medals.total=medals.top1+medals.top2+medals.top3;
+  }
+  return {builds,page,hasMore:result.rows.length>20,scoring:scoringReadiness,medals};
 }
 function publicBuild(row: Row) {
  const data=JSON.parse(String(row.data));
@@ -56,20 +74,19 @@ function parseRankState(raw:unknown):Record<string,RankHistoryEntry>{
  try{const parsed=JSON.parse(String(raw||"{}"));return parsed&&typeof parsed==="object"?parsed as Record<string,RankHistoryEntry>:{}}catch{return {};}
 }
 async function synchronizeRankHistory(character:string,rows:Row[],db:Client):Promise<Record<string,RankHistoryEntry>>{
- const generation="rank-v2:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
+ const generation="rank-v3:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
  let saved=(await db.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
- if(!rows.length)return parseRankState(saved?.state);
  if(String(saved?.generation_hash||"")!==generation){
   const tx=await db.transaction("write");
   try{
    saved=(await tx.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
    if(String(saved?.generation_hash||"")!==generation){
-    const previous=String(saved?.generation_hash||"").startsWith("rank-v2:")?parseRankState(saved?.state):{},now=new Date().toISOString();
-    const next=nextRankHistory(rows.map(row=>({uid:String(row.uid),global_rank:Number(row.global_rank),id:String(row.id),score:Number(row.verified_score)})),previous,now);
-    for(const row of rows){
-     const uid=String(row.uid),prior=previous[uid],current=next[uid];
-     if(prior&&Number(prior.rank)!==current.rank)await tx.execute({sql:"INSERT INTO leaderboard_rank_changes(character,uid,old_rank,new_rank,build_id,score,changed_at) VALUES(?,?,?,?,?,?,?)",args:[character,uid,Number(prior.rank),current.rank,String(row.id),Number(row.verified_score),now]});
-    }
+    const priorGeneration=String(saved?.generation_hash||""),hasBaseline=priorGeneration.startsWith("rank-v2:")||priorGeneration.startsWith("rank-v3:");
+    const previous=hasBaseline?parseRankState(saved?.state):{},now=new Date().toISOString();
+    const historyRows=rows.map(row=>({uid:String(row.uid),global_rank:Number(row.global_rank),id:String(row.id),score:Number(row.verified_score)}));
+    const next=nextRankHistory(historyRows,previous,now);
+    const events=rankHistoryEvents(historyRows,previous,hasBaseline,now);
+    for(const event of events)await tx.execute({sql:"INSERT INTO leaderboard_rank_events(character,uid,event_type,old_rank,new_rank,old_score,new_score,old_build_id,new_build_id,changed_at) VALUES(?,?,?,?,?,?,?,?,?,?)",args:[character,event.uid,event.type,event.oldRank,event.newRank,event.oldScore,event.newScore,event.oldBuildId,event.newBuildId,event.changedAt]});
     await tx.execute({sql:"INSERT INTO leaderboard_rank_history(character,generation_hash,state,updated_at) VALUES(?,?,?,?) ON CONFLICT(character) DO UPDATE SET generation_hash=excluded.generation_hash,state=excluded.state,updated_at=excluded.updated_at",args:[character,generation,JSON.stringify(next),now]});
     saved={generation_hash:generation,state:JSON.stringify(next)} as unknown as Row;
    }
@@ -79,6 +96,11 @@ async function synchronizeRankHistory(character:string,rows:Row[],db:Client):Pro
  return parseRankState(saved?.state);
 }
 
+export async function refreshLeaderboardRankHistory(db:Client=database()){
+ const characters=SUPPORTED;
+ for(const character of characters)await listLeaderboard({character},db);
+ return {refreshed:characters.length};
+}
 export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
   const character = options.character || SUPPORTED[0];
   const page = Number.isFinite(options.page) ? Math.min(10000,Math.max(1,Math.floor(options.page || 1))) : 1;
@@ -104,8 +126,10 @@ export async function listLeaderboard(options: {character?: string;search?: stri
 }
 
 export async function listLeaderboardRankChanges(limit=100,db:Client=database()){
- const result=await db.execute({sql:`SELECT e.id,e.character,e.uid,COALESCE(s.ign,e.uid) AS ign,e.old_rank,e.new_rank,e.build_id,e.score,e.changed_at FROM leaderboard_rank_changes e LEFT JOIN submissions s ON s.id=e.build_id ORDER BY e.changed_at DESC,e.id DESC LIMIT ?`,args:[Math.min(200,Math.max(1,Math.floor(limit)))]});
- return {changes:result.rows.map(row=>({id:Number(row.id),character:String(row.character),uid:String(row.uid),ign:String(row.ign),oldRank:Number(row.old_rank),newRank:Number(row.new_rank),buildId:String(row.build_id),score:Number(row.score),changedAt:String(row.changed_at)}))};
+ const result=await db.execute({sql:`SELECT e.id,e.character,e.uid,COALESCE(s.ign,e.uid) AS ign,e.event_type,e.old_rank,e.new_rank,e.old_score,e.new_score,COALESCE(e.new_build_id,e.old_build_id,'') AS build_id,e.changed_at FROM leaderboard_rank_events e LEFT JOIN submissions s ON s.id=COALESCE(e.new_build_id,e.old_build_id)
+ UNION ALL SELECT -h.id,h.character,h.uid,COALESCE(s.ign,h.uid),'moved',h.old_rank,h.new_rank,NULL,h.score,h.build_id,h.changed_at FROM leaderboard_rank_changes h LEFT JOIN submissions s ON s.id=h.build_id
+ ORDER BY changed_at DESC,id DESC LIMIT ?`,args:[Math.min(200,Math.max(1,Math.floor(limit)))]});
+ return {changes:result.rows.map(row=>({id:Number(row.id),character:String(row.character),uid:String(row.uid),ign:String(row.ign),type:String(row.event_type) as "moved"|"entered"|"left",oldRank:row.old_rank==null?null:Number(row.old_rank),newRank:row.new_rank==null?null:Number(row.new_rank),oldScore:row.old_score==null?null:Number(row.old_score),newScore:row.new_score==null?null:Number(row.new_score),buildId:String(row.build_id),changedAt:String(row.changed_at)}))};
 }
 
 export async function adminOverview(db: Client = database()) {

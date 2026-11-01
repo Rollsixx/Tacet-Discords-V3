@@ -9,3 +9,17 @@ export function nextRankHistory(rows,previous,now){
  }
  return next;
 }
+export function rankHistoryEvents(rows,previous,hasBaseline,now){
+ if(!hasBaseline)return [];
+ const current=new Map(rows.map(row=>[String(row.uid),row]));
+ const events=[];
+ for(const row of rows){
+  const uid=String(row.uid),prior=previous[uid],rank=Number(row.global_rank);
+  if(!prior)events.push({uid,type:"entered",oldRank:null,newRank:rank,oldScore:null,newScore:Number(row.score)||0,oldBuildId:null,newBuildId:String(row.id||""),changedAt:now});
+  else if(Number(prior.rank)!==rank)events.push({uid,type:"moved",oldRank:Number(prior.rank),newRank:rank,oldScore:Number(prior.score)||0,newScore:Number(row.score)||0,oldBuildId:String(prior.buildId||""),newBuildId:String(row.id||""),changedAt:now});
+ }
+ for(const [uid,prior] of Object.entries(previous)){
+  if(!current.has(uid))events.push({uid,type:"left",oldRank:Number(prior.rank),newRank:null,oldScore:Number(prior.score)||0,newScore:null,oldBuildId:String(prior.buildId||""),newBuildId:null,changedAt:now});
+ }
+ return events;
+}
