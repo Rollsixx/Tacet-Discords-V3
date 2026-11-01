@@ -4,26 +4,27 @@ import {validateEchoSlot} from '../scanner/stat-validation.ts';
 import {randomUUID} from 'node:crypto';
 import {assessEquipment,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring.mjs';
 import {correctionLedgerVerified} from './correction-workflow.mjs';
+import {recordRescoreSkip} from './rescore-report.mjs';
 // Reuse only previously server-validated evidence from this known data snapshot.
 // Old unsupported/no-evidence submissions must be resubmitted with an original.
 export async function rescoreStoredBuilds(db){
  await initializeRotations(db);
  const rows=await db.execute("SELECT s.id,s.uid,s.character,s.status,s.identity_verified,s.reviewed_at,s.data,v.id AS active_rotation_id,v.kind AS active_rotation_kind,v.policy_id AS active_policy_id,v.spec AS active_rotation_spec,v.engine_version AS active_rotation_engine_version,v.data_version AS active_rotation_data_version,v.mechanics_version AS active_rotation_mechanics_version FROM submissions s LEFT JOIN rotation_active a ON a.character=s.character LEFT JOIN rotation_versions v ON v.id=a.version_id WHERE s.status IN ('pending','approved') AND s.replaced_by IS NULL");
- const result={updated:0,skipped:0,failed:0,awaitingRotationRecords:[],failedRecords:[]};
+ const result={updated:0,skipped:0,skippedReasons:{},failed:0,awaitingRotationRecords:[],failedRecords:[]};
  for(const row of rows.rows){
   const data=JSON.parse(String(row.data)),a=data.assessment,c=a?.calculation;
   const managed=row.active_rotation_id?{id:String(row.active_rotation_id),kind:String(row.active_rotation_kind),policy_id:String(row.active_policy_id),spec:String(row.active_rotation_spec),engine_version:String(row.active_rotation_engine_version),data_version:String(row.active_rotation_data_version),mechanics_version:String(row.active_rotation_mechanics_version)}:null;
-  if(!SUPPORTED.includes(String(row.character))){result.skipped++;continue;}
-  if((data.substatCorrections||[]).length&&!correctionLedgerVerified(data)){result.skipped++;continue;}
-  if(a?.statsVerified!==true||a?.maxMainStatsVerified!==true){result.skipped++;continue;}
+  if(!SUPPORTED.includes(String(row.character))){recordRescoreSkip(result,"unsupported_character");continue;}
+  if((data.substatCorrections||[]).length&&!correctionLedgerVerified(data)){recordRescoreSkip(result,"correction_ledger_unverified");continue;}
+  if(a?.statsVerified!==true||a?.maxMainStatsVerified!==true){recordRescoreSkip(result,"stats_or_main_stats_unverified");continue;}
   const recoverable=recoveryMode(row,data);
   const retained=a?.eligible&&(/^[a-f0-9]{64}$/.test(a.sourceHash||'')||hasRetainedRecovery(a))&&c?.dataVersion===DATA_VERSION&&c.engineVersion?.startsWith('wuthering-tools-b32cdbd+tacet/')&&c.identities?.length===5&&c.character===String(row.character);
-  if(managed?.kind==='official'&&!recoverable&&!retained){result.skipped++;continue;}
-  if(!retained&&!recoverable){result.skipped++;continue;}
-  if(retained&&c.engineVersion===ENGINE_VERSION&&c.policyId===POLICY_VERSION&&c.displayStats&&typeof c.displayStats==='object'){result.skipped++;continue;}
+  if(managed?.kind==='official'&&!recoverable&&!retained){recordRescoreSkip(result,'official_rotation_evidence_unavailable');continue;}
+  if(!retained&&!recoverable){recordRescoreSkip(result,"source_evidence_unavailable");continue;}
+  if(retained&&c.engineVersion===ENGINE_VERSION&&c.policyId===POLICY_VERSION&&c.displayStats&&typeof c.displayStats==='object'){recordRescoreSkip(result,'score_already_current');continue;}
   try{
    const recovered=recoverable?await recoverVisualEvidence(row,data,db):null;
-   if(recoverable&&!recovered){result.skipped++;continue;}
+   if(recoverable&&!recovered){recordRescoreSkip(result,"visual_recovery_unavailable");continue;}
    const numericIssues=data.slots.flatMap(s=>validateEchoSlot(s).map(issue=>({slot:s.slot,...issue})));
    if(recovered&&numericIssues.length){
     const next={...data,assessment:{...a,eligible:false,rollsVerified:false,visualRecovery:recovered.evidence,previousIdentityFailure:a.reason,visualReport:recovered.identities.map((s,i)=>({slot:i+1,cost:Number(data.slots[i].cost.value),echo:s.echo,set:s.set,problem:null})),scoringIssues:numericIssues,reason:'Echo '+numericIssues[0].slot+': '+numericIssues[0].message}};
