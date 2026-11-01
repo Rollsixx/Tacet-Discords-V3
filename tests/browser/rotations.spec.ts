@@ -38,6 +38,7 @@ test('expanded leaderboard categories load with local portraits',async({page},in
    const option=page.getByRole('option',{name:new RegExp('^'+name+' portrait')});
    if(await option.count()){await option.click();selected=true;break;}
    await page.keyboard.press('Escape');
+   await expect(page.locator('.popover-listbox-menu')).toHaveCount(0);
   }
   expect(selected, name+' should be available in a patch picker').toBe(true);expect((await response).status()).toBe(200);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
