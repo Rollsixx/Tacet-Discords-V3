@@ -101,15 +101,17 @@ export async function medalStandings(db:Client=database()){
 }
 export async function refreshLeaderboardRankHistory(db:Client=database()){
  const characters=SUPPORTED;
- for(const character of characters)await listLeaderboard({character},db);
+ const active=await db.execute('SELECT a.character,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id');
+ const policies=new Map(active.rows.map(row=>[String(row.character),String(row.policy_id)]));
+ for(const character of characters)await listLeaderboard({character,rotationPolicyId:policies.get(character)??null},db);
  return {refreshed:characters.length};
 }
-export async function listLeaderboard(options: {character?: string;search?: string;page?: number} = {}, db: Client = database()) {
+export async function listLeaderboard(options: {character?: string;search?: string;page?: number;rotationPolicyId?:string|null} = {}, db: Client = database()) {
   const character = options.character || SUPPORTED[0];
   const page = Number.isFinite(options.page) ? Math.min(10000,Math.max(1,Math.floor(options.page || 1))) : 1;
   if (!SUPPORTED.includes(character)) return {builds: [],page,hasMore:false,scoring:scoringReadiness,rotationReady:false};
   const search = (options.search || "").slice(0,64).trim();
-  const policy=(await db.execute({sql:'SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];
+  const policy=Object.prototype.hasOwnProperty.call(options,'rotationPolicyId')?{policy_id:options.rotationPolicyId}:(await db.execute({sql:'SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];
   const rotationReady=rotationPolicyReady(policy?.policy_id);
   const result = await db.execute({sql: `WITH candidates AS (
     SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,p.avatar_character,c.details AS current_calculation,c.score AS verified_score,
