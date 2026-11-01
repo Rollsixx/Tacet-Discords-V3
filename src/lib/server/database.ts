@@ -1,5 +1,6 @@
 import { createClient, type Client } from "@libsql/client";
 import { migrations } from "./schema.ts";
+import { observeDatabaseClient } from "./database-observability.ts";
 
 let client: Client | undefined;
 const migrationRuns = new WeakMap<Client,Promise<void>>();
@@ -18,7 +19,7 @@ export function database() {
       timeout: 5000,
     });
   }
-  return client;
+  return observeDatabaseClient(client);
 }
 
 export async function migrate(db: Client = database()) {
