@@ -92,7 +92,7 @@ export default function ImportPage() {
           <p className="muted scan-footnote">A stat pass does not establish Echo identity or leaderboard eligibility. Passed means the extracted fields are readable and structurally valid. Every stat is checked against the screenshot when you submit.</p>
         </Panel>
         {identity && <Panel className="import-character"><ResonatorPortrait key={identity.character} name={identity.character||""} className="import-character-portrait"/><div><span className="eyebrow">Character</span><h2>{identity.character ? resonatorDisplayName(identity.character) : "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
-        {preview &&{preview && <details className="source-preview" open><summary>Original screenshot · compare with the extracted Echo values</summary>
+        {preview && <details className="source-preview" open><summary>Original screenshot · compare with the extracted Echo values</summary>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="Selected build screenshot" />
         </details>}{result && <section className="import-extracted" aria-label="Extracted Echo values">
