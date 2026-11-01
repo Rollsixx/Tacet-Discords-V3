@@ -2,13 +2,14 @@ import {catalogCompleteness} from "@/lib/server/catalog-completeness.mjs";
 import {verifyHistoricalCorrections} from "@/lib/server/correction-workflow.mjs";
 import { authorize, failure, json, readJson } from "@/lib/server/http";
 import { HttpError, record } from "@/lib/server/validation";
-import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild, correctEchoSubstat } from "@/lib/server/store";
+import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, leaderboardConsistencyReport, deleteBuild, correctEchoSubstat } from "@/lib/server/store";
 import {listLeaderboardRankChanges} from "@/lib/server/queries";
 export async function GET(request: Request) {
   try {
     authorize(request);
     const params=new URL(request.url).searchParams;
     if(params.get("view")==="catalog")return json(await catalogCompleteness());
+    if(params.get("view")==="consistency")return json(await leaderboardConsistencyReport());
     const page=Number(params.get("page"))||1;
     const search=params.get("search")||"";
     if(params.get('view')==='players')return json({...await listAdminPlayers({page,search,character:params.get('character')||''}),overview:await adminOverview()});
