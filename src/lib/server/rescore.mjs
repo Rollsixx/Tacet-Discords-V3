@@ -8,11 +8,11 @@ import {correctionLedgerVerified} from './correction-workflow.mjs';
 // Old unsupported/no-evidence submissions must be resubmitted with an original.
 export async function rescoreStoredBuilds(db){
  await initializeRotations(db);
- const rows=await db.execute("SELECT s.id,s.uid,s.character,s.status,s.identity_verified,s.reviewed_at,s.data,v.id AS active_rotation_id,v.kind AS active_rotation_kind,v.policy_id AS active_policy_id FROM submissions s LEFT JOIN rotation_active a ON a.character=s.character LEFT JOIN rotation_versions v ON v.id=a.version_id WHERE s.status IN ('pending','approved') AND s.replaced_by IS NULL");
+ const rows=await db.execute("SELECT s.id,s.uid,s.character,s.status,s.identity_verified,s.reviewed_at,s.data,v.id AS active_rotation_id,v.kind AS active_rotation_kind,v.policy_id AS active_policy_id,v.spec AS active_rotation_spec,v.engine_version AS active_rotation_engine_version,v.data_version AS active_rotation_data_version,v.mechanics_version AS active_rotation_mechanics_version FROM submissions s LEFT JOIN rotation_active a ON a.character=s.character LEFT JOIN rotation_versions v ON v.id=a.version_id WHERE s.status IN ('pending','approved') AND s.replaced_by IS NULL");
  const result={updated:0,skipped:0,failed:0,awaitingRotationRecords:[],failedRecords:[]};
  for(const row of rows.rows){
   const data=JSON.parse(String(row.data)),a=data.assessment,c=a?.calculation;
-  const managed=row.active_rotation_id?{id:String(row.active_rotation_id),kind:String(row.active_rotation_kind),policy_id:String(row.active_policy_id)}:null;
+  const managed=row.active_rotation_id?{id:String(row.active_rotation_id),kind:String(row.active_rotation_kind),policy_id:String(row.active_policy_id),spec:String(row.active_rotation_spec),engine_version:String(row.active_rotation_engine_version),data_version:String(row.active_rotation_data_version),mechanics_version:String(row.active_rotation_mechanics_version)}:null;
   if(!SUPPORTED.includes(String(row.character))){result.skipped++;continue;}
   if((data.substatCorrections||[]).length&&!correctionLedgerVerified(data)){result.skipped++;continue;}
   if(a?.statsVerified!==true||a?.maxMainStatsVerified!==true){result.skipped++;continue;}
@@ -38,7 +38,7 @@ export async function rescoreStoredBuilds(db){
    try{
     const verifiedInputs={...data,assessment:{...a,...equipment,rollsVerified:true}};
     if(managed?.kind==='official'){
-     const activeCalculation=await scoreActiveRotation(tx,String(row.character),verifiedInputs);
+     const activeCalculation=await scoreActiveRotation(tx,String(row.character),verifiedInputs,managed);
      if(!activeCalculation)throw Error('Published rotation did not produce a scoring calculation.');
      equipment.calculation=activeCalculation;equipment.eligible=true;equipment.awaitingRotation=false;
     }else if(equipment.awaitingRotation){
@@ -52,7 +52,9 @@ export async function rescoreStoredBuilds(db){
     }
     const currentCalculation=equipment.calculation;
     data.assessment={...a,...equipment,eligible:true,awaitingRotation:false,rollsVerified:true,calculation:currentCalculation,...(recovered?{visualRecovery:recovered.evidence,visualReport:recovered.identities.map((s,i)=>({slot:i+1,cost:Number(data.slots[i].cost.value),echo:s.echo,set:s.set,problem:null}))}:{}),reason:recovered?'Server-verified source stats and retained visual evidence recovered after a reference-image correction.':'Source evidence retained; recalculated under the current scoring policy.'};
-    const updated=await tx.execute({sql:'UPDATE submissions SET data=? WHERE id=? AND data=? AND status=? AND identity_verified=? AND reviewed_at IS ?',args:[JSON.stringify(data),String(row.id),String(row.data),String(row.status),Number(row.identity_verified),row.reviewed_at]});
+    const rotationGuard=managed?.kind==='official'?" AND EXISTS (SELECT 1 FROM rotation_active WHERE character=? AND version_id=?)":'';
+    const rotationArgs=managed?.kind==='official'?[String(row.character),managed.id]:[];
+    const updated=await tx.execute({sql:`UPDATE submissions SET data=? WHERE id=? AND data=? AND status=? AND identity_verified=? AND reviewed_at IS ?${rotationGuard}`,args:[JSON.stringify(data),String(row.id),String(row.data),String(row.status),Number(row.identity_verified),row.reviewed_at,...rotationArgs]});
     if(updated.rowsAffected!==1)throw Error('Build changed during rescore.');
     if(row.status==='approved')await tx.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(submission_id) DO UPDATE SET score=excluded.score,engine_version=excluded.engine_version,data_version=excluded.data_version,reference_case_version=excluded.reference_case_version,verified_at=excluded.verified_at,policy_id=excluded.policy_id,details=excluded.details',args:[String(row.id),currentCalculation.score,ENGINE_VERSION,DATA_VERSION,currentCalculation.referenceCaseVersion,new Date().toISOString(),currentCalculation.policyId,JSON.stringify(currentCalculation)]});
     if(recovered)await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),String(row.id),'echo_reference_recovered','system',JSON.stringify({reason:a.reason,reference:recovered.evidence.referenceVersion,cropHash:recovered.evidence.cropHash,identities:recovered.identities}),new Date().toISOString()]});
