@@ -43,15 +43,27 @@ const profileBuild = profile.builds.find(build => build.id === rankedBuild.id &&
 assert.ok(profileBuild, "The current leaderboard build is missing from its player's profile.");
 assert.equal(Number(profileBuild.score), Number(rankedBuild.score), "Profile and leaderboard scores disagree.");
 assert.equal(Number(profileBuild.data?.assessment?.calculation?.score), Number(rankedBuild.score), "Displayed score disagrees with the stored calculation.");
+
 const echoAssetUrl = new URL(`/api/assets/${rankedBuild.id}-1-portrait`, base);
-const echoAsset = await fetch(echoAssetUrl, { signal: AbortSignal.timeout(20000) });
+const fetchEchoAsset = () => fetch(echoAssetUrl, { signal: AbortSignal.timeout(20000) });
+const echoAsset = await fetchEchoAsset();
 assert.equal(echoAsset.status, 200, "An approved leaderboard Echo portrait could not be loaded.");
 assert.equal(echoAsset.headers.get("content-type"), "image/png", "Echo portrait response has the wrong content type.");
 assert.match(echoAsset.headers.get("cache-control") || "", /public/, "Approved Echo portrait is not publicly cacheable.");
-const cachedEchoAsset = await fetch(echoAssetUrl, { signal: AbortSignal.timeout(20000) });
-assert.equal(cachedEchoAsset.status, 200, "A cached approved leaderboard Echo portrait could not be loaded.");
-assert.equal(cachedEchoAsset.headers.get("content-type"), "image/png", "Cached Echo portrait response has the wrong content type.");
-assert.match(cachedEchoAsset.headers.get("x-vercel-cache") || "", /^(HIT|STALE|REVALIDATED)$/i, "Second approved Echo portrait request was not served from the Vercel CDN cache.");
+
+let cachedEchoAsset = null;
+for (let attempt = 0; attempt < 5; attempt += 1) {
+  if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 1000));
+  cachedEchoAsset = await fetchEchoAsset();
+  assert.equal(cachedEchoAsset.status, 200, "A cached approved leaderboard Echo portrait could not be loaded.");
+  assert.equal(cachedEchoAsset.headers.get("content-type"), "image/png", "Cached Echo portrait response has the wrong content type.");
+  if (/^(HIT|STALE|REVALIDATED)$/i.test(cachedEchoAsset.headers.get("x-vercel-cache") || "")) break;
+}
+assert.match(
+  cachedEchoAsset?.headers.get("x-vercel-cache") || "",
+  /^(HIT|STALE|REVALIDATED)$/i,
+  `Repeated approved Echo portrait requests did not reach the Vercel CDN cache (last status: ${cachedEchoAsset?.headers.get("x-vercel-cache") || "missing"}; edge: ${cachedEchoAsset?.headers.get("x-vercel-id") || "unknown"}).`,
+);
 
 assert.ok(Number(rankedBuild.rank) >= 1, "Leaderboard rank is invalid.");
 const medalResponse = await readJson("/api/public/players");
@@ -64,12 +76,11 @@ for (const player of medalResponse.topPlayers) {
   assert.equal(Number(player.points), gold * 3 + silver * 2 + bronze, `Weighted medal points disagree for UID ${player.uid}.`);
 }
 
-
 console.log(JSON.stringify({
   ok: true,
   release: health.release,
   database: health.database,
-  checked: ["health", "leaderboard-to-profile build identity", "leaderboard-to-profile score", "stored calculation score", "rank"],
+  checked: ["health", "leaderboard-to-profile build identity", "leaderboard-to-profile score", "stored calculation score", "rank", "weighted medal tally", "Echo CDN cache hit"],
   character: rankedBuild.character,
   buildId: rankedBuild.id,
   rank: rankedBuild.rank,
