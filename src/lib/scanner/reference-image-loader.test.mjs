@@ -4,6 +4,7 @@ import {
   validateReferenceDimensions,
   validateReferenceSources,
   loadReferenceCandidates,
+  decodeReferenceImage,
 } from "./reference-image-loader.ts";
 
 test("valid reference dimensions are accepted", () => {
@@ -105,4 +106,45 @@ test("empty reference list returns no candidates", async () => {
     candidates: [],
     failures: [],
   });
+});
+
+test("decoded reference pixels are reused across scans and concurrent loads", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalBitmap = globalThis.createImageBitmap;
+  const originalDocument = globalThis.document;
+  let fetches = 0;
+  let decodes = 0;
+  globalThis.fetch = async (_url, options) => {
+    fetches += 1;
+    assert.equal(options.cache, "force-cache");
+    return { ok: true, blob: async () => ({}) };
+  };
+  globalThis.createImageBitmap = async () => {
+    decodes += 1;
+    return { close() {} };
+  };
+  globalThis.document = { createElement: () => ({
+    getContext: () => ({
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: "",
+      drawImage() {},
+      getImageData: () => ({ width: 2, height: 2, data: new Uint8ClampedArray(16) }),
+    }),
+  }) };
+  try {
+    const source = { key: "cache-test", url: "/cache-test-reference.png" };
+    const [first, concurrent] = await Promise.all([
+      decodeReferenceImage(source, 2, 2),
+      decodeReferenceImage(source, 2, 2),
+    ]);
+    const repeated = await decodeReferenceImage(source, 2, 2);
+    assert.equal(fetches, 1);
+    assert.equal(decodes, 1);
+    assert.strictEqual(first, concurrent);
+    assert.strictEqual(first, repeated);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.createImageBitmap = originalBitmap;
+    globalThis.document = originalDocument;
+  }
 });
