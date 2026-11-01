@@ -83,14 +83,14 @@ function parseRankState(raw:unknown):Record<string,RankHistoryEntry>{
  try{const parsed=JSON.parse(String(raw||"{}"));return parsed&&typeof parsed==="object"?parsed as Record<string,RankHistoryEntry>:{}}catch{return {};}
 }
 async function synchronizeRankHistory(character:string,rows:Row[],db:Client,recordEvents=true):Promise<Record<string,RankHistoryEntry>>{
- const generation="rank-v4:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
+ const generation="rank-v5:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
  let saved=(await db.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
  if(String(saved?.generation_hash||"")!==generation){
   const tx=await db.transaction("write");
   try{
    saved=(await tx.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
    if(String(saved?.generation_hash||"")!==generation){
-    const priorGeneration=String(saved?.generation_hash||""),hasBaseline=priorGeneration.startsWith("rank-v2:")||priorGeneration.startsWith("rank-v3:")||priorGeneration.startsWith("rank-v4:");
+    const priorGeneration=String(saved?.generation_hash||""),hasBaseline=priorGeneration.startsWith("rank-v2:")||priorGeneration.startsWith("rank-v3:")||priorGeneration.startsWith("rank-v4:")||priorGeneration.startsWith("rank-v5:");
     const previous=hasBaseline?parseRankState(saved?.state):{},now=new Date().toISOString();
     const historyRows=rows.map(row=>({uid:String(row.uid),global_rank:Number(row.global_rank),id:String(row.id),score:Number(row.verified_score)}));
     const next=nextRankHistory(historyRows,previous,now);
