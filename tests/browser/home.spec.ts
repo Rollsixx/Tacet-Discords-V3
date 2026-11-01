@@ -37,7 +37,7 @@ test('Home Top 5 panels, player links, beta navigation and local portraits',asyn
  await patchPickers[0].click();
  const characterMenu=page.getByRole('listbox',{name:'Choose a 1.x Resonator'});
  await expect(characterMenu).toBeVisible();
- await expect(characterMenu.locator('.resonator-portrait').first()).toBeVisible();
+ await expect(characterMenu.locator('.lb-patch-option-avatar').first()).toBeVisible();
  await page.keyboard.press('Escape');
  await expect.poll(()=>page.locator('img.lb-board-mark').evaluate((image:HTMLImageElement)=>image.complete&&image.naturalWidth>0)).toBe(true);
  await expect(page.locator('.lb-player-row')).toHaveCount(1);
