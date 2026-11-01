@@ -60,7 +60,7 @@ test("leaderboard expansion stays readable at 360px, 768px, and 1280px and recov
 
   const expand = page.getByRole("button", { name: "View Responsive QA Echoes", exact: true });
   await expand.click();
-  await expect(expand).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Hide Responsive QA Echoes", exact: true })).toHaveAttribute("aria-expanded", "true");
   const mobileDetail = page.locator(".lb-mobile-rank-card .lb-expanded");
   await expect(mobileDetail).toBeVisible();
   await expect(mobileDetail.locator(".lb-echo")).toHaveCount(5);
@@ -86,7 +86,11 @@ test("leaderboard expansion stays readable at 360px, 768px, and 1280px and recov
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator(".lb-table-wrap")).toBeVisible();
   await expect(page.locator(".lb-mobile-rankings")).toBeHidden();
-  await page.getByRole("button", { name: "View Responsive QA Echoes", exact: true }).click();
+  const desktopToggle = page.locator(".lb-table-wrap .lb-player-button");
+  await desktopToggle.click();
+  await expect(desktopToggle).toHaveAttribute("aria-expanded", "false");
+  await desktopToggle.click();
+  await expect(desktopToggle).toHaveAttribute("aria-expanded", "true");
   const desktopDetail = page.locator(".lb-detail-content .lb-expanded");
   await expect(desktopDetail).toBeVisible();
   await expect(desktopDetail.locator(".lb-echo")).toHaveCount(5);
