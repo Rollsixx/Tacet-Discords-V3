@@ -22,7 +22,7 @@ export async function seedCorrection(db,character='Carlotta',{verified=true,inco
  return {id,uid,data,slot,position,image,original,displayed};
 }
 export async function ensureTestRotation(db,character){
- const w=await rotationWorkspace(db,character);if(w.active.policy_id!=='awaiting-owner-rotation/1')return;
+ const w=await rotationWorkspace(db,character);if(w.active.kind!=='baseline'&&w.active.policy_id!=='awaiting-owner-rotation/1')return;
  await seedCorrection(db,character,{incorrect:false,uid:'833333336'});
  const a=w.catalog.find(a=>!a.mainEcho&&!['Healing','Shield','ElementalEffect'].includes(a.damageType));
  await saveRotationDraft(db,character,{name:'Synthetic correction test only',mode:'admin-reviewed',actions:[{type:a.type,key:a.key,count:1}]},0);

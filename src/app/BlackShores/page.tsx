@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "../admin.css";
 import { ModerationPanel } from "@/components/moderation-panel";
 
 export const metadata: Metadata = {

@@ -106,7 +106,7 @@ for(const character of ['Carlotta','Lucilla','Rebecca'])test(character+' histori
  }finally{db.close();}
 });
 test('historical verification never bypasses other invalid canonical fields',async()=>{
- const {verifyHistoricalCorrections}=await import('./correction-workflow.mjs');const db=createClient({url:'file::memory:'});try{await migrate(db);const f=await seedCorrection(db);const d=structuredClone(f.data);d.substatCorrections=[{slot:f.slot,position:f.position,original:'DEF 8.1%',replacement:'DEF 11.8%'}];d.assessment.sourceSlots[f.slot-1].substats[0].value='DEF 13.7%';await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(d),f.id]});const r=await verifyHistoricalCorrections(f.id,d.substatCorrections,'QA',true,'',db);assert.equal(r.ranked,false);assert.match(r.reason,/13.7/);}finally{db.close();}
+ const {verifyHistoricalCorrections}=await import('./correction-workflow.mjs');const db=createClient({url:'file::memory:'});try{await migrate(db);const f=await seedCorrection(db);const d=structuredClone(f.data);d.substatCorrections=[{slot:f.slot,position:f.position,original:'DEF 8.1%',replacement:'DEF 11.8%'}];d.slots[f.slot-1].substats[1].value='DEF 13.7%';d.assessment.sourceSlots[f.slot-1].substats[1].value='DEF 13.7%';await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(d),f.id]});const r=await verifyHistoricalCorrections(f.id,d.substatCorrections,'QA',true,'',db);assert.equal(r.ranked,false);assert.match(r.reason,/13.7/);}finally{db.close();}
 });
 
 

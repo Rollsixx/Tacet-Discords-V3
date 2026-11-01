@@ -15,12 +15,12 @@ test('state machine rejects incomplete rules and tracks repeat resources, bounds
  const cooldown=structuredClone(syntheticModel);Object.assign(cooldown.actions['skill:ArtofViolenceDMG'],{cooldownKey:'skill',cooldownMs:2000});assert.equal(simulate({...spec,actions:[{...spec.actions[0],count:2}]},cooldown).valid,false);
 });
 test('drafts autosave with revision CAS, engine catalog validation and fail-closed publication',async()=>{
- const db=createClient({url:'file::memory:'});try{await migrate(db);await seed(db);const before=await listBuilds({},db);const workspace=await rotationWorkspace(db,'Carlotta');assert.equal(workspace.characters.length,15);assert.equal(workspace.active.kind,'baseline');assert.ok(workspace.catalog.length>10);
+ const db=createClient({url:'file::memory:'});try{await migrate(db);await seed(db);const before=await listBuilds({},db);const workspace=await rotationWorkspace(db,'Carlotta');assert.equal(workspace.characters.length,39);assert.equal(workspace.active.kind,'baseline');assert.ok(workspace.catalog.length>10);
  const saved=await saveRotationDraft(db,'Carlotta',spec,0);assert.equal(saved.revision,1);await assert.rejects(saveRotationDraft(db,'Carlotta',{...spec,name:'Conflicting tab'},0),e=>e.status===409);
  await assert.rejects(normalizeSpec('Carlotta',{...spec,actions:[{...spec.actions[0],buffs:[{modifier:'ATK',modifierValue:999}]}]}));
  await assert.rejects(normalizeSpec('Carlotta',{...spec,actions:[{type:'skill',key:'InventedAttack',count:1}]}));
  assert.equal((await validateRotationDraft(db,'Carlotta',1)).valid,false);const sample=await sampleRotationDraft(db,'Carlotta',1);assert.equal(sample.provisional,true);assert.equal(sample.builds.length,1);assert.ok(sample.builds[0].score>0);assert.equal(sample.builds[0].actions.length,1);
- await assert.rejects(startRotationPreview(db,'Carlotta',1),e=>e.status===422);assert.deepEqual((await listBuilds({},db)).builds.map(b=>[b.id,b.score,b.identityVerified]),before.builds.map(b=>[b.id,b.score,b.identityVerified]));await initializeRotations(db);assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM rotation_versions')).rows[0].n),15);
+ await assert.rejects(startRotationPreview(db,'Carlotta',1),e=>e.status===422);assert.deepEqual((await listBuilds({},db)).builds.map(b=>[b.id,b.score,b.identityVerified]),before.builds.map(b=>[b.id,b.score,b.identityVerified]));await initializeRotations(db);assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM rotation_versions')).rows[0].n),39);
  }finally{db.close();}
 });
 test('version staging, continuing submissions, atomic activation, approval catch-up, history and rollback',async()=>{
@@ -59,7 +59,7 @@ test('append-only rotation migration preserves every existing player, submission
  await db.execute('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');for(const migration of migrations.filter(m=>m.version<7)){for(const sql of migration.statements)await db.execute(sql);await db.execute({sql:'INSERT INTO schema_migrations VALUES (?,?)',args:[migration.version,'2026-10-28']});}
  const id='abbbbbbb-bbbb-4bbb-abbb-bbbbbbbbbbbb';await db.execute("INSERT INTO players VALUES ('812345678','2026-10-28',1,'2026-10-28')");await db.execute({sql:"INSERT INTO submissions VALUES (?, '812345678','Preserved player','Carlotta','preserved-fingerprint','{}','approved','2026-10-28','2026-10-28',1)",args:[id]});
  await db.execute({sql:'INSERT INTO calculation_results VALUES (?,42,?,?,?,?,?,?)',args:[id,'engine','data','case','2026-10-28','policy','{}']});
- const tables=['players','submissions','calculation_results'];const before=await Promise.all(tables.map(t=>db.execute('SELECT * FROM '+t)));await migrate(db);for(const [i,t]of tables.entries())assert.deepEqual((await db.execute('SELECT * FROM '+t)).rows,before[i].rows);await initializeRotations(db);for(const [i,t]of tables.entries())assert.deepEqual((await db.execute('SELECT * FROM '+t)).rows,before[i].rows);assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM rotation_score_history')).rows[0].n),1);
+ const tables=['players','submissions','calculation_results'];const before=await Promise.all(tables.map(t=>db.execute('SELECT * FROM '+t)));const preserve=(table,rows)=>table==='players'?rows.map(({avatar_character,...row})=>row):table==='submissions'?rows.map(({replaced_by,...row})=>row):rows;await migrate(db);for(const [i,t]of tables.entries())assert.deepEqual(preserve(t,(await db.execute('SELECT * FROM '+t)).rows),preserve(t,before[i].rows));await initializeRotations(db);for(const [i,t]of tables.entries()){const after=(await db.execute('SELECT * FROM '+t)).rows;assert.deepEqual(preserve(t,after),preserve(t,before[i].rows));if(t==='players')assert.equal(after[0].avatar_character,'Carlotta');}assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM rotation_score_history')).rows[0].n),1);
  }finally{db.close();}
 });
 
@@ -111,7 +111,7 @@ test('each Main Echo receives its pinned optimizer buff defaults on every rotati
  for(const [key,echo] of Object.entries(engine.mainEchoesData)){
   const defs=echoBuffDefinitions(echo);if(!defs.length)continue;
   const set=echo.sets[0];const identities=Array.from({length:5},()=>({echo:key,set}));
-  const compiled=compileReviewed({effectMode:'admin-reviewed',defaults:[],actions},catalog,identities);
+  const compiled=compileReviewed({effectMode:'admin-reviewed',actions},catalog,identities);
   for(const action of compiled.actions){
    const buffs=action.advancedConfig.mainEchoBuff?.buffs;
    assert.ok(buffs, key+' Main Echo defaults missing');

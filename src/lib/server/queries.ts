@@ -14,7 +14,7 @@ export async function listBuilds(options: { search?: string; character?: string;
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
   const character = (options.character || "").slice(0, 64).trim();
-  const patchMajor = (options.patchMajor || "").match(/^\\d{1,2}$/)?.[0] || "";
+  const patchMajor = (options.patchMajor || "").match(/^\d{1,2}$/)?.[0] || "";
   const patchCharacters = patchMajor ? featuredResonators.filter(item => item.patchVersion.startsWith(patchMajor + ".")).map(item => item.name) : [];
   if (patchMajor && !patchCharacters.length) return {builds:[],page,hasMore:false,scoring:scoringReadiness};
   const patchSql = patchMajor ? ` AND s.character IN (${patchCharacters.map(() => "?").join(",")})` : "";
@@ -30,17 +30,20 @@ export async function listBuilds(options: { search?: string; character?: string;
   let builds=result.rows.slice(0,20).map(publicBuild);
   // A player's profile uses the same live rank and movement record as the boards.
   if(!options.includePending&&!options.pending&&(options.uid||options.id)&&builds.length){
-    const histories=await Promise.all([...new Set(builds.map(build=>build.character))].map(async resonator=>{
+    // This client may be an in-memory SQLite database with a single connection;
+    // rank-history writes must not race one another inside Promise.all.
+    const histories=[] as Array<readonly [string, typeof builds]>;
+    for(const resonator of [...new Set(builds.map(build=>build.character))]){
       const board=await listLeaderboard({character:resonator,search:options.uid||builds.find(build=>build.character===resonator)!.uid},db);
-      return [resonator,board.builds] as const;
-    }));
+      histories.push([resonator,board.builds]);
+    }
     const byCharacter=new Map(histories);
     builds=builds.map(build=>{
       const ranked=byCharacter.get(build.character)?.find(candidate=>candidate.uid===build.uid);
       return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,rankHasHistory:ranked?.rankHasHistory??false};
     });
   }
-  let medals={top1:0,top2:0,top3:0,total:0};
+  const medals={top1:0,top2:0,top3:0,total:0};
   if(options.uid&&!options.includePending&&!options.pending){
     const marks=SUPPORTED.map(()=>"?").join(",");
     const medalRows=await db.execute({sql:`WITH eligible AS (
@@ -137,21 +140,25 @@ export async function adminOverview(db: Client = database()) {
     (SELECT COUNT(*) FROM submissions WHERE status='pending') AS pending,
     (SELECT COUNT(*) FROM submissions WHERE status='approved' AND replaced_by IS NULL) AS approved,
     (SELECT COUNT(DISTINCT uid) FROM submissions WHERE status='approved' AND replaced_by IS NULL AND identity_verified=0) AS unverified,
-    (SELECT COUNT(*) FROM players) AS players`);
-  return Object.fromEntries(Object.entries(result.rows[0]).map(([key,value])=>[key,Number(value)])) as {pending:number;approved:number;unverified:number;players:number};
+    (SELECT COUNT(*) FROM players) AS players,
+    (SELECT CAST((julianday('now')-julianday(MIN(created_at)))*24 AS INTEGER) FROM submissions WHERE status='pending') AS oldest_pending_hours`);
+  return {...Object.fromEntries(Object.entries(result.rows[0]).filter(([key])=>key!=='oldest_pending_hours').map(([key,value])=>[key,Number(value)])),oldestPendingAgeHours:result.rows[0].oldest_pending_hours==null?null:Number(result.rows[0].oldest_pending_hours)} as {pending:number;approved:number;unverified:number;players:number;oldestPendingAgeHours:number|null};
 }
 
-export async function listAdminAudit(page = 1, search = "", db: Client = database()) {
+export async function listAdminAudit(page = 1, search = "", db: Client = database(), reviewerFilter = "", actionFilter = "") {
   page = Math.min(10000,Math.max(1,Number.isFinite(page)?Math.floor(page):1));
   const query=search.trim().slice(0,64).toLowerCase();
+  const reviewer=reviewerFilter.trim().slice(0,64).toLowerCase(),action=actionFilter.trim().slice(0,40).toLowerCase();
   const result=await db.execute({sql:`WITH events AS (
     SELECT id,submission_id,action,reviewer,note,created_at FROM moderation_events
     UNION ALL SELECT id,submission_id,action,reviewer,note,created_at FROM build_events
     UNION ALL SELECT id,submission_id,'rejected' AS action,reviewer,note,created_at FROM rejection_events
     UNION ALL SELECT id,submission_id,action,reviewer,note,created_at FROM admin_audit_events
-  ) SELECT * FROM events WHERE (?='' OR instr(lower(submission_id||' '||reviewer||' '||action),?)>0)
-    ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?`,args:[query,query,(page-1)*20]});
-  return {events:result.rows.slice(0,20).map(row=>({id:String(row.id),submissionId:String(row.submission_id),action:String(row.action),reviewer:String(row.reviewer),note:String(row.note),createdAt:String(row.created_at)})),page,hasMore:result.rows.length>20};
+  ) SELECT events.*,s.uid,s.character FROM events LEFT JOIN submissions s ON s.id=events.submission_id
+    WHERE (?='' OR instr(lower(events.submission_id||' '||events.reviewer||' '||events.action),?)>0)
+      AND (?='' OR lower(events.reviewer)=?) AND (?='' OR lower(events.action)=?)
+    ORDER BY events.created_at DESC,events.id DESC LIMIT 21 OFFSET ?`,args:[query,query,reviewer,reviewer,action,action,(page-1)*20]});
+  return {events:result.rows.slice(0,20).map(row=>({id:String(row.id),submissionId:String(row.submission_id),action:String(row.action),reviewer:String(row.reviewer),note:String(row.note),createdAt:String(row.created_at),uid:row.uid==null?null:String(row.uid),character:row.character==null?null:String(row.character)})),page,hasMore:result.rows.length>20};
 }
 
 export async function findPlayers(search = "", db: Client = database()) {
@@ -168,10 +175,13 @@ export async function findPlayers(search = "", db: Client = database()) {
 // Return only the fields needed on Home, never full Echo records or private submissions.
 export async function homeRankings(db: Client = database()) {
  const configuration=await homeFeaturedSettings(db);
- const boards=await Promise.all(configuration.featured.map(async character=>{
+ const boards=[] as Array<{character:string;players:Array<{id:string;uid:string;ign:string;rank:number;score:number}>}>;
+ // Rank history updates write to the same database connection. Keep featured
+ // boards sequential so SQLite and remote single-connection clients stay safe.
+ for(const character of configuration.featured){
   const result=await listLeaderboard({character:character.name},db);
-  return {character:character.name,players:result.builds.slice(0,5).map(build=>({id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}))};
- }));
+  boards.push({character:character.name,players:result.builds.slice(0,5).map(build=>({id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}))});
+ }
  return {boards,featured:configuration.featured};
 }
 

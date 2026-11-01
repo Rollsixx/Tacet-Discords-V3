@@ -54,28 +54,29 @@ export function compileReviewed(spec,catalog,identities){
  const sharedDefaults=[...fixed,...(spec.defaults||[]).map(e=>({...e,source:'rotation default'}))];
  const automaticMain=Object.fromEntries(echoBuffDefinitions(main).map(d=>[d.key,{isEnabled:Boolean(d.alwaysEnabled),stacks:d.alwaysEnabled?d.maxStacks||0:0}]));
  const definitions=new Map(catalog.map(d=>[d.id,d]));
- function compile(effects,mainBuffs=automaticMain){
-  const advancedConfig={mainEchoBuff:{buffs:structuredClone(mainBuffs)}},applied=[],inactive=[];
+ function compile(effects,mainBuffs=null){
+  const advancedConfig=mainBuffs?{mainEchoBuff:{buffs:structuredClone(mainBuffs)}}:{},applied=[],inactive=[];
   for(const e of effects){
    const d=definitions.get(e.id);if(!d)throw new HttpError(400,'Unknown optimizer effect.');
    const config={isEnabled:e.isEnabled,...(d.hasStacks?{stacks:e.stacks}:{})};
    if((d.category==='echoSetPassives'&&!equipped.has(d.scope))||(d.category==='mainEchoBuff'&&d.scope!==identities[0].echo)){inactive.push(d.label);continue;}
-   if(d.category==='mainEchoBuff'){advancedConfig.mainEchoBuff||={buffs:structuredClone(mainBuffs)};advancedConfig.mainEchoBuff.buffs[d.key]=config;}
+   if(d.category==='mainEchoBuff'){advancedConfig.mainEchoBuff||={buffs:structuredClone(mainBuffs||{})};advancedConfig.mainEchoBuff.buffs[d.key]=config;}
    else(advancedConfig[d.category]||={})[d.key]=config;
    applied.push({effect:d.label,...config,...(e.source?{source:e.source}:{})});
   }
   return {advancedConfig,applied,inactive};
  }
  const shared=automatic||spec.defaults!==undefined;
- const base=compile(sharedDefaults).advancedConfig;
+ const mainEchoDefault=(spec.defaults||[]).some(e=>definitions.get(e.id)?.category==='mainEchoBuff'&&definitions.get(e.id)?.scope===identities[0].echo);
+ const base=compile(sharedDefaults,automatic||mainEchoDefault?automaticMain:null).advancedConfig;
  const trace=[];
  const actions=spec.actions.map((a,i)=>{
   const resolved=new Map(sharedDefaults.map(e=>[e.id,e]));
   for(const e of a.effects||[])resolved.set(e.id,{...e,...(shared?{source:'move override'}:{})});
-  const full=compile([...resolved.values()]);
+  const full=compile([...resolved.values()],shared?(base.mainEchoBuff?.buffs||null):automaticMain);
   // Synced moves use the optimizer's shared-context fast path. Rebuild a
   // context only for real per-move overrides; preserve all Main Echo buffs.
-  const advancedConfig=shared?compile(a.effects||[],base.mainEchoBuff?.buffs||automaticMain).advancedConfig:full.advancedConfig;
+  const advancedConfig=shared?(automatic&&!(a.effects||[]).length?{}:compile(a.effects||[],base.mainEchoBuff?.buffs||null).advancedConfig):full.advancedConfig;
   trace.push({index:i+1,key:a.key,count:a.count,applied:full.applied,inactive:full.inactive,note:automatic?'Permanent Resonator, signature weapon, equipped Sonata and Main Echo effects resolved per build. Unproven conditional triggers remain off unless explicitly overridden; no cooldown or resource simulation is claimed.':shared?'Rotation defaults with move overrides; equipment-gated per build. Every repeat shares these assumptions; timing and resources require owner review.':'Owner-configured effects for every repeat; resource availability and timing require owner review.'});
   return {type:a.type,key:a.key,count:a.count,...(a.mainEcho?{mainEcho:a.mainEcho}:{}),advancedConfig};
  });

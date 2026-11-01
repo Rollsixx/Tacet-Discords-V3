@@ -1,0 +1,1 @@
+export default function Loading(){return <section className="route-loading" aria-label="Loading page"><div className="skeleton-line skeleton-title"/><div className="skeleton-line"/><div className="skeleton-panel"/><div className="skeleton-panel"/></section>;}

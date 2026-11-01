@@ -11,7 +11,7 @@ test('defaults attribute and kit damage stats from each Resonator',()=>{
  assert.equal(cartethyia.damage.field,'basicAttackDMGBonus');
 });
 test('metric icons resolve to bundled stat icons',()=>{
- assert.equal(attributeMetric({element:'Glacio'}).icon,'/stat-icons/glacio.png');
+ assert.equal(attributeMetric({element:'Glacio'}).icon,'/stat-icons/glacio.webp');
 });
 test('fraction-valued stats retain full percentages above 2',()=>{
  assert.equal(formatLeaderboardMetric(.82,true,'energyRegen'),'82%');
@@ -34,5 +34,5 @@ test('format raw and missing stats without inventing values',()=>{
 
 test('damage bonus labels use compact Resonance abbreviations',()=>{
  assert.equal(selectableLeaderboardMetrics.find(item=>item.id==='resonanceSkillDMGBonus').label,'RES. Skill');
- assert.equal(selectableLeaderboardMetrics.find(item=>item.id==='resonanceLiberationDMGBonus').label,'RES. Liberation');
+ assert.equal(selectableLeaderboardMetrics.find(item=>item.id==='resonanceLiberationDMGBonus').label,'RES. Lib');
 });

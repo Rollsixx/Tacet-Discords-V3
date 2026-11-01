@@ -25,8 +25,10 @@ export default function ImportPage() {
   const [readiness,setReadiness]=useState<ScoringReadiness|null>(null);
   const [identityChecking,setIdentityChecking]=useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [dragOver,setDragOver]=useState(false);
   const previewUrl = useRef("");
   useEffect(() => () => { if (previewUrl.current) URL.revokeObjectURL(previewUrl.current); }, []);
+  useEffect(()=>{const paste=(event:ClipboardEvent)=>{if(scanning.current)return;const image=Array.from(event.clipboardData?.items||[]).find(item=>item.type.startsWith("image/"))?.getAsFile();if(image){event.preventDefault();choose(image);}};const beforeUnload=(event:BeforeUnloadEvent)=>{if(scanning.current){event.preventDefault();event.returnValue="";}};window.addEventListener("paste",paste);window.addEventListener("beforeunload",beforeUnload);return()=>{window.removeEventListener("paste",paste);window.removeEventListener("beforeunload",beforeUnload);};});
 
   async function scan(candidate: File) {
     if (scanning.current) return;
@@ -73,8 +75,9 @@ export default function ImportPage() {
     <PageHeading eyebrow="Build workspace / 01" title="Import your build." description="Drop a 1920 × 1080 build card. Scanning starts automatically; review the results before uploading." />
     <div className="import-workspace">
       <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" className="visually-hidden" aria-label="Choose build screenshot" disabled={running} onChange={e => choose(e.target.files?.[0])} />
-      {!file ? <Panel><div className="upload-zone" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); choose(e.dataTransfer.files[0]); }}>
+      {!file ? <Panel><div className={`upload-zone${dragOver?' drag-active':''}`} onDragEnter={e=>{e.preventDefault();setDragOver(true);}} onDragOver={e => {e.preventDefault();setDragOver(true);}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setDragOver(false);}} onDrop={e => { e.preventDefault();setDragOver(false); choose(e.dataTransfer.files[0]); }}>
         <div className="upload-icon" aria-hidden="true">↑</div><h2>Drop your build card here</h2><p className="muted">1920 × 1080 · PNG, JPEG or WebP · Up to 10 MB</p>
+        <p className="muted">You can also paste a screenshot with Ctrl+V.</p><details className="build-card-guide"><summary>What should my 1920 × 1080 screenshot show?</summary><p>Open the in-game Resonator details page and capture the full screen at 1920 × 1080. Keep your player name and UID, character panel, weapon, and all five Echo cards with their main stats and substats visible. Don’t crop, resize, or cover any values.</p></details>
         <button className="action" onClick={() => input.current?.click()}>Browse screenshot</button>
       </div></Panel> : <>
         <div className="import-file-bar"><div><strong>{file.name}</strong><p className="muted">{running ? "Scanning automatically…" : "Screenshot scanned · Stats locked"}</p></div><button className="outline-button" disabled={running} onClick={reset}>{submitted ? "Import another build" : "Choose another screenshot"}</button></div>
@@ -89,11 +92,10 @@ export default function ImportPage() {
           <p className="muted scan-footnote">A stat pass does not establish Echo identity or leaderboard eligibility. Passed means the extracted fields are readable and structurally valid. Every stat is checked against the screenshot when you submit.</p>
         </Panel>
         {identity && <Panel className="import-character"><ResonatorPortrait key={identity.character} name={identity.character||""} className="import-character-portrait"/><div><span className="eyebrow">Character</span><h2>{identity.character ? resonatorDisplayName(identity.character) : "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
-        {preview && <details className="source-preview"><summary>Compare original screenshot</summary>
+        {(preview||result)&&<div className="import-evidence-layout">{preview && <details className="source-preview" open><summary>Original screenshot · compare with the extracted Echo values</summary>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="Selected build screenshot" />
-        </details>}
-        {result && <>
+        </details>}{result && <section className="import-extracted" aria-label="Extracted Echo values">
           <div className="import-results-heading"><h2>{result.slots.length} Echo slots processed</h2><span className="tag">{issues.length ? "Rescan required" : "No structural warnings"}</span></div>
           <EchoVisualPreview file={file} renderFields={slotNumber => {
             const slot = result.slots[slotNumber - 1];
@@ -106,8 +108,8 @@ export default function ImportPage() {
               {warnings.map(issue => <p key={issue.code} className="field-error">{issue.message}</p>)}
               <details><summary>Original OCR and automatic corrections</summary><p className="muted">Cost: {slot.cost.raw || "Unreadable"}{slot.cost.autoRecovered ? ` (recovered from image: ${slot.cost.value})` : ""}</p><p className="muted">{slot.mainStat.raw}{slot.mainStat.autoRecovered ? ` (corrected to ${slot.mainStat.value})` : ""}</p>{slot.substats.map((stat, i) => <p className="muted" key={i}>Substat {i+1}: {stat.raw || "Unreadable"}{stat.autoRecovered ? ` (corrected to ${stat.value})` : ""}</p>)}</details></>;
           }} />
-          <SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onRetryScan={()=>void scan(file)} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />
-        </>}
+        </section>}</div>}
+        {result&&<SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onRetryScan={()=>void scan(file)} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />}
       </>}
       {error && <div className="workspace-note"><p role="alert" className="field-error">{error}</p>{file && !running && <button className="outline-button" onClick={() => scan(file)}>Retry scan</button>}</div>}
       <p className="muted import-privacy">Large screenshots are prepared once before scanning; the same image is used for upload verification. Only your character and Echo cards are used here. After you submit, the server checks your screenshot UID, Echo stats and scoring evidence, then discards the original. Approved builds show your UID and IGN publicly.</p>

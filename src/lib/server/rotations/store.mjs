@@ -179,6 +179,11 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
   must(await clock(tx,run.character)===Number(run.source_revision),'Approved builds changed. Refresh the leaderboard preview before publishing.');
   if(run.draft_revision!==null){const d=(await tx.execute({sql:'SELECT * FROM rotation_drafts WHERE character=?',args:[run.character]})).rows[0];must(d&&Number(d.revision)===Number(run.draft_revision)&&d.spec_hash===version.spec_hash,'Draft changed. Revalidate and preview the new revision.');}
   if(JSON.parse(version.spec).mode===REVIEWED_MODE)must(ownerReviewed===true,'Confirm owner review of combat legality and benchmark assumptions.',400);
+  const staged=Number((await tx.execute({sql:'SELECT COUNT(*) n FROM rotation_run_scores WHERE run_id=?',args:[id]})).rows[0]?.n||0);
+  must(staged>0,'No current build with verified scoring inputs is available for this rotation preview.',422);
+  const changedPrivateInputs=Number((await tx.execute({sql:`SELECT COUNT(*) n FROM rotation_run_scores r JOIN submissions s ON s.id=r.submission_id
+   WHERE r.run_id=? AND s.status='pending' AND s.character=? AND s.replaced_by IS NULL AND r.input_data<>s.data`,args:[id,run.character]})).rows[0]?.n||0);
+  must(changedPrivateInputs===0,'No current build with verified scoring inputs is available for this rotation preview.',422);
   if(version.kind==='official'){const v=await validateSpec(run.character,JSON.parse(version.spec));must(v.valid&&v.mechanicsVersion===version.mechanics_version,'The pinned rotation validation no longer passes.',422);}
   // Independent coverage check, in addition to the approved-build clock.
   const missing=(await tx.execute({sql:`SELECT COUNT(*) n FROM submissions s WHERE s.character=? AND s.status='approved' AND s.replaced_by IS NULL
@@ -208,7 +213,9 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
   await tx.execute({sql:'INSERT INTO rotation_activations VALUES (?,?,?,?,?,?)',args:[randomUUID(),run.character,run.base_version_id,version.id,id,at]});
   await tx.execute({sql:"UPDATE rotation_runs SET state='activated',updated_at=? WHERE id=?",args:[at,id]});
   await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),version.id,'rotation_published','owner',run.character+'; '+version.spec_hash+(JSON.parse(version.spec).mode===REVIEWED_MODE?'; owner confirmed combat review':''),at]});
-  await tx.commit();const {revalidateCorrectedBuilds}=await import('../correction-workflow.mjs');const corrections=await revalidateCorrectedBuilds(db,{character:run.character});const {autoApproveVerifiedPendingBuildsForCharacter}=await import('../approval-workflow.mjs');const approvals=await autoApproveVerifiedPendingBuildsForCharacter(run.character,db);return {ok:true,versionId:version.id,corrections,approvals};
+  // Rotation publication may make pending, source-verified builds score-ready,
+  // but publication itself must never approve or rank a pending submission.
+  await tx.commit();const {revalidateCorrectedBuilds}=await import('../correction-workflow.mjs');const corrections=await revalidateCorrectedBuilds(db,{character:run.character});return {ok:true,versionId:version.id,corrections};
  }finally{tx.close();}
 }
 export async function scoreActiveRotation(db,character,data){

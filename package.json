@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mts",
-    "test": "node --test src/lib/scanner/*.test.mjs src/lib/server/*.test.mjs src/lib/leaderboards/*.test.mjs",
+    "test": "node --test src/lib/scanner/*.test.mjs src/lib/server/*.test.mjs src/lib/leaderboards/*.test.mjs src/lib/moderation/*.test.mjs",
     "predev": "node scripts/build-scoring-engine.mjs && node scripts/prepare-ocr.mjs",
     "prebuild": "node scripts/check-function-platform.mjs && node scripts/build-scoring-engine.mjs && npm run catalog:check && npm run scanner:regression && node scripts/prepare-ocr.mjs",
     "test:browser": "npm run build && playwright test",

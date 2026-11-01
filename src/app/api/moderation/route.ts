@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       const uid=params.get('uid')||'';if(!/^\d{8,12}$/.test(uid))throw new HttpError(400,'Valid player UID required.');
       return json(await adminPlayerBuilds(uid,page));
     }
-    if(params.get("view")==="audit")return json(await listAdminAudit(page,search));
+    if(params.get("view")==="audit")return json(await listAdminAudit(page,search,undefined,params.get("reviewer")||"",params.get("action")||""));
     if(params.get("view")==="rank-changes")return json(await listLeaderboardRankChanges(Number(params.get("limit"))||100));
     const [builds,overview,activity]=await Promise.all([
       listBuilds({ pending:params.get("status")!=="approved",search,page,character:params.get("character")||"" }),
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       typeof input.note !== "string" || input.note.length > 500 || typeof input.identityVerified !== "boolean") {
       throw new HttpError(400, "Valid review action and moderator name required; note is optional.");
     }
+    if(input.action==="rejected"&&!(["incomplete","mismatch","unsupported","other"] as unknown[]).includes(input.reasonCode))throw new HttpError(400,"Choose a rejection reason before rejecting this submission.");
     await moderate(input.id, input.action as "approved" | "rejected", input.reviewer.trim(), input.note, input.identityVerified, undefined, input.allowUnranked===true);
     return json({ ok: true });
   } catch (error) { return failure(error); }

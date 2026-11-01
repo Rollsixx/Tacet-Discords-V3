@@ -59,14 +59,15 @@ test("server validates all five slots, crop dimensions, OCR corrections and nume
     x => { x.uid = "bad"; },
     x => { x.confirmed = false; },
     x => { x.slots[4].slot = 1; },
-    x => { x.slots[0].substats[0].value = "Crit. Rate 105%"; },
-    x => { x.slots[0].substats[4].value = "Resonance Skill DMG Bonus 105%"; },
     x => { x.slots[0].portrait = testSmallPng(); },
     x => { x.slots[4].sonata = null; },
   ]) {
     const input = fixture(); mutate(input);
     assert.throws(() => validateSubmission(input), e => e.status === 400);
   }
+  const oversized = fixture();
+  oversized.slots[0].substats[0].value = "Crit. Rate 105%";
+  assert.equal(validateSubmission(oversized).slots[0].substats[0].value, "Crit. Rate 105%");
   function testSmallPng() { return fixture().slots[0].sonata; }
   const corrected = fixture();
   corrected.slots[0].substats[0].raw = "Crit. Rate 105%";
@@ -113,7 +114,7 @@ test("public queries are bounded, deterministic and preserve multiple builds per
     await moderate(second.id, "approved", "Reviewer", "", false, db);
     assert.equal((await listBuilds({ search: "812345678" }, db)).builds.length, 2);
     for (let i = 0; i < 22; i++) {
-      await db.execute({sql: "INSERT INTO submissions SELECT ?,uid,ign,character,?,data,status,created_at,reviewed_at,identity_verified FROM submissions WHERE id=?", args: ["pagination-"+i, "unique-"+i, first.id]});
+      await db.execute({sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,status,created_at,reviewed_at,identity_verified) SELECT ?,uid,ign,character,?,data,status,created_at,reviewed_at,identity_verified FROM submissions WHERE id=?", args: ["pagination-"+i, "unique-"+i, first.id]});
     }
     const page1 = await listBuilds({}, db); const page2 = await listBuilds({page:2}, db);
     assert.equal(page1.builds.length, 20); assert.equal(page1.hasMore, true);
@@ -184,12 +185,12 @@ test('admin dashboard, ID search, audited approved deletion and rollback are rea
   const first=await submit(validateSubmission(firstInput),db);
   const input=fixture();input.character='Hiyuki';
   const second=await submit(validateSubmission(input),db);
-  assert.deepEqual(await adminOverview(db),{pending:2,approved:0,unverified:0,players:1});
+  assert.deepEqual(await adminOverview(db),{pending:2,approved:0,unverified:0,players:1,oldestPendingAgeHours:0});
   assert.equal((await listBuilds({pending:true,search:first.id},db)).builds.length,1);
   await moderate(first.id,'approved','Owner label','Reviewed crops',true,db);
   await db.execute({sql:'INSERT INTO calculation_results(submission_id,score,engine_version,data_version,reference_case_version,verified_at,policy_id,details) VALUES (?,?,?,?,?,?,?,?)',args:[first.id,100,scoringReadiness.engineVersion,scoringReadiness.dataVersion,'test-reference',new Date().toISOString(),scoringReadiness.policyId,'{}']});
   assert.equal((await listLeaderboard({character:'Lucy'},db)).builds.length,1);
-  assert.deepEqual(await adminOverview(db),{pending:1,approved:1,unverified:0,players:1});
+  assert.deepEqual(await adminOverview(db),{pending:1,approved:1,unverified:0,players:1,oldestPendingAgeHours:0});
   await db.execute("CREATE TRIGGER fail_delete BEFORE INSERT ON admin_audit_events WHEN NEW.action='deleted' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
   await assert.rejects(deleteBuild(first.id,'Owner label','Test rollback',db));
   assert.equal((await listBuilds({id:first.id},db)).builds.length,1);
