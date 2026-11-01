@@ -1270,11 +1270,14 @@ input[readonly] { opacity: .75; cursor: default; }
 .bs-rank-history td small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
 @media(max-width:650px){.lb-rank-composite{gap:3px}.lb-rank-days{font-size:9px}.lb-rank-tracking{font-size:8px}.lb-rank-unavailable small{max-width:94px}.bs-rank-history th,.bs-rank-history td{padding:9px 8px}}
 
-.pp-medals{margin:18px 0 24px;padding:18px 20px;border:1px solid #2b3743;border-radius:14px;background:linear-gradient(120deg,#141f29,#10171f)}
-.pp-medals h2{font-size:16px;margin:0 0 4px}.pp-medals>p{font-size:12px;color:#93a4b7;margin:0 0 14px}.pp-medals>div{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.pp-medal{min-width:115px;display:grid;grid-template-columns:26px 1fr;align-items:center;column-gap:8px;padding:9px 12px;border:1px solid #34404b;border-radius:11px;background:#111a23}
-.pp-medal>span{grid-row:span 2;font-size:20px}.pp-medal strong{font-size:19px}.pp-medal small{font-size:10px;color:#9aaabc}.pp-medal-gold>span{color:#e8bf53}.pp-medal-silver>span{color:#c5d0db}.pp-medal-bronze>span{color:#c78c5a}.pp-medals>div>b{margin-left:auto;color:#bac8d5;font-size:12px}
-.bs-rank-history .bs-table-scroll:focus-visible{outline:2px solid #8bc8ff;outline-offset:2px}
-@media(max-width:650px){.pp-medals{padding:14px}.pp-medals>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.pp-medal{min-width:0;padding:8px 6px;grid-template-columns:20px 1fr;column-gap:5px}.pp-medal>span{font-size:16px}.pp-medal strong{font-size:16px}.pp-medal small{font-size:9px}.pp-medals>div>b{grid-column:1/-1;margin:2px 0 0;text-align:right}.bs-rank-history table{min-width:780px}}
-
-.bs-rank-refreshing{color:#93c5fd;font-size:12px}
+.pp-player-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center}
+.pp-player-identity{min-width:0}
+.pp-medal-summary{display:flex;align-items:center;justify-content:flex-end;gap:14px;margin-left:24px;white-space:nowrap}
+.pp-medal-count{display:grid;grid-template-columns:auto auto;column-gap:6px;align-items:center}
+.pp-medal-count i{grid-row:span 2;font-style:normal;font-size:18px}
+.pp-medal-count b{font-size:17px;line-height:1.1}
+.pp-medal-count small{font-size:10px;color:#9aaabc;line-height:1.2}
+.pp-medal-gold i{color:#e8bf53}.pp-medal-silver i{color:#c5d0db}.pp-medal-bronze i{color:#c78c5a}
+.pp-medal-summary>strong{padding-left:14px;border-left:1px solid #34404b;color:#bac8d5;font-size:12px}
+@media(max-width:760px){.pp-player-header{grid-template-columns:auto minmax(0,1fr);row-gap:18px}.pp-medal-summary{grid-column:1/-1;justify-content:flex-start;margin-left:0;gap:clamp(12px,5vw,26px);padding-left:2px}.pp-medal-summary>strong{margin-left:auto}}
+@media(max-width:420px){.pp-medal-summary{gap:12px}.pp-medal-count i{font-size:16px}.pp-medal-count b{font-size:15px}.pp-medal-summary>strong{font-size:10px;padding-left:9px}}
