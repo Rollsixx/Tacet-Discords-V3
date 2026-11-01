@@ -52,7 +52,7 @@ test("leaderboard expansion stays readable at 360px, 768px, and 1280px and recov
 
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/leaderboards?character=Carlotta");
-  await expect(page.getByRole("alert")).toContainText("Temporary leaderboard error.");
+  await expect(page.locator(".lb-board .placeholder[role='alert']")).toContainText("Temporary leaderboard error.");
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.locator(".lb-mobile-rank-card")).toHaveCount(1);
   await expect(page.locator(".lb-mobile-rankings")).toBeVisible();
