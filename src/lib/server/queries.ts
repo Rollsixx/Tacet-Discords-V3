@@ -3,6 +3,7 @@ import type {Client,Row} from '@libsql/client';
 import {createHash} from 'node:crypto';
 import {nextRankHistory,rankHistoryEvents} from '../leaderboards/rank-history.mjs';
 import {aggregateMedalStandings} from '../leaderboards/medal-standings.mjs';
+import {buildDataConsistencyReport} from '../leaderboards/consistency-report.mjs';
 import {database} from './database.ts';
 import {HttpError} from './validation.ts';
 import {featuredResonators,latestResonators} from '../resonators.ts';
@@ -158,6 +159,38 @@ export async function listLeaderboardRankChanges(limit=100,db:Client=database(),
 export async function listPlayerRankHistory(uid:string,db:Client=database()){
  const result=await db.execute({sql:`SELECT e.id,e.character,e.event_type,e.old_rank,e.new_rank,e.old_score,e.new_score,COALESCE(e.new_build_id,e.old_build_id,'') AS build_id,e.changed_at FROM leaderboard_rank_events e WHERE e.uid=? ORDER BY e.changed_at DESC,e.id DESC LIMIT 100`,args:[uid]});
  return {events:result.rows.map(row=>({id:Number(row.id),character:String(row.character),type:String(row.event_type) as "moved"|"entered"|"left",oldRank:row.old_rank==null?null:Number(row.old_rank),newRank:row.new_rank==null?null:Number(row.new_rank),oldScore:row.old_score==null?null:Number(row.old_score),newScore:row.new_score==null?null:Number(row.new_score),buildId:String(row.build_id),changedAt:String(row.changed_at)}))};
+}
+
+export async function leaderboardConsistencyReport(db:Client=database()){
+ const marks=SUPPORTED.map(()=>"?").join(",");
+ const staleResult=await db.execute({sql:`SELECT s.id,s.uid,s.character,
+  CASE WHEN c.submission_id IS NULL THEN 'No current score record'
+       WHEN c.engine_version<>? THEN 'Score uses an older scoring engine'
+       WHEN c.data_version<>? THEN 'Score uses outdated scoring data'
+       ELSE 'Score uses an inactive rotation version' END AS reason
+  FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id
+  WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character IN (${marks})
+   AND (c.submission_id IS NULL OR c.engine_version<>? OR c.data_version<>? OR c.policy_id<>COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?))
+  ORDER BY s.created_at DESC,s.id LIMIT 100`,args:[ENGINE_VERSION,DATA_VERSION,...SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
+ const duplicateResult=await db.execute({sql:`SELECT uid,character,COUNT(*) AS count FROM submissions WHERE status='approved' AND replaced_by IS NULL GROUP BY uid,character HAVING COUNT(*)>1 ORDER BY count DESC,character,uid LIMIT 100`,args:[]});
+ const medalResult=await db.execute({sql:`WITH candidates AS (
+   SELECT s.id,s.uid,s.character,c.score,row_number() OVER(PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
+   FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
+   WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character IN (${marks})
+    AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
+  ), ranked AS (SELECT uid,character,row_number() OVER(PARTITION BY character ORDER BY score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1)
+  SELECT uid,SUM(CASE WHEN global_rank=1 THEN 1 ELSE 0 END) AS gold,SUM(CASE WHEN global_rank=2 THEN 1 ELSE 0 END) AS silver,SUM(CASE WHEN global_rank=3 THEN 1 ELSE 0 END) AS bronze FROM ranked WHERE global_rank<=3 GROUP BY uid`,args:[...SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
+ const expected=(await medalStandings(db)).players,profiles=new Map(medalResult.rows.map(row=>[String(row.uid),{gold:Number(row.gold),silver:Number(row.silver),bronze:Number(row.bronze)}]));
+ const expectedByUid=new Map(expected.map(player=>[player.uid,{gold:player.gold,silver:player.silver,bronze:player.bronze}]));
+ const medalMismatches=[...new Set([...profiles.keys(),...expectedByUid.keys()])].flatMap(uid=>{
+  const profile=profiles.get(uid)||{gold:0,silver:0,bronze:0},standings=expectedByUid.get(uid)||{gold:0,silver:0,bronze:0};
+  return profile.gold===standings.gold&&profile.silver===standings.silver&&profile.bronze===standings.bronze?[]:[{uid,profile,standings}];
+ });
+ return buildDataConsistencyReport({
+  staleScores:staleResult.rows.map(row=>({id:String(row.id),uid:String(row.uid),character:String(row.character),reason:String(row.reason)})),
+  duplicateBuilds:duplicateResult.rows.map(row=>({uid:String(row.uid),character:String(row.character),count:Number(row.count)})),
+  medalMismatches
+ });
 }
 
 export async function adminOverview(db: Client = database()) {
