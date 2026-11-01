@@ -12,7 +12,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!row) return json({ error: "Not found." }, 404);
     if (row.status !== "approved") authorize(request);
     const headers = row.status === "approved"
-      ? { ...privateHeaders, "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" }
+      ? {
+          ...privateHeaders,
+          // Keep browser revalidation while explicitly caching only on Vercel's
+          // edge. This avoids exposing stale Echo images in local browser caches.
+          "Cache-Control": "public, max-age=0, must-revalidate",
+          "Vercel-CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        }
       : privateHeaders;
     return new Response(row.png as ArrayBuffer, { headers: { ...headers, "Content-Type": "image/png", "Content-Security-Policy": "default-src 'none'; sandbox" } });
   } catch (error) { return failure(error); }
