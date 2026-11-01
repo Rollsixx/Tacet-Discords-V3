@@ -16,6 +16,11 @@ export type ReferenceLoadResult = {
   }>;
 };
 
+// Reference images are identical across scans. Cache decoded pixels and share
+// concurrent fetches so later scans skip repeated image downloads and canvas work.
+const decodedReferences = new Map<string, PixelImage>();
+const referenceLoads = new Map<string, Promise<PixelImage>>();
+
 export function validateReferenceDimensions(
   width: number,
   height: number,
@@ -70,43 +75,38 @@ export async function decodeReferenceImage(
 ): Promise<PixelImage> {
   validateReferenceDimensions(width, height);
   validateReferenceSources([source]);
+  const cacheKey = `${width}x${height}:${source.url}`;
+  const cached = decodedReferences.get(cacheKey);
+  if (cached) return cached;
+  const loading = referenceLoads.get(cacheKey);
+  if (loading) return loading;
 
-  const response = await fetch(source.url);
-
-  if (!response.ok) {
-    throw new Error(`Reference image request failed: ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const bitmap = await createImageBitmap(blob);
-
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-
-    const context = canvas.getContext("2d", {
-      willReadFrequently: true,
-    });
-
-    if (!context) {
-      throw new Error("Unable to create reference image canvas.");
+  const pending = (async () => {
+    const response = await fetch(source.url, { cache: "force-cache" });
+    if (!response.ok) throw new Error(`Reference image request failed: ${response.status}`);
+    const bitmap = await createImageBitmap(await response.blob());
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Unable to create reference image canvas.");
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(bitmap, 0, 0, width, height);
+      const image = context.getImageData(0, 0, width, height);
+      const decoded = { width: image.width, height: image.height, data: image.data };
+      decodedReferences.set(cacheKey, decoded);
+      return decoded;
+    } finally {
+      bitmap.close();
     }
-
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-
-    context.drawImage(bitmap, 0, 0, width, height);
-
-    const image = context.getImageData(0, 0, width, height);
-
-    return {
-      width,
-      height,
-      data: image.data,
-    };
+  })();
+  referenceLoads.set(cacheKey, pending);
+  try {
+    return await pending;
   } finally {
-    bitmap.close();
+    referenceLoads.delete(cacheKey);
   }
 }
 
