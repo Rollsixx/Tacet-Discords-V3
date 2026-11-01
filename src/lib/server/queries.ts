@@ -146,7 +146,7 @@ export async function listLeaderboard(options: {character?: string;search?: stri
 
 export async function listLeaderboardRankChanges(limit=100,db:Client=database(),filters:{character?:string;player?:string;from?:string;to?:string}={}){
  const character=(filters.character||"").trim().slice(0,64).toLowerCase(),player=(filters.player||"").trim().slice(0,64).toLowerCase();
- const from=/^\\d{4}-\\d{2}-\\d{2}$/.test(filters.from||"")?filters.from!:"",to=/^\\d{4}-\\d{2}-\\d{2}$/.test(filters.to||"")?filters.to!:"";
+ const from=/^\d{4}-\d{2}-\d{2}$/.test(filters.from||"")?filters.from!:"",to=/^\d{4}-\d{2}-\d{2}$/.test(filters.to||"")?filters.to!:"";
  const result=await db.execute({sql:`WITH events AS (
   SELECT e.id,e.character,e.uid,COALESCE(s.ign,e.uid) AS ign,e.event_type,e.old_rank,e.new_rank,e.old_score,e.new_score,COALESCE(e.new_build_id,e.old_build_id,'') AS build_id,e.changed_at FROM leaderboard_rank_events e LEFT JOIN submissions s ON s.id=COALESCE(e.new_build_id,e.old_build_id)
   UNION ALL SELECT -h.id,h.character,h.uid,COALESCE(s.ign,h.uid),'moved',h.old_rank,h.new_rank,NULL,h.score,h.build_id,h.changed_at FROM leaderboard_rank_changes h LEFT JOIN submissions s ON s.id=h.build_id
