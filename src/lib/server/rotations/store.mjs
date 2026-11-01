@@ -15,9 +15,10 @@ const must=(condition,message,status=409)=>{if(!condition)throw new HttpError(st
 async function active(db,character){return (await db.execute({sql:'SELECT v.* FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];}
 const clock=async(db,c)=>Number((await db.execute({sql:'SELECT revision FROM rotation_clock WHERE character=?',args:[c]})).rows[0]?.revision||0);
 export async function initializeRotations(db){
- // Insert-only seeds preserve every existing score and publication pointer.
+ // Read active characters once; insert-only seeds preserve every existing score and publication pointer.
+ const activeCharacters=new Set((await db.execute('SELECT character FROM rotation_active')).rows.map(row=>String(row.character)));
  for(const character of ROTATION_ROSTER){
-  if(await active(db,character))continue;
+  if(activeCharacters.has(character))continue;
   const data=await engine.getCharByName(character),preset=scoringPreset(character,data);
   const waiting=!preset;
   const selected=preset||{name:'Awaiting owner rotation · '+character,data:{actions:[]}};
@@ -218,8 +219,8 @@ export async function activateRotation(db,id,confirmation,ownerReviewed=false){
   await tx.commit();const {revalidateCorrectedBuilds}=await import('../correction-workflow.mjs');const corrections=await revalidateCorrectedBuilds(db,{character:run.character});return {ok:true,versionId:version.id,corrections};
  }finally{tx.close();}
 }
-export async function scoreActiveRotation(db,character,data){
- const version=await active(db,character);if(!version||version.kind==='baseline')return null;
+export async function scoreActiveRotation(db,character,data,selectedVersion){
+ const version=selectedVersion??await active(db,character);if(!version||version.kind==='baseline')return null;
  return evaluateVersion(character,data,version);
 }
 
