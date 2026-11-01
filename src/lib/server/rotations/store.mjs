@@ -32,6 +32,7 @@ export async function initializeRotations(db){
    }
    await tx.commit();
   }finally{tx.close();}
+  activeCharacters.add(character);
  }
 }
 export async function rotationWorkspace(db,character,historyPage=1){
