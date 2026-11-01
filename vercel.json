@@ -20,10 +20,9 @@
       "development/import-resonator-names-and-patch-dropdowns": false,
       "development/leaderboard-profile-filters-auto-approval": false,
       "development/verified-auto-approval-profile-avatar": false,
-      "development/fix-profile-avatar-endpoint-type": false
+      "development/fix-profile-avatar-endpoint-type": false,
+      "fix/mobile-browser-check-selectors": false,
+      "fix/vercel-deployment-config": false
     }
-  },
-  "deploymentEnabled": {
-    "fix/mobile-browser-check-selectors": false
   }
 }
