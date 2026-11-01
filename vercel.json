@@ -22,7 +22,8 @@
       "development/verified-auto-approval-profile-avatar": false,
       "development/fix-profile-avatar-endpoint-type": false,
       "fix/mobile-browser-check-selectors": false,
-      "fix/vercel-deployment-config": false
+      "fix/vercel-deployment-config": false,
+      "fix/profile-stats-browser-selector": false
     }
   }
 }
