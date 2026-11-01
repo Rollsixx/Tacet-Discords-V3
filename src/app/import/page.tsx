@@ -92,7 +92,7 @@ export default function ImportPage() {
           <p className="muted scan-footnote">A stat pass does not establish Echo identity or leaderboard eligibility. Passed means the extracted fields are readable and structurally valid. Every stat is checked against the screenshot when you submit.</p>
         </Panel>
         {identity && <Panel className="import-character"><ResonatorPortrait key={identity.character} name={identity.character||""} className="import-character-portrait"/><div><span className="eyebrow">Character</span><h2>{identity.character ? resonatorDisplayName(identity.character) : "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
-        {(preview||result)&&<div className="import-evidence-layout">{preview && <details className="source-preview" open><summary>Original screenshot · compare with the extracted Echo values</summary>
+        {preview &&{preview && <details className="source-preview" open><summary>Original screenshot · compare with the extracted Echo values</summary>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="Selected build screenshot" />
         </details>}{result && <section className="import-extracted" aria-label="Extracted Echo values">
@@ -108,7 +108,7 @@ export default function ImportPage() {
               {warnings.map(issue => <p key={issue.code} className="field-error">{issue.message}</p>)}
               <details><summary>Original OCR and automatic corrections</summary><p className="muted">Cost: {slot.cost.raw || "Unreadable"}{slot.cost.autoRecovered ? ` (recovered from image: ${slot.cost.value})` : ""}</p><p className="muted">{slot.mainStat.raw}{slot.mainStat.autoRecovered ? ` (corrected to ${slot.mainStat.value})` : ""}</p>{slot.substats.map((stat, i) => <p className="muted" key={i}>Substat {i+1}: {stat.raw || "Unreadable"}{stat.autoRecovered ? ` (corrected to ${stat.value})` : ""}</p>)}</details></>;
           }} />
-        </section>}</div>}
+        </section>}
         {result&&<SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onRetryScan={()=>void scan(file)} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />}
       </>}
       {error && <div className="workspace-note"><p role="alert" className="field-error">{error}</p>{file && !running && <button className="outline-button" onClick={() => scan(file)}>Retry scan</button>}</div>}

@@ -61,6 +61,13 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   await page.getByLabel("Choose build screenshot").setInputFiles(fixture);
   await expect(page.locator('img[alt="Selected build screenshot"]')).toBeAttached();
   await expect(page.getByRole("heading", { name: "5 Echo slots processed" })).toBeVisible({ timeout: 60000 });
+  const evidenceLayout = await page.evaluate(() => {
+    const screenshot = document.querySelector(".source-preview")!.getBoundingClientRect();
+    const echoes = document.querySelector(".import-results-heading")!.getBoundingClientRect();
+    return { screenshotBottom: screenshot.bottom, echoesTop: echoes.top, screenshotWidth: screenshot.width };
+  });
+  expect(evidenceLayout.screenshotBottom).toBeLessThanOrEqual(evidenceLayout.echoesTop);
+  expect(evidenceLayout.screenshotWidth).toBeGreaterThan(500);
   // Duplicate slot 4 into slot 5 for workflow coverage only. This is a derived
   // test image, never described as an authentic complete five-Echo game card.
   const dataUrl = await page.locator('img[alt="Selected build screenshot"]').evaluate(image => {
