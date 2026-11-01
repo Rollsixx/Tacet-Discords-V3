@@ -3,12 +3,13 @@ import {verifyHistoricalCorrections} from "@/lib/server/correction-workflow.mjs"
 import { authorize, failure, json, readJson } from "@/lib/server/http";
 import { HttpError, record } from "@/lib/server/validation";
 import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild, correctEchoSubstat } from "@/lib/server/store";
-import {listLeaderboardRankChanges} from "@/lib/server/queries";
+import {listLeaderboardRankChanges,leaderboardConsistencyReport} from "@/lib/server/queries";
 export async function GET(request: Request) {
   try {
     authorize(request);
     const params=new URL(request.url).searchParams;
     if(params.get("view")==="catalog")return json(await catalogCompleteness());
+    if(params.get("view")==="consistency")return json(await leaderboardConsistencyReport());
     const page=Number(params.get("page"))||1;
     const search=params.get("search")||"";
     if(params.get('view')==='players')return json({...await listAdminPlayers({page,search,character:params.get('character')||''}),overview:await adminOverview()});
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
       return json(await adminPlayerBuilds(uid,page));
     }
     if(params.get("view")==="audit")return json(await listAdminAudit(page,search,undefined,params.get("reviewer")||"",params.get("action")||""));
-    if(params.get("view")==="rank-changes")return json(await listLeaderboardRankChanges(Number(params.get("limit"))||100));
+    if(params.get("view")==="rank-changes")return json(await listLeaderboardRankChanges(Number(params.get("limit"))||100,undefined,{character:params.get("character")||"",player:params.get("player")||"",from:params.get("from")||"",to:params.get("to")||""}));
     const [builds,overview,activity]=await Promise.all([
       listBuilds({ pending:params.get("status")!=="approved",search,page,character:params.get("character")||"" }),
       adminOverview(),listAdminAudit(1)

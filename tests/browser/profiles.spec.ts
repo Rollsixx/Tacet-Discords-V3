@@ -21,3 +21,24 @@ test('player search, multi-player tabs, resonator stats, reload and empty/error 
  await page.unroute('**/api/public/players?*');await page.getByRole('button',{name:'Try again'}).click();await expect(page.locator('.profiles-page [role=alert]')).toHaveCount(0);
  expect(errors).toEqual([]);
 });
+
+test('Top Players medals remain readable as stacked cards on mobile',async({page},info)=>{
+ const players=[
+  {uid:'812345678',ign:'Gold Leader',avatarCharacter:'Carlotta',character:'Carlotta',buildId:'gold',gold:3,silver:1,bronze:0,points:11,total:4,rank:1,rankMovement:null,rankSince:null,rankTrackingSince:'2026-10-01',rankDays:3,bestRank:1,bestTop1Days:0,rankHasHistory:false},
+  {uid:'899999999',ign:'Silver Player',avatarCharacter:'Hiyuki',character:'Hiyuki',buildId:'silver',gold:1,silver:2,bronze:2,points:9,total:5,rank:2,rankMovement:-1,rankSince:null,rankTrackingSince:'2026-10-01',rankDays:null,bestRank:1,bestTop1Days:6,rankHasHistory:true}
+ ];
+ await page.route('**/api/public/players?*',route=>route.fulfill({json:{players:[],hasMore:false,topPlayers:players,topPlayersUpdatedAt:'2026-11-01T12:00:00.000Z'}}));
+ await page.route('**/api/assets/*',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#233d48"/></svg>'}));
+ await page.goto('/profiles');
+ await expect(page.getByRole('heading',{name:'Top Players'})).toBeVisible();
+ await expect(page.locator('.medal-standings-table tbody tr')).toHaveCount(2);
+ await expect(page.locator('.medal-standings-updated')).toContainText('Updated');
+ for(const width of [360,768,1280]){
+  await page.setViewportSize({width,height:900});
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ await page.setViewportSize({width:360,height:800});
+ await expect.poll(()=>page.locator('.medal-standings-table tbody tr').first().evaluate(row=>getComputedStyle(row).display)).toBe('grid');
+ await expect(page.locator('.medal-standings-table tbody tr').first()).toContainText('Gold');
+ await page.screenshot({path:info.outputPath('top-players-mobile.png'),fullPage:true});
+});
