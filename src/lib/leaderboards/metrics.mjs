@@ -17,6 +17,9 @@ export function damageMetric(resonator) { return metric(resonator.leaderboardDam
 export function defaultLeaderboardColumns(resonator) { return {primary:metric("atk"),attribute:attributeMetric(resonator),damage:damageMetric(resonator),recovery:metric("energyRegen")}; }
 export function formatLeaderboardMetric(value,percent=false) {
  if(value===undefined||!Number.isFinite(value)) return "—";
- const normalized=percent?(Math.abs(value)<=2?value*100:value):value;
+ // Scoring calculations store percentage stats as fractions (for example 2.862
+ // Energy Regen means 286.2%). Keep the same contract as compactNumber() used
+ // by the expanded build view; a magnitude heuristic misread values above 2.
+ const normalized=percent?value*100:value;
  return normalized.toLocaleString(undefined,{maximumFractionDigits:percent?1:0})+(percent?"%":"");
 }
