@@ -5,7 +5,7 @@ import { listBuilds } from './queries.ts';
 
 test('profile patch filtering applies before pagination across the selected major version',async()=>{
  const captured=[];
- const db={execute:async statement=>{captured.push(statement);return {rows:[]};}};
+ const db={execute:async statement=>{captured.push(statement);return {rows:[]};},transaction:async()=>({execute:async statement=>{captured.push(statement);return {rows:[]};},commit:async()=>{},close:()=>{}})};
  const result=await listBuilds({uid:'900445927',page:1,patchMajor:'3'},db);
  const expected=featuredResonators.filter(item=>item.patchVersion.startsWith('3.')).map(item=>item.name);
  assert.equal(result.hasMore,false);
