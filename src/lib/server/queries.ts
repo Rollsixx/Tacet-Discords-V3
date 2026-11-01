@@ -10,7 +10,7 @@ import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-ve
 import {scoringReadiness} from './scoring-info.ts';
 import {rotationPolicyReady} from '../game-data/scoring-policies.mjs';
 import {resolveHomeFeatured} from './home-featured.mjs';
-type RankHistoryEntry={rank:number;previousRank:number|null;movement:number|null;rankSince:string|null;trackingSince?:string;buildId?:string;score?:number};
+type RankHistoryEntry={rank:number;previousRank:number|null;movement:number|null;rankSince:string|null;trackingSince?:string;bestRank?:number;bestTop1Days?:number;buildId?:string;score?:number};
 export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean; patchMajor?: string } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
@@ -78,7 +78,7 @@ function parseRankState(raw:unknown):Record<string,RankHistoryEntry>{
  try{const parsed=JSON.parse(String(raw||"{}"));return parsed&&typeof parsed==="object"?parsed as Record<string,RankHistoryEntry>:{}}catch{return {};}
 }
 async function synchronizeRankHistory(character:string,rows:Row[],db:Client,recordEvents=true):Promise<Record<string,RankHistoryEntry>>{
- const generation="rank-v3:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
+ const generation="rank-v4":createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
  let saved=(await db.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
  if(String(saved?.generation_hash||"")!==generation){
   const tx=await db.transaction("write");
