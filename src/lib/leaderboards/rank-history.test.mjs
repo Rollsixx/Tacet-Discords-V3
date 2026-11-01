@@ -42,3 +42,14 @@ test("players entering and leaving are explicit events with prior and current sc
  assert.deepEqual(events.map(e=>[e.uid,e.type]),[["c","entered"],["b","left"]]);
  assert.deepEqual([events[0].oldScore,events[0].newScore,events[1].oldScore,events[1].newScore],[null,105,100,null]);
 });
+
+test("records best rank and completed #1 tenure after dethroning",()=>{
+ const prior={a:{rank:1,rankSince:"2026-10-01T00:00:00.000Z",bestRank:1,bestTop1Days:0}};
+ const next=nextRankHistory([{uid:"a",global_rank:3}],prior,"2026-10-11T00:00:00.000Z");
+ assert.equal(next.a.bestRank,1);assert.equal(next.a.bestTop1Days,10);assert.equal(next.a.rankSince,null);
+});
+test("preserves the best rank and longest completed #1 tenure across later changes",()=>{
+ const prior={a:{rank:2,bestRank:1,bestTop1Days:12,rankSince:null}};
+ const next=nextRankHistory([{uid:"a",global_rank:4}],prior,"2026-11-01T00:00:00.000Z");
+ assert.equal(next.a.bestRank,1);assert.equal(next.a.bestTop1Days,12);
+});

@@ -1153,3 +1153,14 @@ input[readonly] { opacity: .75; cursor: default; }
 .home-medal-movement{position:absolute;right:16px;bottom:12px;font-size:12px;font-weight:750}
 .home-medal-tenure{position:absolute;right:16px;top:55px;color:#ffd66e;font-size:12px}
 @media(max-width:800px){.home-medal-card-grid{grid-template-columns:1fr;gap:12px}.home-medal-card>a{min-height:0}.home-medal-card{max-width:none}.home-medal-counts{gap:clamp(14px,5vw,30px)}}
+
+/* Current and best rank context in profiles and expanded leaderboard builds */
+.pp-profile-name-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pp-overall-ranks{display:flex;align-items:center;gap:9px;padding:6px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.pp-overall-ranks span{font-size:12px;color:var(--muted);white-space:nowrap}.pp-overall-ranks strong{color:var(--text);font-size:13px}
+.pp-overall-ranks small{padding-left:8px;border-left:1px solid var(--border);color:#e8bf53;font-size:12px;white-space:nowrap}
+.lb-resonator-achievements{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:9px 0 12px;padding:9px 11px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.lb-achievement-portrait{width:32px;height:32px;flex:0 0 32px;border-radius:8px;overflow:hidden}
+.lb-resonator-achievements>span:not(.lb-achievement-portrait){font-size:12px;color:var(--muted);white-space:nowrap}
+.lb-resonator-achievements strong{color:var(--text);margin-left:3px}.lb-resonator-achievements small{color:#e8bf53;font-size:12px}
+@media(max-width:600px){.pp-profile-name-row{align-items:flex-start;flex-direction:column;gap:8px}.pp-overall-ranks{flex-wrap:wrap;gap:7px}.lb-resonator-achievements{gap:7px;padding:8px}.lb-resonator-achievements small{width:100%;padding-left:40px}}

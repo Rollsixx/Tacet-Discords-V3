@@ -5,7 +5,10 @@ export function nextRankHistory(rows,previous,now){
   const movement=previousRank===null||previousRank===rank?null:previousRank-rank;
   const rankSince=rank===1?(previousRank===1&&prior?.rankSince?prior.rankSince:now):null;
   const trackingSince=prior?.trackingSince||now;
-  next[uid]={rank,previousRank,movement,rankSince,trackingSince,buildId:String(row.id||prior?.buildId||""),score:Number(row.score)||0};
+  const completedTop1Days=prior?.rank===1&&rank!==1&&prior?.rankSince?Math.max(0,Math.floor((Date.parse(now)-Date.parse(prior.rankSince))/86400000)):0;
+  const bestRank=Math.min(Number(prior?.bestRank)||previousRank||rank,rank);
+  const bestTop1Days=Math.max(Number(prior?.bestTop1Days)||0,completedTop1Days);
+  next[uid]={rank,previousRank,movement,rankSince,trackingSince,bestRank,bestTop1Days,buildId:String(row.id||prior?.buildId||""),score:Number(row.score)||0};
  }
  return next;
 }
