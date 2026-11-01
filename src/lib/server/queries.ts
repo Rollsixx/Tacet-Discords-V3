@@ -240,7 +240,8 @@ export async function homeRankings(db: Client = database()) {
   const result=await listLeaderboard({character:character.name},db);
   boards.push({character:character.name,players:result.builds.slice(0,5).map(build=>({id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}))});
  }
- const standings=await medalStandings(db);\n return {boards,featured:configuration.featured,topPlayers:standings.players,topPlayersUpdatedAt:standings.updatedAt};
+ const standings=await medalStandings(db);
+ return {boards,featured:configuration.featured,topPlayers:standings.players,topPlayersUpdatedAt:standings.updatedAt};
 }
 
 export async function homeFeaturedSettings(db:Client=database()) {
