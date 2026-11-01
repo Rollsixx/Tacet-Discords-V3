@@ -205,3 +205,12 @@
 .bs-rank-history table{width:100%;min-width:640px;border-collapse:collapse}
 .bs-rank-history th,.bs-rank-history td{padding:12px;text-align:left;border-bottom:1px solid var(--border)}
 .bs-rank-history td small{display:block;color:var(--muted);font-size:12px;margin-top:3px}.bs-rank-history th,.bs-rank-history td{padding:9px 8px}
+
+.source-stat-review-image {display:block;width:min(100%,960px);height:auto;margin:16px auto;border:1px solid #30404e;border-radius:10px}
+.source-stat-review-slots {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}
+.source-stat-review-slots article {min-width:0;padding:12px;border:1px solid #30404e;border-radius:10px;background:#0c1825}
+.source-stat-review-slots h4 {margin:0 0 8px}
+.source-stat-review-slots p,.source-stat-review-slots li {overflow-wrap:anywhere}
+.source-stat-review-slots ol {padding-left:22px}
+.source-stat-review input:not([type=checkbox]) {width:100%}
+@media(max-width:700px){.source-stat-review-slots{grid-template-columns:minmax(0,1fr)}}

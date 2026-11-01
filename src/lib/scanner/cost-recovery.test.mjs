@@ -13,3 +13,17 @@ test('cost retries never replace a valid cost or infer an unknown digit',async()
  assert.equal(await recoverEchoCost(original,async i=>({text:reads[i][0],confidence:reads[i][1]})),original);
  }
 });
+
+test('a legal but conflicting first read is retried and corrected only by two confident matching reads',async()=>{
+ const attempts=[];
+ const result=await recoverEchoCost({raw:'3',value:'3'},async variant=>{attempts.push(variant);return {text:'4',confidence:variant===0?92:88};},'4');
+ assert.deepEqual(result,{raw:'3',value:'4',autoRecovered:true});
+ assert.deepEqual(attempts,[0,1]);
+});
+test('a conflicting legal read remains locked unless both independent reads match the scan',async()=>{
+ for(const reads of [[['3',95],['4',95]],[['4',64],['4',95]],[['1',95],['1',95]]]){
+  const original={raw:'3',value:'3'};
+  const result=await recoverEchoCost(original,async i=>({text:reads[i][0],confidence:reads[i][1]}),'4');
+  assert.equal(result,original);
+ }
+});
