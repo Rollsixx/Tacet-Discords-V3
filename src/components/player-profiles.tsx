@@ -41,7 +41,8 @@ function ProfileWorkspace(){
  const buildId=params.get('build')||'';
  const [query,setQuery]=useState(params.get('search')||'');
  const [players,setPlayers]=useState<Player[]>([]);
- const [topPlayers,setTopPlayers]=useState<MedalPlayer[]>([]);\n const [topPlayersUpdatedAt,setTopPlayersUpdatedAt]=useState<string|null>(null);
+ const [topPlayers,setTopPlayers]=useState<MedalPlayer[]>([]);
+ const [topPlayersUpdatedAt,setTopPlayersUpdatedAt]=useState<string|null>(null);
  const [tabs,setTabs]=useState<Tab[]>([]);
  const [result,setResult]=useState<Builds|null>(null);
  const [page,setPage]=useState(1),[filter,setFilter]=useState(''),[patchFilter,setPatchFilter]=useState('all');
