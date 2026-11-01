@@ -41,7 +41,7 @@ export async function listBuilds(options: { search?: string; character?: string;
     const byCharacter=new Map(histories);
     builds=builds.map(build=>{
       const ranked=byCharacter.get(build.character)?.find(candidate=>candidate.uid===build.uid);
-      return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,rankHasHistory:ranked?.rankHasHistory??false};
+      return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.rankHasHistory??false};
     });
   }
   const medals={top1:0,top2:0,top3:0,total:0};
@@ -62,7 +62,12 @@ export async function listBuilds(options: { search?: string; character?: string;
     for(const row of medalRows.rows){const rank=Number(row.global_rank),count=Number(row.medals);if(rank===1)medals.top1=count;if(rank===2)medals.top2=count;if(rank===3)medals.top3=count;}
     medals.total=medals.top1+medals.top2+medals.top3;
   }
-  return {builds,page,hasMore:result.rows.length>20,scoring:scoringReadiness,medals};
+  let medalStanding=null;
+  if(options.uid&&!options.includePending&&!options.pending){
+    const overall=(await medalStandings(db)).players.find(player=>player.uid===options.uid);
+    if(overall)medalStanding=overall;
+  }
+  return {builds,page,hasMore:result.rows.length>20,scoring:scoringReadiness,medals,medalStanding};
 }
 function publicBuild(row: Row) {
  const data=JSON.parse(String(row.data));
@@ -78,14 +83,14 @@ function parseRankState(raw:unknown):Record<string,RankHistoryEntry>{
  try{const parsed=JSON.parse(String(raw||"{}"));return parsed&&typeof parsed==="object"?parsed as Record<string,RankHistoryEntry>:{}}catch{return {};}
 }
 async function synchronizeRankHistory(character:string,rows:Row[],db:Client,recordEvents=true):Promise<Record<string,RankHistoryEntry>>{
- const generation="rank-v4":createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
+ const generation="rank-v4:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
  let saved=(await db.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
  if(String(saved?.generation_hash||"")!==generation){
   const tx=await db.transaction("write");
   try{
    saved=(await tx.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
    if(String(saved?.generation_hash||"")!==generation){
-    const priorGeneration=String(saved?.generation_hash||""),hasBaseline=priorGeneration.startsWith("rank-v2:")||priorGeneration.startsWith("rank-v3:");
+    const priorGeneration=String(saved?.generation_hash||""),hasBaseline=priorGeneration.startsWith("rank-v2:")||priorGeneration.startsWith("rank-v3:")||priorGeneration.startsWith("rank-v4:");
     const previous=hasBaseline?parseRankState(saved?.state):{},now=new Date().toISOString();
     const historyRows=rows.map(row=>({uid:String(row.uid),global_rank:Number(row.global_rank),id:String(row.id),score:Number(row.verified_score)}));
     const next=nextRankHistory(historyRows,previous,now);
@@ -133,7 +138,7 @@ export async function listLeaderboard(options: {character?: string;search?: stri
   const pageRows=matching.slice((page-1)*20,page*20+1);
   return {builds:pageRows.slice(0,20).map(row=>{
     const build=publicBuild(row),history=states[build.uid];
-    return {...build,rankMovement:history?.movement??null,rankSince:history?.rankSince??null,rankTrackingSince:history?.trackingSince??null,rankDays:history?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(history.rankSince))/86400000)):null,rankHasHistory:history?.previousRank!==null&&history?.previousRank!==undefined};
+    return {...build,rankMovement:history?.movement??null,rankSince:history?.rankSince??null,rankTrackingSince:history?.trackingSince??null,rankDays:history?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(history.rankSince))/86400000)):null,bestRank:history?.bestRank??build.rank,bestTop1Days:history?.bestTop1Days??null,rankHasHistory:history?.previousRank!==null&&history?.previousRank!==undefined};
   }),page,hasMore:matching.length>page*20,scoring:scoringReadiness,rotationReady};
 }
 
