@@ -117,4 +117,17 @@ export const migrations = [
       updated_at TEXT NOT NULL
     )`,
   ]},
+  {version:13,statements:[
+    `CREATE TABLE leaderboard_rank_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      character TEXT NOT NULL,
+      uid TEXT NOT NULL,
+      old_rank INTEGER NOT NULL,
+      new_rank INTEGER NOT NULL,
+      build_id TEXT NOT NULL,
+      score REAL NOT NULL,
+      changed_at TEXT NOT NULL
+    )`,
+    `CREATE INDEX leaderboard_rank_changes_recent ON leaderboard_rank_changes(changed_at DESC,id DESC)`,
+  ]},
 ];

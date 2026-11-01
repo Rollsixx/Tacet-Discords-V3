@@ -3,6 +3,7 @@ import {verifyHistoricalCorrections} from "@/lib/server/correction-workflow.mjs"
 import { authorize, failure, json, readJson } from "@/lib/server/http";
 import { HttpError, record } from "@/lib/server/validation";
 import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild, correctEchoSubstat } from "@/lib/server/store";
+import {listLeaderboardRankChanges} from "@/lib/server/queries";
 export async function GET(request: Request) {
   try {
     authorize(request);
@@ -16,6 +17,7 @@ export async function GET(request: Request) {
       return json(await adminPlayerBuilds(uid,page));
     }
     if(params.get("view")==="audit")return json(await listAdminAudit(page,search));
+    if(params.get("view")==="rank-changes")return json(await listLeaderboardRankChanges(Number(params.get("limit"))||100));
     const [builds,overview,activity]=await Promise.all([
       listBuilds({ pending:params.get("status")!=="approved",search,page,character:params.get("character")||"" }),
       adminOverview(),listAdminAudit(1)

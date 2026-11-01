@@ -1259,3 +1259,13 @@ input[readonly] { opacity: .75; cursor: default; }
 .lb-rank-up{color:#65d5a6}.lb-rank-down{color:#f08b83}
 .pp-build-table th:first-child{width:8%}.pp-build-table th:nth-child(2){width:20%}
 @media(max-width:650px){.lb-rank-cell{gap:3px;min-width:54px}.lb-rank-days{font-size:9px}.lb-rank-composite .lb-rank{min-width:26px;height:27px}}
+
+/* Rank tracking context and mobile layout */
+.lb-rank-tracking{font-size:9px;line-height:1;color:var(--muted);white-space:nowrap}
+.lb-rank-unavailable{display:flex;align-items:center;gap:5px;min-width:0;color:var(--muted)}
+.lb-rank-unavailable small{font-size:10px;line-height:1.2;white-space:normal}
+.bs-rank-history .bs-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.bs-rank-history table{width:100%;min-width:640px;border-collapse:collapse}
+.bs-rank-history th,.bs-rank-history td{padding:12px;text-align:left;border-bottom:1px solid var(--border)}
+.bs-rank-history td small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+@media(max-width:650px){.lb-rank-composite{gap:3px}.lb-rank-days{font-size:9px}.lb-rank-tracking{font-size:8px}.lb-rank-unavailable small{max-width:94px}.bs-rank-history th,.bs-rank-history td{padding:9px 8px}}
