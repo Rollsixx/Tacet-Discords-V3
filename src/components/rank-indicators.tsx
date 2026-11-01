@@ -1,9 +1,9 @@
 "use client";
 
-type RankProps={rank:number|null;rankSince?:string|null;rankTrackingSince?:string|null;rankDays?:number|null;rankMovement?:number|null;rankStatus?:string;rankHasHistory?:boolean};
+type RankProps={rank:number|null;rankSince?:string|null;rankTrackingSince?:string|null;rankDays?:number|null;rankMovement?:number|null;rankStatus?:string;rankHasHistory?:boolean;showTracking?:boolean};
 function Crown(){return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 7 5 4 4-7 4 7 5-4-2 12H5L3 7Zm2.7 14h12.6" /></svg>;}
 
-export function RankIndicator({rank,rankTrackingSince,rankDays,rankMovement,rankStatus,rankHasHistory}:RankProps){
+export function RankIndicator({rank,rankTrackingSince,rankDays,rankMovement,rankStatus,rankHasHistory,showTracking=true}:RankProps){
  const trackingDate=rankTrackingSince?new Date(rankTrackingSince):null;
  const trackingLabel=trackingDate&&!Number.isNaN(trackingDate.getTime())?trackingDate.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric",timeZone:"UTC"}):null;
  if(rank===null){const label=rankStatus||"Not currently ranked";return <span className="lb-rank-composite lb-rank-unavailable" title={label} aria-label={label}>— <small>{label}</small></span>;}
@@ -12,7 +12,7 @@ export function RankIndicator({rank,rankTrackingSince,rankDays,rankMovement,rank
  return <span className={`lb-rank-composite ${podium?`lb-medal-row lb-medal-${rank}`:""}`} aria-label={label}>
   <span className={`lb-rank ${podium?"lb-podium":""} ${podium?`lb-medal-${rank}`:""}`}>{podium&&<Crown/>}<span>{rank}</span></span>
   {rank===1&&rankDays!==null&&rankDays!==undefined&&<span className="lb-rank-days">{rankDays}d</span>}
-  {rankTrackingSince&&!rankHasHistory&&<span className="lb-rank-tracking">Tracking</span>}
+  {showTracking&&rankTrackingSince&&!rankHasHistory&&<span className="lb-rank-tracking">Tracking</span>}
  </span>;
 }
 

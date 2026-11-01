@@ -1,11 +1,12 @@
 "use client";
 import { ResonatorPortrait } from "./resonator-portrait";
+import { MedalStandingsTable } from "./medal-standings";
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { PopoverListbox } from "./popover-listbox";
-import type { findPlayers, listBuilds } from "@/lib/server/queries";
+import type { findPlayers, listBuilds, medalStandings } from "@/lib/server/queries";
 import { compactNumber, echoCritValue } from "@/lib/leaderboards/display";
 import { EchoDetails, PublicImage } from "./echo-details";
 import { featuredResonators, resonatorDisplayName } from "@/lib/resonators";
@@ -14,6 +15,7 @@ import type { LeaderboardMetric } from "@/lib/leaderboards/metrics.mjs";
 import { RankIndicator, RankMovement } from "./rank-indicators";
 type Player=Awaited<ReturnType<typeof findPlayers>>['players'][number];
 type Builds=Awaited<ReturnType<typeof listBuilds>>;
+type MedalPlayer=Awaited<ReturnType<typeof medalStandings>>['players'][number];
 type Tab={uid:string;ign:string};
 function ProfileMetricColumn({title,selected,onSelect,fallbackLabel}:{title:string;selected:LeaderboardMetric|null;onSelect:(metric:LeaderboardMetric|null)=>void;fallbackLabel:string}){
  const options=[{value:"auto",label:"Auto by Resonator",content:"↻ Auto by Resonator"},...selectableLeaderboardMetrics.map(option=>({value:option.id,label:option.label,content:<><Image src={option.icon} alt="" width={17} height={17} unoptimized/>{option.label}</>}))];const value=selected?.id||"auto";
@@ -39,6 +41,7 @@ function ProfileWorkspace(){
  const buildId=params.get('build')||'';
  const [query,setQuery]=useState(params.get('search')||'');
  const [players,setPlayers]=useState<Player[]>([]);
+ const [topPlayers,setTopPlayers]=useState<MedalPlayer[]>([]);
  const [tabs,setTabs]=useState<Tab[]>([]);
  const [result,setResult]=useState<Builds|null>(null);
  const [page,setPage]=useState(1),[filter,setFilter]=useState(''),[patchFilter,setPatchFilter]=useState('all');
@@ -67,7 +70,7 @@ function ProfileWorkspace(){
    fetch(url,{signal:controller.signal,cache:'default'}).then(async response=>{const data=await response.json();if(!response.ok)throw Error(data.error||'Profiles unavailable.');return data;}).then(data=>{
     if(controller.signal.aborted)return;
     if(selected||buildId){setResult(data);const first=data.builds[0];if(first){setTabs(previous=>{const next=[...previous.filter(item=>item.uid!==first.uid),{uid:first.uid,ign:first.ign}].slice(-8);try{localStorage.setItem(storageKey,JSON.stringify(next));}catch{}return next;});if(!selected)router.replace('/profiles?'+new URLSearchParams({uid:first.uid,build:buildId}),{scroll:false});}}
-    else{setPlayers(data.players);setMorePlayers(data.hasMore);setResult(null);}
+    else{setPlayers(data.players);setTopPlayers(data.topPlayers||[]);setMorePlayers(data.hasMore);setResult(null);}
    }).catch(cause=>{if(cause.name!=='AbortError')setError(cause.message);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
   },180);
   return()=>{clearTimeout(timer);controller.abort();};
@@ -85,7 +88,7 @@ function ProfileWorkspace(){
  return <div className="profiles-page">
   <header className="lb-page-heading"><div><span className="eyebrow">Player profiles</span><h1>{selected?'Player builds':'Find a player'}</h1><p>Search approved builds by UID or in-game name.</p></div><Link href="/import" className="outline-button">Import your build ↗</Link></header>
   <nav className="pp-tabs" aria-label="Open player profiles">{tabs.map(tab=><div key={tab.uid} className={tab.uid===selected?'active':''}><button onClick={()=>openPlayer(tab.uid)} aria-current={tab.uid===selected?'page':undefined}>{tab.ign}<small>{tab.uid}</small></button><button aria-label={`Close ${tab.ign} profile`} onClick={()=>closeTab(tab.uid)}>×</button></div>)}<button className={!selected?'pp-new active':'pp-new'} onClick={newSearch}>+ Find another player</button></nav>
-  {!selected&&!buildId&&<section className="pp-search-panel"><label htmlFor="player-search">Player name or UID</label><div className="pp-search"><input id="player-search" type="search" maxLength={64} value={query} onChange={e=>{setLoading(true);setQuery(e.target.value);}} placeholder="Enter a UID or in-game name…" autoComplete="off"/><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></span></div><div className="pp-section-title"><h2>{query?'Search results':'Recently updated players'}</h2><small>Approved builds only</small></div>{!loading&&!error&&<div className="pp-player-list">{players.map(player=><button className="pp-player" key={player.uid} onClick={()=>openPlayer(player.uid)}><ResonatorPortrait name={player.avatarCharacter||player.character||"Carlotta"} className="lb-player-avatar lb-player-avatar-image"/><span><strong>{player.ign}</strong><small>UID {player.uid}</small></span><span className="pp-player-count">{player.builds} build{player.builds===1?'':'s'} · {player.characters} resonator{player.characters===1?'':'s'}</span><span aria-hidden="true">↗</span></button>)}{!players.length&&<div className="placeholder"><h3>No players found</h3><p>Try another name or UID. New submissions appear after approval.</p></div>}{morePlayers&&<p className="muted">Showing the first 20 matches. Refine your search to find a player.</p>}</div>}</section>}
+  {!selected&&!buildId&&<section className="pp-search-panel"><label htmlFor="player-search">Player name or UID</label><div className="pp-search"><input id="player-search" type="search" maxLength={64} value={query} onChange={e=>{setLoading(true);setQuery(e.target.value);}} placeholder="Enter a UID or in-game name…" autoComplete="off"/><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></span></div><div className="pp-section-title"><h2>{query.trim()?'Search results':'Top Players'}</h2><small>{query.trim()?"Approved builds only":"Gold 3 pts · Silver 2 pts · Bronze 1 pt"}</small></div>{!query.trim()?<MedalStandingsTable players={topPlayers}/>:!loading&&!error&&<div className="pp-player-list">{players.map(player=><button className="pp-player" key={player.uid} onClick={()=>openPlayer(player.uid)}><ResonatorPortrait name={player.avatarCharacter||player.character||"Carlotta"} className="lb-player-avatar lb-player-avatar-image"/><span><strong>{player.ign}</strong><small>UID {player.uid}</small></span><span className="pp-player-count">{player.builds} build{player.builds===1?'':'s'} · {player.characters} resonator{player.characters===1?'':'s'}</span><span aria-hidden="true">↗</span></button>)}{!players.length&&<div className="placeholder"><h3>No players found</h3><p>Try another name or UID. New submissions appear after approval.</p></div>}{morePlayers&&<p className="muted">Showing the first 20 matches. Refine your search to find a player.</p>}</div>}</section>}
   {loading&&!result?<div className="lb-loading" role="status">Loading {selected?'player builds':'players'}…</div>:error?<div className="placeholder" role="alert"><h2>Couldn’t load profiles</h2><p>{error}</p><button className="outline-button" onClick={()=>setRetry(value=>value+1)}>Try again</button></div>:selected&&<section className="pp-profile" aria-busy={loading}>
    {!first?<div className="placeholder"><h2>No approved builds for this player</h2><p>Check the UID or search for another player.</p><button className="outline-button" onClick={newSearch}>Find a player</button></div>:<>
    <header className="pp-player-header"><ResonatorPortrait name={first.avatarCharacter||first.character} className="pp-avatar pp-avatar-image"/><div className="pp-player-identity"><h2>{first.ign}</h2><p>UID {first.uid} <span>·</span> {first.identityVerified?'Identity verified':<a href="#identity-verification-help">Identity unverified · how to verify</a>}</p><small>Approved resonator builds · Latest on this page {new Date(first.createdAt).toLocaleDateString()}</small></div><div className="pp-medal-summary" aria-label={`Leaderboard medals: ${result?.medals?.top1||0} gold, ${result?.medals?.top2||0} silver, ${result?.medals?.top3||0} bronze`}><span className="pp-medal-count pp-medal-gold"><i aria-hidden="true">♛</i><b>{result?.medals?.top1||0}</b><small>Gold</small></span><span className="pp-medal-count pp-medal-silver"><i aria-hidden="true">♛</i><b>{result?.medals?.top2||0}</b><small>Silver</small></span><span className="pp-medal-count pp-medal-bronze"><i aria-hidden="true">♛</i><b>{result?.medals?.top3||0}</b><small>Bronze</small></span><strong>{result?.medals?.total||0} total medals</strong></div></header>{myUid&&<p className="pp-my-rank-link"><Link className="text-link" href={`/profiles?uid=${encodeURIComponent(myUid)}`}>Jump to my profile and ranks</Link></p>}
