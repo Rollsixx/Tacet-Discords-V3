@@ -5,7 +5,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  expect((await request.get('/api/admin/rotations')).status()).toBe(401);
  await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();await expect(page.getByText('Optimizer connected · Owner-reviewed benchmark',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(15);
+ await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(39);
  await page.getByLabel('Evaluation mode').selectOption('admin-reviewed');await page.getByLabel('Starting conditions & combat review notes').fill('');
  await page.getByLabel('Rotation name',{exact:true}).fill('Browser draft '+info.project.name);
  await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
@@ -21,7 +21,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});await page.getByRole('button',{name:'Validate draft',exact:true}).click();await expect(page.getByText('Passed · optimizer configuration checked; owner review required',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Preview leaderboard changes',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'Test against builds',exact:true}).click();await expect(page.getByRole('heading',{name:'Optimizer build comparison'})).toBeVisible();
  if(info.project.name==='desktop'){
-  await expect(page.getByLabel('Starting conditions & combat review notes')).toHaveValue('');await page.getByRole('button',{name:'Preview leaderboard changes',exact:true}).click();await expect(page.getByText('No source-verified test inputs were staged.',{exact:false})).toBeVisible({timeout:30000});await expect(page.getByRole('button',{name:'Review publication confirmation'})).toBeDisabled();
+  await expect(page.getByLabel('Starting conditions & combat review notes')).toHaveValue('');await page.getByRole('button',{name:'Preview leaderboard changes',exact:true}).click();await expect(page.getByText(/No eligible builds exist for Carlotta yet/)).toBeVisible({timeout:30000});await expect(page.getByRole('button',{name:'Review publication confirmation'})).toBeEnabled();
  }
  await expect.poll(()=>page.locator('.rotation-actions li').nth(1).locator('div').first().evaluate(el=>el.getBoundingClientRect().width)).toBeGreaterThan(120);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('rotation-editor.png'),fullPage:true});
@@ -32,9 +32,9 @@ test('expanded leaderboard categories load with local portraits',async({page},in
  await page.goto('/leaderboards');
  for(const name of ['Suoming','Jingran','Hsin','Qingxiao','Suisui','Lucy','Lucilla','Rebecca','Denia','Sigrika']){
   const response=page.waitForResponse(r=>r.url().includes('/api/public/leaderboards?')&&new URL(r.url()).searchParams.get('character')===name);
-  await page.locator('.lb-character-tabs button').filter({hasText:name}).click();expect((await response).status()).toBe(200);
+ await page.getByLabel('Choose a Resonator').selectOption(name);expect((await response).status()).toBe(200);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
-  const portrait=page.locator('.lb-character-tabs button').filter({hasText:name}).locator('img');await expect.poll(()=>portrait.evaluate((img:HTMLImageElement)=>img.complete&&img.naturalWidth>0)).toBe(true);
+  const portrait=page.locator('img.lb-board-mark');await expect.poll(()=>portrait.evaluate((img:HTMLImageElement)=>img.complete&&img.naturalWidth>0)).toBe(true);
  }
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:info.outputPath('expanded-roster.png'),fullPage:true});

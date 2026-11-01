@@ -100,13 +100,13 @@ test('all five official categories score only after approval and identity verifi
  await expect(page.getByRole('heading',{name:'Equipped Echoes',exact:true})).toBeVisible();
  await expect(page.locator('.lb-echo')).toHaveCount(5);
  await expect.poll(()=>page.locator('.lb-portrait').evaluateAll(images=>images.every(image=>(image as HTMLImageElement).naturalWidth===192))).toBe(true);
+ for(const width of [360,768,1280]){await page.setViewportSize({width,height:900});await expect(page.locator('.lb-score')).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});
  await page.screenshot({path:info.outputPath(character+'-official-leaderboard.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});
- await expect.poll(()=>page.locator('.lb-character-tabs').evaluate(container=>{
-  const selected=container.querySelector('[aria-pressed="true"]')!;
-  const a=selected.getBoundingClientRect(),b=container.getBoundingClientRect();return a.left>=b.left-1&&a.right<=b.right+1;
+ await expect.poll(()=>page.getByLabel('Choose a Resonator').evaluate(select=>{
+  const a=select.getBoundingClientRect(),b=document.documentElement.getBoundingClientRect();return a.left>=b.left-1&&a.right<=b.right+1;
  })).toBe(true);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:info.outputPath(character+'-official-leaderboard-mobile.png'),fullPage:true});

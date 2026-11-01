@@ -133,7 +133,7 @@
 .readiness-heading h3 {margin:0 0 8px}.scoring-readiness dl {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
 .scoring-readiness dl div {padding:10px;border:1px solid #293c4b;border-radius:8px}.scoring-readiness dt {font-size:12px;color:#a7b8c7}.scoring-readiness dd {margin:5px 0 0;font-size:13px;font-weight:600}
 .scoring-readiness p,.scoring-readiness small {font-size:12px;line-height:1.7;overflow-wrap:anywhere}.identity-review {padding:18px;border:1px solid #9a845349;border-radius:12px;background:#c39f4610;margin:18px 0;min-width:0}
-.identity-review p,.identity-review small {font-size:12px;line-height:1.7;overflow-wrap:anywhere}.identity-review textarea {width:100%;box-sizing:border-box;resize:vertical}.identity-review .field {display:grid;gap:7px;margin:12px 0}.identity-review select {width:100%;min-width:0}.identity-review details {margin:12px 0}.identity-review summary {cursor:pointer;font-size:12px}.scoring-readiness dl{grid-template-columns:1fr}.identity-review,.scoring-readiness{padding:13px}
+.identity-review p,.identity-review small {font-size:12px;line-height:1.7;overflow-wrap:anywhere}.identity-review textarea {width:100%;box-sizing:border-box;resize:vertical}.identity-review .field {display:grid;gap:7px;margin:12px 0}.identity-review select {width:100%;min-width:0}.identity-review details {margin:12px 0}.identity-review summary {cursor:pointer;font-size:12px}.identity-review,.scoring-readiness{padding:13px}
 
 .rotation-effect-workspace {min-width:0;padding-top:12px}
 .rotation-effect-categories {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0}

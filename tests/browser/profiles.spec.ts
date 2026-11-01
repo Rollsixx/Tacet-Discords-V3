@@ -9,7 +9,7 @@ test('player search, multi-player tabs, resonator stats, reload and empty/error 
  await page.getByLabel('Player name or UID').fill('812345678');await expect(page.locator('.pp-player')).toHaveCount(1);await page.locator('.pp-player').click();
  await expect(page.locator('.pp-player-header')).toContainText('QA Rover');await page.getByRole('button',{name:'View Hiyuki stats',exact:true}).click();
  await expect(page.locator('.lb-echo')).toHaveCount(5);await expect(page.locator('.lb-stat-chips')).toContainText('16,869');await expect(page.locator('.lb-stat-chips')).toContainText('75.1%');await expect(page.locator('.pp-stats-notice')).toContainText('benchmark assumptions');
- await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ for(const width of [360,768,1280]){await page.setViewportSize({width,height:900});await expect(page.locator('.lb-score')).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  await page.screenshot({path:info.outputPath('player-profile.png'),fullPage:true});
  await page.getByRole('button',{name:'Hide Hiyuki stats',exact:true}).click();await expect(page.locator('.lb-echo')).toHaveCount(0);
  await page.getByRole('button',{name:'Find another player'}).click();await page.getByLabel('Player name or UID').fill('Second');await page.locator('.pp-player').filter({hasText:'Second QA'}).click();await expect(page.locator('.pp-player-header')).toContainText('Second QA');

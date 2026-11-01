@@ -9,11 +9,15 @@ test("four pages render without overflow or browser errors", async ({ page }, te
     await expect(page.locator("h1")).toBeVisible();
     if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table, .pp-player-list, .home-ranking-card").first()).toBeVisible();
     if(route === '/leaderboards') {
-      await page.locator('.lb-character-tabs button[aria-pressed="true"]').click();
+      await expect(page.getByLabel('Choose a Resonator').locator('optgroup')).toHaveCount(3);
+      await expect(page.getByLabel('Choose a Resonator')).toHaveValue('Carlotta');
       await expect(page.locator('.placeholder,.lb-table').first()).toBeVisible();
     }
     await expect(page.locator('nav[aria-label="Main navigation"] a')).toHaveCount(4);
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const width of [360, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
     await page.screenshot({ path: testInfo.outputPath(route.slice(1) || "home") + ".png", fullPage: true });
   }
   expect(errors).toEqual([]);

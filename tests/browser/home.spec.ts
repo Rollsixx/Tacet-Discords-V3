@@ -3,6 +3,7 @@ test('Home Top 5 panels, player links, beta navigation and local portraits',asyn
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  const boards=['Hiyuki','Aemeath','Chisa'].map((character,i)=>({character,players:i===0?Array.from({length:5},(_,n)=>({id:'home-qa-'+n,uid:'88776655'+n,ign:'QA Player '+n,rank:n+1,score:234283-n*1000})):i===1?[{id:'home-qa-a',uid:'899999999',ign:'QA Aemeath',rank:1,score:200000}]:[]}));
  await page.route('**/api/public/home',route=>route.fulfill({json:{boards}}));
+ await page.route('**/api/public/leaderboards?*',route=>{const character=new URL(route.request().url()).searchParams.get('character')||'Carlotta';return route.fulfill({json:{builds:[{id:'lb-qa-1',uid:'887766550',ign:'QA Player 0',character,status:'approved',createdAt:'2026-10-28',identityVerified:true,score:123456.78,rank:1,rankDays:3,rankTrackingSince:'2026-10-28T00:00:00.000Z',rankHasHistory:true,data:{assessment:{calculation:{finalStats:{totalHp:16000,totalAtk:2300,totalDef:1100,totalCritRate:.55,totalCritDMG:2.2},identities:[]}},slots:Array.from({length:5},(_,i)=>({slot:i+1,cost:{value:'1'},mainStat:{value:'ATK'},substats:[]}))}}],page:1,hasMore:false}});});
  await page.route('**/api/public/players?*',route=>{
   const uid=new URL(route.request().url()).searchParams.get('uid');
   if(!uid)return route.fulfill({json:{players:[],hasMore:false}});
@@ -30,7 +31,15 @@ test('Home Top 5 panels, player links, beta navigation and local portraits',asyn
  await page.getByLabel('Looking for someone?').fill('Rover Test');await page.getByRole('button',{name:'Search players',exact:true}).click();await expect(page).toHaveURL(/profiles\?search=Rover\+Test/);await expect(page.locator('.nav-links a[aria-current=page]')).toHaveText('Profiles');
  await page.locator('.nav-links a').filter({hasText:'Import'}).click();await expect(page.locator('.nav-links a[aria-current=page]')).toHaveText('Import');
  await page.locator('.nav-links a').filter({hasText:'Leaderboards'}).click();await expect(page.locator('.nav-links a[aria-current=page]')).toHaveText('Leaderboards');
- await expect.poll(()=>page.locator('.lb-character-tabs img').evaluateAll(images=>images.length===5&&images.every(image=>(image as HTMLImageElement).naturalWidth>0))).toBe(true);
+ const characterPicker=page.getByLabel('Choose a Resonator');
+ await expect(characterPicker.locator('optgroup')).toHaveCount(3);
+ await expect(characterPicker.locator('optgroup').nth(0)).toHaveAttribute('label','1.x Characters');
+ await expect(characterPicker.locator('optgroup').nth(1)).toHaveAttribute('label','2.x Characters');
+ await expect(characterPicker.locator('optgroup').nth(2)).toHaveAttribute('label','3.x Characters');
+ await expect.poll(()=>page.locator('img.lb-board-mark').evaluate((image:HTMLImageElement)=>image.complete&&image.naturalWidth>0)).toBe(true);
+ await expect(page.locator('.lb-player-row')).toHaveCount(1);
+ await expect(page.locator('.lb-score')).toContainText('123,457');
+ for(const width of [360,768,1280]){await page.setViewportSize({width,height:900});await expect(page.locator('.lb-score')).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  expect(errors).toEqual([]);
 });
 test('Home ranking failures offer retry and missing portraits fall back cleanly',async({page})=>{

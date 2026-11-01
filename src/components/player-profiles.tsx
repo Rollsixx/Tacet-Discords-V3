@@ -35,7 +35,7 @@ const storageKey='tacet-player-tabs-v1';
 export function PlayerProfiles(){ return <ProfileWorkspace/>; }
 function ProfileWorkspace(){
  const params=useSearchParams(),router=useRouter();
- const uid=params.get('uid')||params.get('search')||'';
+ const uid=params.get('uid')||'';
  const buildId=params.get('build')||'';
  const [query,setQuery]=useState(params.get('search')||'');
  const [players,setPlayers]=useState<Player[]>([]);
