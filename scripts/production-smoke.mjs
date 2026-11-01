@@ -15,8 +15,18 @@ async function readJson(path) {
   return body;
 }
 
-const health = await readJson("/api/health");
-assert.equal(health.ok, true, "Production health reports that the database or migration is not ready.");
+let health;
+const expectedRelease = process.env.EXPECTED_RELEASE || "";
+const deadline = Date.now() + 20 * 60 * 1000;
+while (Date.now() < deadline) {
+  try {
+    health = await readJson("/api/health");
+    if (health.ok && (!expectedRelease || health.release === expectedRelease)) break;
+  } catch {}
+  await new Promise(resolve => setTimeout(resolve, 15000));
+}
+assert.ok(health?.ok, "Production health reports that the database or migration is not ready.");
+assert.ok(!expectedRelease || health.release === expectedRelease, "Production did not serve the expected commit release.");
 
 let rankedBuild = null;
 for (const character of ["Brant", "Mornye", "Carlotta"]) {
