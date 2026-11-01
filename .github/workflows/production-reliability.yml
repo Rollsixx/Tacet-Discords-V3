@@ -3,6 +3,8 @@ name: Production reliability checks
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   deployment_status:
   workflow_dispatch:
 
@@ -11,7 +13,7 @@ permissions:
 
 jobs:
   production-checks:
-    if: github.event_name != 'deployment_status' || (github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))
+    if: github.event_name != 'pull_request' && (github.event_name != 'deployment_status' || (github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production')))
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
@@ -40,3 +42,24 @@ jobs:
         env:
           DEPLOYMENT_URL: ${{ github.event.deployment_status.target_url || 'https://tacet-discords-v3.vercel.app' }}
           EXPECTED_RELEASE: ${{ github.event.deployment.sha || github.sha }}
+
+  responsive-pr-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out pull request revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build and verify responsive leaderboard layouts
+        run: npm run test:browser -- tests/browser/responsive-leaderboard.spec.ts

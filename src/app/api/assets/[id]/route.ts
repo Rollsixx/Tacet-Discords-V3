@@ -11,6 +11,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const row = result.rows[0];
     if (!row) return json({ error: "Not found." }, 404);
     if (row.status !== "approved") authorize(request);
-    return new Response(row.png as ArrayBuffer, { headers: { ...privateHeaders, "Content-Type": "image/png", "Content-Security-Policy": "default-src 'none'; sandbox" } });
+    const headers = row.status === "approved"
+      ? { ...privateHeaders, "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" }
+      : privateHeaders;
+    return new Response(row.png as ArrayBuffer, { headers: { ...headers, "Content-Type": "image/png", "Content-Security-Policy": "default-src 'none'; sandbox" } });
   } catch (error) { return failure(error); }
 }
