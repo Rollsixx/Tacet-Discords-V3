@@ -12,7 +12,7 @@ permissions:
 jobs:
   production-checks:
     if: github.event_name != 'deployment_status' || (github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
       - name: Check out deployed revision
