@@ -15,13 +15,20 @@ async function verifyPublicApiCache(path) {
     const body = await last.text();
     assert.equal(last.status, 200, `${path} returned HTTP ${last.status}: ${body.slice(0, 300)}`);
     const policy = last.headers.get("cache-control") || "";
+    const edgePolicy = last.headers.get("vercel-cdn-cache-control") || last.headers.get("cdn-cache-control") || "";
     assert.match(policy, /public/i, `${path} is not publicly cacheable (Cache-Control: ${policy || "missing"}).`);
     assert.doesNotMatch(policy, /no-store|private/i, `${path} disables intended public caching (Cache-Control: ${policy}).`);
-    assert.match(policy, /s-maxage=\d+/i, `${path} is missing a shared-cache lifetime (Cache-Control: ${policy}).`);
-    if (/^(HIT|STALE|REVALIDATED)$/i.test(last.headers.get("x-vercel-cache") || "")) return last.headers.get("x-vercel-cache");
+    if (edgePolicy) {
+      assert.match(edgePolicy, /public/i, `${path} has a non-public Vercel edge policy (${edgePolicy}).`);
+      assert.match(edgePolicy, /s-maxage=45/i, `${path} has an unexpected Vercel edge lifetime (${edgePolicy}).`);
+    }
+    const hit = last.headers.get("x-vercel-cache") || "";
+    if (/^(HIT|STALE|REVALIDATED)$/i.test(hit)) {
+      return { cache: hit, cacheControl: policy, edgeCacheControl: edgePolicy || null };
+    }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  assert.fail(`${path} did not produce a Vercel CDN cache hit (last: ${last?.headers.get("x-vercel-cache") || "missing"}; edge: ${last?.headers.get("x-vercel-id") || "unknown"}).`);
+  assert.fail(`${path} did not produce a Vercel CDN cache hit (Cache-Control: ${last?.headers.get("cache-control") || "missing"}; Vercel-CDN-Cache-Control: ${last?.headers.get("vercel-cdn-cache-control") || "missing"}; x-vercel-cache: ${last?.headers.get("x-vercel-cache") || "missing"}; edge: ${last?.headers.get("x-vercel-id") || "unknown"}).`);
 }
 
 async function readJson(path) {
@@ -51,13 +58,15 @@ for (const character of ["Brant", "Mornye", "Carlotta"]) {
   const leaderboard = await readJson(leaderboardPath);
   assert.ok(Array.isArray(leaderboard.builds), "Leaderboard response is missing its builds array.");
   rankedBuild = leaderboard.builds.find(build => build && build.uid && build.id && Number.isFinite(Number(build.score)));
-  if (rankedBuild) { await verifyPublicApiCache(leaderboardPath); break; }
+  if (rankedBuild) { var leaderboardCache = await verifyPublicApiCache(leaderboardPath); break; }
 }
 assert.ok(rankedBuild, "No eligible scored build was found in the smoke-check leaderboards.");
 
 const profilePath = `/api/public/players?uid=${encodeURIComponent(rankedBuild.uid)}`;
 const profile = await readJson(profilePath);
 const profileCache = await verifyPublicApiCache(profilePath);
+const homeCache = await verifyPublicApiCache("/api/public/home");
+const buildsCache = await verifyPublicApiCache("/api/public/builds?page=1");
 assert.ok(Array.isArray(profile.builds), "Player profile response is missing its builds array.");
 const profileBuild = profile.builds.find(build => build.id === rankedBuild.id && build.character === rankedBuild.character);
 assert.ok(profileBuild, "The current leaderboard build is missing from its player's profile.");
@@ -100,8 +109,8 @@ console.log(JSON.stringify({
   ok: true,
   release: health.release,
   database: health.database,
-  checked: ["health", "leaderboard-to-profile build identity", "leaderboard-to-profile score", "stored calculation score", "rank", "weighted medal tally", "leaderboard API CDN cache hit", "profile API CDN cache hit", "Echo CDN cache hit"],
-  profileCache,
+  checked: ["health", "leaderboard-to-profile build identity", "leaderboard-to-profile score", "stored calculation score", "rank", "weighted medal tally", "home, builds, leaderboard, and profile API CDN cache hits", "Echo CDN cache hit"],
+  homeCache, buildsCache, leaderboardCache, profileCache,
   character: rankedBuild.character,
   buildId: rankedBuild.id,
   rank: rankedBuild.rank,
