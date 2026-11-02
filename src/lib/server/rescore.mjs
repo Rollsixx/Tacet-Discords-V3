@@ -68,6 +68,6 @@ export async function rescoreStoredBuilds(db,{force=false}={}){
    }finally{tx.close();}
   }catch(error){result.failed++;result.failedRecords.push({id:String(row.id),character:String(row.character),reason:(error instanceof Error?error.message:String(error)).slice(0,500)});}
  }
- if(result.failed===0)await db.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('rescore_signature',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[rescoreKey,new Date().toISOString()]});
+ if(result.failed===0&&result.awaitingRotationRecords.length===0)await db.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('rescore_signature',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[rescoreKey,new Date().toISOString()]});
  return result;
 }
