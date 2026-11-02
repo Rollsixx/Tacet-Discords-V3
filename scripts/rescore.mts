@@ -10,7 +10,8 @@ try{
  console.log('Owner-authorized corrections:',JSON.stringify(await applyAuthorizedCorrections(db,requests)));
  console.log('Corrected build revalidation:',JSON.stringify(await revalidateCorrectedBuilds(db)));
  console.log('Owner rotation publication readiness:',JSON.stringify(await prepareCorrectionPreviews(db)));
- const refreshed=await rescoreStoredBuilds(db);
+ const force=process.argv.includes('--force');
+ const refreshed=await rescoreStoredBuilds(db,{force});
  console.log('Stored score refresh:',JSON.stringify(refreshed));
  console.log('Leaderboard rank history refresh:',JSON.stringify(await refreshLeaderboardRankHistory(db)));
 }finally{database().close();}
