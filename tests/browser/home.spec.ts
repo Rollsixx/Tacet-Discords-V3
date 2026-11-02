@@ -23,10 +23,10 @@ test('Home Top 5 panels, player links, beta navigation and local portraits',asyn
  for(const width of [768,1024,1440,390]){await page.setViewportSize({width,height:950});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(page.locator('.version-label')).toBeVisible();}
  await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1440,height:1000});await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});await page.screenshot({path:info.outputPath('home-top-five.png'),fullPage:true});
  await page.getByRole('link',{name:"View QA Player 0's Hiyuki build",exact:true}).click();
- await expect(page.locator('.lb-echo')).toHaveCount(5);await expect(page.locator('.lb-expanded-heading')).toContainText('Hiyuki');
+ await expect(page.locator('.lb-echo')).toHaveCount(5);await expect(page.locator('.profile-build-card .profile-build-hero-copy h2')).toContainText('Hiyuki');
  await page.locator('.nav-links a').filter({hasText:'Home'}).click();
  await page.getByRole('link',{name:"View QA Aemeath's Aemeath build",exact:true}).click();
- await expect(page.locator('.pp-player-header')).toContainText('QA Aemeath');await expect(page.locator('.lb-echo')).toHaveCount(5);await expect(page.locator('.lb-expanded-heading')).toContainText('Aemeath');
+ await expect(page.locator('.pp-player-header')).toContainText('QA Aemeath');await expect(page.locator('.lb-echo')).toHaveCount(5);await expect(page.locator('.profile-build-card .profile-build-hero-copy h2')).toContainText('Aemeath');
  await page.locator('.nav-links a').filter({hasText:'Home'}).click();
  await page.getByLabel('Looking for someone?').fill('Rover Test');await page.getByRole('button',{name:'Search players',exact:true}).click();await expect(page).toHaveURL(/profiles\?search=Rover\+Test/);await expect(page.locator('.nav-links a[aria-current=page]')).toHaveText('Profiles');
  await page.locator('.nav-links a').filter({hasText:'Import'}).click();await expect(page.locator('.nav-links a[aria-current=page]')).toHaveText('Import');
