@@ -21,10 +21,7 @@ export async function rescoreStoredBuilds(db){
   const retained=a?.eligible&&(/^[a-f0-9]{64}$/.test(a.sourceHash||'')||hasRetainedRecovery(a))&&c?.dataVersion===DATA_VERSION&&c.engineVersion?.startsWith('wuthering-tools-b32cdbd+tacet/')&&c.identities?.length===5&&c.character===String(row.character);
   if(managed?.kind==='official'&&!recoverable&&!retained){recordRescoreSkip(result,'official_rotation_evidence_unavailable');continue;}
   if(!retained&&!recoverable){recordRescoreSkip(result,"source_evidence_unavailable");continue;}
-  const scoreMatchesActivePolicy=managed?.kind==='official'
-   ?c?.policyId===managed.policy_id&&c?.rotationVersion===managed.id&&c?.mechanicsVersion===managed.mechanics_version&&managed.engine_version===ENGINE_VERSION&&managed.data_version===DATA_VERSION
-   :c?.policyId===POLICY_VERSION;
-  if(retained&&c.engineVersion===ENGINE_VERSION&&scoreMatchesActivePolicy&&c.displayStats&&typeof c.displayStats==='object'){recordRescoreSkip(result,'score_already_current');continue;}
+  if(retained&&c.engineVersion===ENGINE_VERSION&&c.policyId===POLICY_VERSION&&c.displayStats&&typeof c.displayStats==='object'){recordRescoreSkip(result,'score_already_current');continue;}
   try{
    const recovered=recoverable?await recoverVisualEvidence(row,data,db):null;
    if(recoverable&&!recovered){recordRescoreSkip(result,"visual_recovery_unavailable");continue;}
