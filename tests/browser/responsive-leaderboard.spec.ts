@@ -63,6 +63,8 @@ test("leaderboard expansion stays readable at 360px, 768px, and 1280px and recov
   await expect(page.getByRole("button", { name: "Hide Responsive QA Echoes", exact: true })).toHaveAttribute("aria-expanded", "true");
   const mobileDetail = page.locator(".lb-mobile-rank-card .lb-expanded");
   await expect(mobileDetail).toBeVisible();
+  await expect(mobileDetail.locator(".profile-build-card, .profile-build-hero")).toHaveCount(0);
+  await expect(mobileDetail.locator(".lb-expanded-heading")).toBeVisible();
   await expect(mobileDetail.locator(".lb-echo")).toHaveCount(5);
   await expect(mobileDetail.locator(".lb-stat-chips")).toBeVisible();
 
@@ -93,6 +95,8 @@ test("leaderboard expansion stays readable at 360px, 768px, and 1280px and recov
   await expect(desktopToggle).toHaveAttribute("aria-expanded", "true");
   const desktopDetail = page.locator(".lb-detail-content .lb-expanded");
   await expect(desktopDetail).toBeVisible();
+  await expect(desktopDetail.locator(".profile-build-card, .profile-build-hero")).toHaveCount(0);
+  await expect(desktopDetail.locator(".lb-expanded-heading")).toBeVisible();
   await expect(desktopDetail.locator(".lb-echo")).toHaveCount(5);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
