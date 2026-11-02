@@ -8,6 +8,47 @@ import { ResonatorPortrait } from "./resonator-portrait";
 import { defaultLeaderboardColumns, formatLeaderboardMetric } from "@/lib/leaderboards/metrics.mjs";
 import type { listBuilds } from "@/lib/server/queries";
 import { compactNumber, echoCritValue, mainStatAmount, readableName, shortStat } from "@/lib/leaderboards/display";
+const resonatorSplashArt: Record<string,string> = {
+  Aemeath: "/resonator-splash/Aemeath_Splash_Art.webp",
+  Augusta: "/resonator-splash/Augusta_Splash_Art.webp",
+  Brant: "/resonator-splash/Brant_Splash_Art.webp",
+  Camellya: "/resonator-splash/Camellya_Splash_Art.webp",
+  Cantarella: "/resonator-splash/Cantarella_Splash_Art.webp",
+  Carlotta: "/resonator-splash/Carlotta_Splash_Art.webp",
+  Cartethyia: "/resonator-splash/Cartethyia_Splash_Art.webp",
+  Changli: "/resonator-splash/Changli_Splash_Art.webp",
+  Chisa: "/resonator-splash/Chisa_Splash_Art.webp",
+  Ciaccona: "/resonator-splash/Ciaccona_Splash_Art.webp",
+  Denia: "/resonator-splash/Denia_Splash_Art.webp",
+  Galbrena: "/resonator-splash/Galbrena_Splash_Art.webp",
+  Hiyuki: "/resonator-splash/Hiyuki_Splash_Art.webp",
+  Hsin: "/resonator-splash/Hsin_Splash_Art.webp",
+  Iuno: "/resonator-splash/Iuno_Splash_Art.webp",
+  Jingran: "/resonator-splash/Jingran_Splash_Art.webp",
+  Jinhsi: "/resonator-splash/Jinhsi_Splash_Art.webp",
+  Jiyan: "/resonator-splash/Jiyan_Splash_Art.webp",
+  Lucilla: "/resonator-splash/Lucilla_Splash_Art.webp",
+  Lucy: "/resonator-splash/Lucy_Splash_Art.webp",
+  Lupa: "/resonator-splash/Lupa_Splash_Art.webp",
+  LuukHerssen: "/resonator-splash/Luuk_Herssen_Splash_Art.webp",
+  Lynae: "/resonator-splash/Lynae_Splash_Art.webp",
+  Mornye: "/resonator-splash/Mornye_Splash_Art.webp",
+  Phoebe: "/resonator-splash/Phoebe_Splash_Art.webp",
+  Phrolova: "/resonator-splash/Phrolova_Splash_Art.webp",
+  Qingxiao: "/resonator-splash/Qingxiao_Splash_Art.webp",
+  Qiuyuan: "/resonator-splash/Qiuyuan_Splash_Art.webp",
+  Rebecca: "/resonator-splash/Rebecca_Splash_Art.webp",
+  Roccia: "/resonator-splash/Roccia_Splash_Art.webp",
+  Shorekeeper: "/resonator-splash/Shorekeeper_Splash_Art.webp",
+  Sigrika: "/resonator-splash/Sigrika_Splash_Art.webp",
+  Suisui: "/resonator-splash/Suisui_Splash_Art.webp",
+  Suoming: "/resonator-splash/Suoming_Splash_Art.webp",
+  XiangliYao: "/resonator-splash/Xiangli_Yao_Splash_Art.webp",
+  YangyangXuanling: "/resonator-splash/Yangyang_Xuanling_Splash_Art.webp",
+  Yinlin: "/resonator-splash/Yinlin_Splash_Art.webp",
+  Zani: "/resonator-splash/Zani_Splash_Art.webp",
+  Zhezhi: "/resonator-splash/Zhezhi_Splash_Art.webp",
+};
 type Build=Awaited<ReturnType<typeof listBuilds>>['builds'][number];
 export function PublicImage({src,alt,className}:{src:string;alt:string;className:string}){
  const [failed,setFailed]=useState(false);
