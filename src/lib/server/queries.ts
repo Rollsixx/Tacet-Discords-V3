@@ -32,13 +32,18 @@ export async function listBuilds(options: { search?: string; character?: string;
     args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", ...patchCharacters, ...(rankedProfile?[]:[(page - 1) * 20])],
   });
   let builds=rankedProfile?result.rows.map(publicBuild):result.rows.slice(0,20).map(publicBuild);
-  // Resolve all of this player's current ranks from one compact leaderboard query.
-  // Keep only rank-history fields here; parsing every player's full build JSON for
-  // every Resonator used to multiply CPU and response work on large profiles.
+  // A player's profile uses the same live rank and movement record as the boards.
   if(!options.includePending&&!options.pending&&(options.uid||options.id)&&builds.length){
-    const ranks=await profileRanksByCharacter([...new Set(builds.map(build=>build.character))],db);
+    // This client may be an in-memory SQLite database with a single connection;
+    // rank-history writes must not race one another inside Promise.all.
+    const histories=[] as Array<readonly [string, typeof builds]>;
+    for(const resonator of [...new Set(builds.map(build=>build.character))]){
+      const board=await listLeaderboard({character:resonator,search:options.uid||builds.find(build=>build.character===resonator)!.uid},db);
+      histories.push([resonator,board.builds]);
+    }
+    const byCharacter=new Map(histories);
     builds=builds.map(build=>{
-      const ranked=ranks.get(build.character)?.get(build.uid);
+      const ranked=byCharacter.get(build.character)?.find(candidate=>candidate.uid===build.uid);
       return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.rankHasHistory??false};
     });
   }
@@ -69,86 +74,27 @@ function publicBuild(row: Row) {
 function parseRankState(raw:unknown):Record<string,RankHistoryEntry>{
  try{const parsed=JSON.parse(String(raw||"{}"));return parsed&&typeof parsed==="object"?parsed as Record<string,RankHistoryEntry>:{}}catch{return {};}
 }
-function rankGeneration(rows:Row[]){
- return "rank-v5:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
-}
-async function synchronizeRankHistories(boards:Map<string,Row[]>,db:Client,recordEvents=true):Promise<Map<string,Record<string,RankHistoryEntry>>>{
- const entries=[...boards.entries()];
- const states=new Map<string,Record<string,RankHistoryEntry>>();
- if(!entries.length)return states;
- const characters=entries.map(([character])=>character),args=characters;
- const sql="SELECT character,generation_hash,state FROM leaderboard_rank_history WHERE character IN ("+characters.map(()=>"?").join(",")+")";
- const initialRows=(await db.execute({sql,args})).rows;
- const initial=new Map<string,Row>(initialRows.map(row=>[String(row.character),row] as const));
- const generations=new Map<string,string>(entries.map(([character,rows])=>[character,rankGeneration(rows)] as const));
- const stale=entries.some(([character])=>String(initial.get(character)?.generation_hash||"")!==generations.get(character));
- if(!stale){
-  for(const [character] of entries)states.set(character,parseRankState(initial.get(character)?.state));
-  return states;
- }
- const tx=await db.transaction("write");
- try{
-  const latestRows=(await tx.execute({sql,args})).rows;
-  const latest=new Map<string,Row>(latestRows.map(row=>[String(row.character),row] as const));
-  const now=new Date().toISOString();
-  for(const [character,rows] of entries){
-   const generation=generations.get(character)!;
-   const saved=latest.get(character);
-   if(String(saved?.generation_hash||"")===generation){
-    states.set(character,parseRankState(saved?.state));
-    continue;
-   }
-   const priorGeneration=String(saved?.generation_hash||"");
-   const hasBaseline=priorGeneration.startsWith("rank-v2:")||priorGeneration.startsWith("rank-v3:")||priorGeneration.startsWith("rank-v4:")||priorGeneration.startsWith("rank-v5:");
-   const previous=hasBaseline?parseRankState(saved?.state):{};
-   const historyRows=rows.map(row=>({uid:String(row.uid),global_rank:Number(row.global_rank),id:String(row.id),score:Number(row.verified_score)}));
-   const next=nextRankHistory(historyRows,previous,now);
-   const events=rankHistoryEvents(historyRows,previous,hasBaseline,now);
-   if(recordEvents)for(const event of events)await tx.execute({sql:"INSERT INTO leaderboard_rank_events(character,uid,event_type,old_rank,new_rank,old_score,new_score,old_build_id,new_build_id,changed_at) VALUES(?,?,?,?,?,?,?,?,?,?)",args:[character,event.uid,event.type,event.oldRank,event.newRank,event.oldScore,event.newScore,event.oldBuildId,event.newBuildId,event.changedAt]});
-   await tx.execute({sql:"INSERT INTO leaderboard_rank_history(character,generation_hash,state,updated_at) VALUES(?,?,?,?) ON CONFLICT(character) DO UPDATE SET generation_hash=excluded.generation_hash,state=excluded.state,updated_at=excluded.updated_at",args:[character,generation,JSON.stringify(next),now]});
-   states.set(character,next);
-  }
-  await tx.commit();
- }finally{tx.close();}
- return states;
-}
 async function synchronizeRankHistory(character:string,rows:Row[],db:Client,recordEvents=true):Promise<Record<string,RankHistoryEntry>>{
- return (await synchronizeRankHistories(new Map([[character,rows]]),db,recordEvents)).get(character)||{};
-}
-type ProfileRank={rank:number;rankMovement:number|null;rankSince:string|null;rankTrackingSince:string|null;rankDays:number|null;bestRank:number|null;bestTop1Days:number|null;rankHasHistory:boolean};
-async function profileRanksByCharacter(characters:string[],db:Client):Promise<Map<string,Map<string,ProfileRank>>>{
- const supported=[...new Set(characters)].filter(character=>SUPPORTED.includes(character));
- const result=new Map<string,Map<string,ProfileRank>>();
- if(!supported.length)return result;
- const boards=new Map<string,Row[]>(supported.map(character=>[character,[] as Row[]] as const));
- const rows=await db.execute({
-  sql:"WITH candidates AS ("+
-   "SELECT s.id,s.uid,s.character,c.score AS verified_score,"+
-   "row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best "+
-   "FROM submissions s JOIN players p ON p.uid=s.uid JOIN calculation_results c ON c.submission_id=s.id "+
-   "WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 "+
-   "AND s.character IN ("+supported.map(()=>"?").join(",")+") "+
-   "AND c.engine_version=? AND c.data_version=? "+
-   "AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)"+
-  "), ranked AS ("+
-   "SELECT id,uid,character,verified_score,"+
-   "row_number() OVER (PARTITION BY character ORDER BY verified_score DESC,id ASC) AS global_rank "+
-   "FROM candidates WHERE player_best=1"+
-  ") SELECT id,uid,character,verified_score,global_rank FROM ranked ORDER BY character,global_rank ASC",
-  args:[...supported,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]
- });
- for(const row of rows.rows)boards.get(String(row.character))?.push(row);
- const histories=await synchronizeRankHistories(boards,db);
- const now=Date.now();
- for(const [character,board] of boards){
-  const state=histories.get(character)||{},players=new Map<string,ProfileRank>();
-  for(const row of board){
-   const uid=String(row.uid),history=state[uid];
-   players.set(uid,{rank:Number(row.global_rank),rankMovement:history?.movement??null,rankSince:history?.rankSince??null,rankTrackingSince:history?.trackingSince??null,rankDays:history?.rankSince?Math.max(0,Math.floor((now-Date.parse(history.rankSince))/86400000)):null,bestRank:history?.bestRank??Number(row.global_rank),bestTop1Days:history?.bestTop1Days??null,rankHasHistory:history?.previousRank!==null&&history?.previousRank!==undefined});
-  }
-  result.set(character,players);
+ const generation="rank-v5:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
+ let saved=(await db.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
+ if(String(saved?.generation_hash||"")!==generation){
+  const tx=await db.transaction("write");
+  try{
+   saved=(await tx.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
+   if(String(saved?.generation_hash||"")!==generation){
+    const priorGeneration=String(saved?.generation_hash||""),hasBaseline=priorGeneration.startsWith("rank-v2:")||priorGeneration.startsWith("rank-v3:")||priorGeneration.startsWith("rank-v4:")||priorGeneration.startsWith("rank-v5:");
+    const previous=hasBaseline?parseRankState(saved?.state):{},now=new Date().toISOString();
+    const historyRows=rows.map(row=>({uid:String(row.uid),global_rank:Number(row.global_rank),id:String(row.id),score:Number(row.verified_score)}));
+    const next=nextRankHistory(historyRows,previous,now);
+    const events=rankHistoryEvents(historyRows,previous,hasBaseline,now);
+    if(recordEvents)for(const event of events)await tx.execute({sql:"INSERT INTO leaderboard_rank_events(character,uid,event_type,old_rank,new_rank,old_score,new_score,old_build_id,new_build_id,changed_at) VALUES(?,?,?,?,?,?,?,?,?,?)",args:[character,event.uid,event.type,event.oldRank,event.newRank,event.oldScore,event.newScore,event.oldBuildId,event.newBuildId,event.changedAt]});
+    await tx.execute({sql:"INSERT INTO leaderboard_rank_history(character,generation_hash,state,updated_at) VALUES(?,?,?,?) ON CONFLICT(character) DO UPDATE SET generation_hash=excluded.generation_hash,state=excluded.state,updated_at=excluded.updated_at",args:[character,generation,JSON.stringify(next),now]});
+    saved={generation_hash:generation,state:JSON.stringify(next)} as unknown as Row;
+   }
+   await tx.commit();
+  }finally{tx.close();}
  }
- return result;
+ return parseRankState(saved?.state);
 }
 
 export async function medalStandings(db:Client=database()){
@@ -167,44 +113,30 @@ export async function refreshLeaderboardRankHistory(db:Client=database()){
  for(const character of characters)await listLeaderboard({character,rotationPolicyId:policies.get(character)??null},db);
  return {refreshed:characters.length};
 }
-export async function listLeaderboard(options: {character?:string;search?:string;page?:number;rotationPolicyId?:string|null} = {}, db:Client=database()) {
-  const character=options.character||SUPPORTED[0];
-  const page=Number.isFinite(options.page)?Math.min(10000,Math.max(1,Math.floor(options.page||1))):1;
-  if(!SUPPORTED.includes(character))return {builds:[],page,hasMore:false,scoring:scoringReadiness,rotationReady:false};
-  const search=(options.search||"").slice(0,64).trim();
-  const policy=Object.prototype.hasOwnProperty.call(options,"rotationPolicyId")?{policy_id:options.rotationPolicyId}:(await db.execute({sql:"SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?",args:[character]})).rows[0];
+export async function listLeaderboard(options: {character?: string;search?: string;page?: number;rotationPolicyId?:string|null} = {}, db: Client = database()) {
+  const character = options.character || SUPPORTED[0];
+  const page = Number.isFinite(options.page) ? Math.min(10000,Math.max(1,Math.floor(options.page || 1))) : 1;
+  if (!SUPPORTED.includes(character)) return {builds: [],page,hasMore:false,scoring:scoringReadiness,rotationReady:false};
+  const search = (options.search || "").slice(0,64).trim();
+  const policy=Object.prototype.hasOwnProperty.call(options,'rotationPolicyId')?{policy_id:options.rotationPolicyId}:(await db.execute({sql:'SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];
   const rotationReady=rotationPolicyReady(policy?.policy_id);
-  // Ranking and history need only identifiers and scores. Keep private build JSON and
-  // calculation details out of the full-board result; hydrate only the visible page.
-  const ranked=await db.execute({sql:`WITH candidates AS (
-    SELECT s.id,s.uid,s.ign,s.character,c.score AS verified_score,
-      row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
+  const result = await db.execute({sql: `WITH candidates AS (
+    SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,p.avatar_character,c.details AS current_calculation,c.score AS verified_score,
+    row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
     FROM submissions s JOIN players p ON p.uid=s.uid JOIN calculation_results c ON c.submission_id=s.id
     WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
   ), ranked AS (
-    SELECT id,uid,ign,verified_score,row_number() OVER (ORDER BY verified_score DESC,id ASC) AS global_rank
-    FROM candidates WHERE player_best=1
-  ) SELECT id,uid,ign,verified_score,global_rank FROM ranked ORDER BY global_rank ASC`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
-  const states=await synchronizeRankHistory(character,ranked.rows,db);
-  const matching=search?ranked.rows.filter(row=>String(row.uid).includes(search)||String(row.ign).toLowerCase().includes(search.toLowerCase())):ranked.rows;
-  const pageRows=matching.slice((page-1)*20,page*20);
-  let builds:ReturnType<typeof publicBuild>[]=[];
-  if(pageRows.length){
-    const ids=pageRows.map(row=>String(row.id));
-    const details=await db.execute({sql:`SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,p.avatar_character,c.details AS current_calculation,c.score AS verified_score
-      FROM submissions s JOIN players p ON p.uid=s.uid JOIN calculation_results c ON c.submission_id=s.id
-      WHERE s.id IN (${ids.map(()=>"?").join(",")}) AND s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)`,args:[...ids,character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
-    const detailsById=new Map(details.rows.map(row=>[String(row.id),row]));
-    builds=pageRows.flatMap(row=>{
-      const detail=detailsById.get(String(row.id));
-      if(!detail)return [];
-      const build=publicBuild({...detail,global_rank:row.global_rank});
-      const history=states[build.uid];
-      return [{...build,rankMovement:history?.movement??null,rankSince:history?.rankSince??null,rankTrackingSince:history?.trackingSince??null,rankDays:history?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(history.rankSince))/86400000)):null,bestRank:history?.bestRank??build.rank,bestTop1Days:history?.bestTop1Days??null,rankHasHistory:history?.previousRank!==null&&history?.previousRank!==undefined}];
-    });
-  }
-  return {builds,page,hasMore:matching.length>page*20,scoring:scoringReadiness,rotationReady};
+    SELECT *,row_number() OVER (ORDER BY verified_score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1
+  ) SELECT * FROM ranked ORDER BY global_rank ASC`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
+  const states=await synchronizeRankHistory(character,result.rows,db);
+  const matching=search?result.rows.filter(row=>String(row.uid).includes(search)||String(row.ign).toLowerCase().includes(search.toLowerCase())):result.rows;
+  const pageRows=matching.slice((page-1)*20,page*20+1);
+  return {builds:pageRows.slice(0,20).map(row=>{
+    const build=publicBuild(row),history=states[build.uid];
+    return {...build,rankMovement:history?.movement??null,rankSince:history?.rankSince??null,rankTrackingSince:history?.trackingSince??null,rankDays:history?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(history.rankSince))/86400000)):null,bestRank:history?.bestRank??build.rank,bestTop1Days:history?.bestTop1Days??null,rankHasHistory:history?.previousRank!==null&&history?.previousRank!==undefined};
+  }),page,hasMore:matching.length>page*20,scoring:scoringReadiness,rotationReady};
 }
+
 export async function listLeaderboardRankChanges(limit=100,db:Client=database(),filters:{character?:string;player?:string;from?:string;to?:string}={}){
  const character=(filters.character||"").trim().slice(0,64).toLowerCase(),player=(filters.player||"").trim().slice(0,64).toLowerCase();
  const from=/^\d{4}-\d{2}-\d{2}$/.test(filters.from||"")?filters.from!:"",to=/^\d{4}-\d{2}-\d{2}$/.test(filters.to||"")?filters.to!:"";
