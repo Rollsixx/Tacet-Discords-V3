@@ -113,30 +113,44 @@ export async function refreshLeaderboardRankHistory(db:Client=database()){
  for(const character of characters)await listLeaderboard({character,rotationPolicyId:policies.get(character)??null},db);
  return {refreshed:characters.length};
 }
-export async function listLeaderboard(options: {character?: string;search?: string;page?: number;rotationPolicyId?:string|null} = {}, db: Client = database()) {
-  const character = options.character || SUPPORTED[0];
-  const page = Number.isFinite(options.page) ? Math.min(10000,Math.max(1,Math.floor(options.page || 1))) : 1;
-  if (!SUPPORTED.includes(character)) return {builds: [],page,hasMore:false,scoring:scoringReadiness,rotationReady:false};
-  const search = (options.search || "").slice(0,64).trim();
-  const policy=Object.prototype.hasOwnProperty.call(options,'rotationPolicyId')?{policy_id:options.rotationPolicyId}:(await db.execute({sql:'SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?',args:[character]})).rows[0];
+export async function listLeaderboard(options: {character?:string;search?:string;page?:number;rotationPolicyId?:string|null} = {}, db:Client=database()) {
+  const character=options.character||SUPPORTED[0];
+  const page=Number.isFinite(options.page)?Math.min(10000,Math.max(1,Math.floor(options.page||1))):1;
+  if(!SUPPORTED.includes(character))return {builds:[],page,hasMore:false,scoring:scoringReadiness,rotationReady:false};
+  const search=(options.search||"").slice(0,64).trim();
+  const policy=Object.prototype.hasOwnProperty.call(options,"rotationPolicyId")?{policy_id:options.rotationPolicyId}:(await db.execute({sql:"SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?",args:[character]})).rows[0];
   const rotationReady=rotationPolicyReady(policy?.policy_id);
-  const result = await db.execute({sql: `WITH candidates AS (
-    SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,p.avatar_character,c.details AS current_calculation,c.score AS verified_score,
-    row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
+  // Ranking and history need only identifiers and scores. Keep private build JSON and
+  // calculation details out of the full-board result; hydrate only the visible page.
+  const ranked=await db.execute({sql:`WITH candidates AS (
+    SELECT s.id,s.uid,s.ign,s.character,c.score AS verified_score,
+      row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
     FROM submissions s JOIN players p ON p.uid=s.uid JOIN calculation_results c ON c.submission_id=s.id
     WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
   ), ranked AS (
-    SELECT *,row_number() OVER (ORDER BY verified_score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1
-  ) SELECT * FROM ranked ORDER BY global_rank ASC`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
-  const states=await synchronizeRankHistory(character,result.rows,db);
-  const matching=search?result.rows.filter(row=>String(row.uid).includes(search)||String(row.ign).toLowerCase().includes(search.toLowerCase())):result.rows;
-  const pageRows=matching.slice((page-1)*20,page*20+1);
-  return {builds:pageRows.slice(0,20).map(row=>{
-    const build=publicBuild(row),history=states[build.uid];
-    return {...build,rankMovement:history?.movement??null,rankSince:history?.rankSince??null,rankTrackingSince:history?.trackingSince??null,rankDays:history?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(history.rankSince))/86400000)):null,bestRank:history?.bestRank??build.rank,bestTop1Days:history?.bestTop1Days??null,rankHasHistory:history?.previousRank!==null&&history?.previousRank!==undefined};
-  }),page,hasMore:matching.length>page*20,scoring:scoringReadiness,rotationReady};
+    SELECT id,uid,ign,verified_score,row_number() OVER (ORDER BY verified_score DESC,id ASC) AS global_rank
+    FROM candidates WHERE player_best=1
+  ) SELECT id,uid,ign,verified_score,global_rank FROM ranked ORDER BY global_rank ASC`,args:[character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
+  const states=await synchronizeRankHistory(character,ranked.rows,db);
+  const matching=search?ranked.rows.filter(row=>String(row.uid).includes(search)||String(row.ign).toLowerCase().includes(search.toLowerCase())):ranked.rows;
+  const pageRows=matching.slice((page-1)*20,page*20);
+  let builds:ReturnType<typeof publicBuild>[]=[];
+  if(pageRows.length){
+    const ids=pageRows.map(row=>String(row.id));
+    const details=await db.execute({sql:`SELECT s.id,s.uid,s.ign,s.character,s.status,s.created_at,s.reviewed_at,s.identity_verified,s.data,p.avatar_character,c.details AS current_calculation,c.score AS verified_score
+      FROM submissions s JOIN players p ON p.uid=s.uid JOIN calculation_results c ON c.submission_id=s.id
+      WHERE s.id IN (${ids.map(()=>"?").join(",")}) AND s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character=? AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)`,args:[...ids,character,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
+    const detailsById=new Map(details.rows.map(row=>[String(row.id),row]));
+    builds=pageRows.flatMap(row=>{
+      const detail=detailsById.get(String(row.id));
+      if(!detail)return [];
+      const build=publicBuild({...detail,global_rank:row.global_rank});
+      const history=states[build.uid];
+      return [{...build,rankMovement:history?.movement??null,rankSince:history?.rankSince??null,rankTrackingSince:history?.trackingSince??null,rankDays:history?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(history.rankSince))/86400000)):null,bestRank:history?.bestRank??build.rank,bestTop1Days:history?.bestTop1Days??null,rankHasHistory:history?.previousRank!==null&&history?.previousRank!==undefined}];
+    });
+  }
+  return {builds,page,hasMore:matching.length>page*20,scoring:scoringReadiness,rotationReady};
 }
-
 export async function listLeaderboardRankChanges(limit=100,db:Client=database(),filters:{character?:string;player?:string;from?:string;to?:string}={}){
  const character=(filters.character||"").trim().slice(0,64).toLowerCase(),player=(filters.player||"").trim().slice(0,64).toLowerCase();
  const from=/^\d{4}-\d{2}-\d{2}$/.test(filters.from||"")?filters.from!:"",to=/^\d{4}-\d{2}-\d{2}$/.test(filters.to||"")?filters.to!:"";
