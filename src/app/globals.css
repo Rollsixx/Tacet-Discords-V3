@@ -1220,3 +1220,29 @@ input[readonly] { opacity: .75; cursor: default; }
 
 /* Keep profile build rows visible on mobile; the standalone leaderboard has its own card list. */
 @media(max-width:1100px){.profiles-page .lb-table-wrap{display:block!important}}
+
+
+/* Profile-only build-card presentation. Leaderboard expansions stay unchanged. */
+.profile-build-card{padding:clamp(16px,3vw,30px);border:1px solid #36505a;border-radius:17px;background:linear-gradient(145deg,#101a22,#0b1219 58%,#101922);overflow:hidden}
+.profile-build-card .lb-expanded-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;margin:-7px -7px 22px;padding:20px;border:1px solid #31464e;border-radius:13px;background:radial-gradient(ellipse at 8% 50%,#4c8f8526,transparent 44%),linear-gradient(110deg,#1b2b34,#15212a)}
+.profile-build-card .lb-expanded-heading>div:first-child{min-width:0}.profile-build-card .lb-expanded-heading .eyebrow{color:#83e5dc;font-size:10px;letter-spacing:.14em}
+.profile-build-card .lb-expanded-heading h2{font-size:clamp(23px,3vw,34px);margin:10px 0 7px}.profile-build-card .lb-expanded-heading p{font-size:11px}
+.profile-build-card .lb-resonator-achievements{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin-top:12px}
+.profile-build-card .lb-achievement-portrait{width:42px;height:42px;object-fit:cover;border-radius:10px;border:1px solid #47716f}
+.profile-build-card .lb-resonator-achievements>span{padding:8px 10px;border:1px solid #354853;border-radius:9px;background:#0b151c;color:#aab8c4;font-size:10px}
+.profile-build-card .lb-resonator-achievements strong{color:#eaf4f4;font-size:13px;margin-left:4px}
+.profile-build-card .lb-resonator-achievements small{flex-basis:100%;color:#e4c86e;font-size:11px;font-weight:700;padding-left:55px}
+.profile-build-equipment{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,.6fr) minmax(0,1.6fr);gap:10px;margin:0 0 18px}
+.profile-build-equipment>section{min-width:0;padding:13px 15px;border:1px solid #2d444d;border-radius:10px;background:#111c24}
+.profile-build-equipment>section>span{display:block;color:#83e5dc;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.profile-build-equipment>section>strong{display:block;margin-top:8px;color:#e8f0f3;font-size:14px;overflow-wrap:anywhere}
+.profile-build-equipment .profile-build-talents>div{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:9px}
+.profile-build-equipment .profile-build-talents>div>span{display:flex;flex-direction:column;gap:5px;min-width:0;padding:8px 4px;border:1px solid #2d424a;border-radius:7px;background:#0c151b;text-align:center}
+.profile-build-equipment .profile-build-talents small{color:#91a2ae;font-size:8px;white-space:nowrap}.profile-build-equipment .profile-build-talents>div strong{color:#e8d49b;font-size:12px;font-variant-numeric:tabular-nums}
+.profile-build-card .lb-stat-chips{gap:8px;margin:17px 0 22px}.profile-build-card .lb-stat-chips>div{padding:9px 12px;border-color:#354650;background:#121d26;font-size:10px}
+.profile-build-card .lb-stat-chips dt{display:flex;align-items:center;gap:6px}.profile-build-card .lb-echoes{grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.profile-build-card .lb-echo{border-color:#31464e;background:linear-gradient(155deg,#18252d,#101820)}.profile-build-card .lb-echo-art{height:clamp(100px,12vw,145px)}
+.profile-build-card .lb-portrait{height:100%;object-fit:contain}.profile-build-card .lb-echo h3{font-size:11px}.profile-build-card .lb-calculation{margin-top:16px}
+@media(max-width:1050px){.profile-build-card .lb-echoes{grid-template-columns:repeat(3,minmax(0,1fr))}.profile-build-equipment{grid-template-columns:1fr 1fr}.profile-build-equipment .profile-build-talents{grid-column:1/-1}}
+@media(max-width:700px){.profile-build-card{padding:12px;border-radius:12px}.profile-build-card .lb-expanded-heading{grid-template-columns:1fr;gap:12px;margin:0 0 15px;padding:13px}.profile-build-card .lb-expanded-heading h2{font-size:24px;margin:8px 0 5px}.profile-build-card .lb-resonator-achievements{gap:6px;margin-top:9px}.profile-build-card .lb-achievement-portrait{width:36px;height:36px}.profile-build-card .lb-resonator-achievements>span{padding:7px;font-size:9px}.profile-build-card .lb-resonator-achievements small{padding-left:0}.profile-build-equipment{grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}.profile-build-equipment>section{padding:10px}.profile-build-equipment>section>strong{font-size:12px}.profile-build-equipment .profile-build-talents{grid-column:1/-1}.profile-build-equipment .profile-build-talents>div{gap:4px}.profile-build-equipment .profile-build-talents small{font-size:7px}.profile-build-equipment .profile-build-talents>div strong{font-size:11px}.profile-build-card .lb-echoes{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.profile-build-card .lb-echo:last-child{grid-column:1/-1;justify-self:center;width:calc(50% - 4px);max-width:none}.profile-build-card .lb-echo{padding:8px}.profile-build-card .lb-echo-art{height:115px}.profile-build-card .lb-echo h3{font-size:10px}.profile-build-card .lb-expanded-heading .outline-button{justify-self:start}}
+@media(max-width:380px){.profile-build-equipment .profile-build-talents>div{grid-template-columns:repeat(3,minmax(0,1fr))}.profile-build-card .lb-echo:last-child{width:100%}}

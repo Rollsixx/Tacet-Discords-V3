@@ -16,7 +16,7 @@ let active=false;
 export async function assessSource(input){
  if(!input.sourceImage){console.info(JSON.stringify({event:'scanner.verification',outcome:'rejected',reason_code:'MISSING_SCREENSHOT',duration_ms:0}));return {eligible:false,reason:'Original screenshot evidence is required for scoring.'};}
  if(active){console.warn(JSON.stringify({event:'scanner.verification',outcome:'deferred',reason_code:'WORKER_BUSY',duration_ms:0}));return {eligible:false,reason:'Scoring worker busy; resubmit later for scoring.'};}
- active=true;const startedAt=Date.now();let metricOutcome='blocked';let metricCode='';const ocrReadings=[];let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;let stage='image';let retries=0;
+ active=true;const startedAt=Date.now();let metricOutcome='blocked';let metricCode='';const ocrReadings=[];let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;let profileDetails;let stage='image';let retries=0;
  try{
   const image=input.sourceImage;
   const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
@@ -115,22 +115,54 @@ export async function assessSource(input){
   const rollIssues=slots.flatMap(slot=>validateEchoSlot(slot).map(issue=>({...issue,slot:slot.slot})));
   const invalid=rollIssues.find(issue=>issue.code!=='UNSUPPORTED_ROLL');if(invalid)throw Error('Echo '+invalid.slot+': '+invalid.message);
   statsVerified=true;sourceSlots=slots;
+  profileDetails=await readProfileDetails(worker,readResult,decoded);
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
   visualReport=await diagnoseSlots(decoded,slots.map(x=>Number(x.cost.value)));
-  if(!SUPPORTED.includes(input.character)){metricOutcome='awaiting_rotation';metricCode='NO_PUBLISHED_ROTATION';return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:'No validated rotation policy is available for this character.'};}
-  if(levelIssue){metricOutcome='main_stat_unverified';metricCode='MAIN_STAT_AMOUNT_UNVERIFIED';return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:levelIssue};}
-  if(rollIssues.length){metricOutcome='catalog_review';metricCode='ROLL_TABLE_REVIEW';return {eligible:false,catalogReview:true,sourceUid,statsVerified,rollsVerified:false,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,reason:'Source numbers verified; optimizer roll-table review required. This build can be approved as unranked, but cannot score. '+rollIssues.map(i=>'Echo '+i.slot+': '+i.message).join(' ')};}
+  if(!SUPPORTED.includes(input.character)){metricOutcome='awaiting_rotation';metricCode='NO_PUBLISHED_ROTATION';return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,profileDetails,reason:'No validated rotation policy is available for this character.'};}
+  if(levelIssue){metricOutcome='main_stat_unverified';metricCode='MAIN_STAT_AMOUNT_UNVERIFIED';return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,profileDetails,reason:levelIssue};}
+  if(rollIssues.length){metricOutcome='catalog_review';metricCode='ROLL_TABLE_REVIEW';return {eligible:false,catalogReview:true,sourceUid,statsVerified,rollsVerified:false,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,profileDetails,reason:'Source numbers verified; optimizer roll-table review required. This build can be approved as unranked, but cannot score. '+rollIssues.map(i=>'Echo '+i.slot+': '+i.message).join(' ')};}
   const identities=identitiesFromReport(visualReport);
   const equipment=await assessEquipment(input.character,slots,identities);
   metricOutcome=equipment.eligible?'verified':equipment.awaitingRotation?'awaiting_rotation':equipment.catalogReview?'catalog_review':'blocked';
   metricCode=equipment.eligible?'VERIFIED':equipment.awaitingRotation?'NO_PUBLISHED_ROTATION':equipment.catalogReview?'ROLL_TABLE_REVIEW':'SCORING_BLOCKED';
-  return {...equipment,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,ocrReadings,maxMainStatsVerified,visualReport,reason:equipment.reason||'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash};
+  return {...equipment,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,ocrReadings,maxMainStatsVerified,visualReport,profileDetails,reason:equipment.reason||'Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',sourceHash};
  }catch(error){
   const failure=error?.sourceFailure||(statsVerified?{code:'SCORING_BLOCKED',message:error instanceof Error?error.message:'Scoring validation failed.'}:stage==='worker'?{code:'OCR_SERVICE_UNAVAILABLE',message:'Screenshot verification could not start. Please try again shortly.'}:{code:'SOURCE_UNREADABLE',message:'Echo stats could not be verified from this image. Retry with the original 1920 × 1080 card; stats remain locked.'});
   metricOutcome=failure.code==='OCR_SERVICE_UNAVAILABLE'?'service_error':'rejected';metricCode=failure.code;
   console.warn('Source verification failed',JSON.stringify({code:failure.code,slot:failure.slot,field:failure.field}));
-  return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,failure,reason:failure.message};
+  return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,profileDetails,failure,reason:failure.message};
  }
  finally{try{await worker?.terminate();}catch{/* Keep the original diagnostic. */}console.info(JSON.stringify({event:'scanner.verification',outcome:metricOutcome,reason_code:metricCode||'UNCLASSIFIED',stage,duration_ms:Date.now()-startedAt,retries,stats_verified:statsVerified,max_main_stats_verified:maxMainStatsVerified}));active=false;}
+}
+
+
+async function readProfileDetails(worker,readResult,decoded){
+ try{
+  const nodes=[
+   {left:1063,top:184,width:105,height:30},
+   {left:831,top:343,width:105,height:30},
+   {left:1260,top:343,width:105,height:30},
+   {left:916,top:588,width:105,height:30},
+   {left:1184,top:588,width:105,height:30},
+  ];
+  await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'LV0123456789/'});
+  const reads=[];for(const region of nodes)reads.push(await readResult(region,{scale:4,linear:true}));
+  const talents=reads.map(({data})=>{const match=data.text.replace(/\s+/g,'').toUpperCase().match(/LV(\d{1,2})\/10/);return match?Number(match[1]):null;});
+  await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 &-.'});
+  const weaponRead=await readResult({left:1590,top:455,width:230,height:46},{scale:4,linear:true});
+  const weapon=weaponRead.data.text.replace(/[^\p{L}\p{N} '&-]/gu,'').replace(/\s+/g,' ').trim();
+  const safeWeapon=weapon.length>=3&&weapon.length<=40&&!/^(LV|Level|Ascension|Attack)/i.test(weapon)?weapon:undefined;
+  const crop=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).extract({left:102,top:548,width:556,height:82}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  let resonanceChain=0,chainPixels=0;
+  for(let node=0;node<6;node++){
+   const left=Math.round(node*crop.info.width/6),right=Math.round((node+1)*crop.info.width/6);let gold=0;
+   for(let y=0;y<crop.info.height;y++)for(let x=left;x<right;x++){
+    const i=(y*crop.info.width+x)*4,r=crop.data[i],g=crop.data[i+1],b=crop.data[i+2];
+    if(r>150&&g>105&&r>g*1.08&&b<165)gold++;
+   }
+   chainPixels+=gold;if(gold>75)resonanceChain++;
+  }
+  return {...(safeWeapon?{weapon:safeWeapon}:{}),...(talents.every(level=>level!==null&&level>=1&&level<=10)?{talents}:{}),...(chainPixels>150?{resonanceChain}:{})};
+ }catch{return undefined;}
 }
