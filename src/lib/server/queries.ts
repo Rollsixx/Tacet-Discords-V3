@@ -34,17 +34,32 @@ export async function listBuilds(options: { search?: string; character?: string;
   let builds=rankedProfile?result.rows.map(publicBuild):result.rows.slice(0,20).map(publicBuild);
   // A player's profile uses the same live rank and movement record as the boards.
   if(!options.includePending&&!options.pending&&(options.uid||options.id)&&builds.length){
-    // This client may be an in-memory SQLite database with a single connection;
-    // rank-history writes must not race one another inside Promise.all.
-    const histories=[] as Array<readonly [string, typeof builds]>;
-    for(const resonator of [...new Set(builds.map(build=>build.character))]){
-      const board=await listLeaderboard({character:resonator,search:options.uid||builds.find(build=>build.character===resonator)!.uid},db);
-      histories.push([resonator,board.builds]);
-    }
-    const byCharacter=new Map(histories);
+    // Fetch all of this player's resonator ranks in one ranking query, then
+    // synchronize histories serially because SQLite may use a single connection.
+    const characters=[...new Set(builds.map(build=>build.character))];
+    const ranked=await db.execute({sql:`WITH candidates AS (
+      SELECT s.id,s.uid,s.ign,s.character,c.score AS verified_score,
+        row_number() OVER (PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
+      FROM submissions s JOIN players p ON p.uid=s.uid JOIN calculation_results c ON c.submission_id=s.id
+      WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1
+        AND s.character IN (${characters.map(()=>"?").join(",")})
+        AND c.engine_version=? AND c.data_version=?
+        AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
+    ), ranked AS (
+      SELECT id,uid,ign,character,verified_score,
+        row_number() OVER (PARTITION BY character ORDER BY verified_score DESC,id ASC) AS global_rank
+      FROM candidates WHERE player_best=1
+    ) SELECT id,uid,ign,character,verified_score,global_rank FROM ranked ORDER BY character,global_rank ASC`,
+      args:[...characters,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
+    const grouped=new Map<string,Row[]>();
+    for(const row of ranked.rows){const key=String(row.character),group=grouped.get(key)||[];group.push(row);grouped.set(key,group);}
+    const historyByCharacter=new Map<string,Record<string,RankHistoryEntry>>();
+    for(const resonator of characters)historyByCharacter.set(resonator,await synchronizeRankHistory(resonator,grouped.get(resonator)||[],db));
     builds=builds.map(build=>{
-      const ranked=byCharacter.get(build.character)?.find(candidate=>candidate.uid===build.uid);
-      return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.rankHasHistory??false};
+      const rankedBuild=(grouped.get(build.character)||[]).find(candidate=>String(candidate.uid)===build.uid);
+      const history=historyByCharacter.get(build.character)?.[build.uid];
+      const rank=rankedBuild?Number(rankedBuild.global_rank):null;
+      return {...build,rank,rankMovement:history?.movement??null,rankSince:history?.rankSince??null,rankTrackingSince:history?.trackingSince??null,rankDays:history?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(history.rankSince))/86400000)):null,bestRank:history?.bestRank??rank,bestTop1Days:history?.bestTop1Days??null,rankHasHistory:history?.previousRank!==null&&history?.previousRank!==undefined};
     });
   }
   let hasMore=rankedProfile?builds.length>page*20:result.rows.length>20;
