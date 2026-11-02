@@ -1352,3 +1352,59 @@ input[readonly] { opacity: .75; cursor: default; }
 .profile-build-sprite-card{background:linear-gradient(0deg,rgba(7,17,27,.88),rgba(7,17,27,.08) 65%)}
 .profile-build-info-card,.profile-build-sprite-card,.profile-build-weapon-card,.profile-build-cv-card{background-color:rgba(12,23,32,.76)}
 .profile-build-card .lb-echo{background:linear-gradient(160deg,rgba(21,35,45,.86),rgba(9,17,24,.88))}
+
+/* Profile card legibility and wider substats layout. */
+.profile-build-card{background-size:cover;background-position:center 42%}
+.profile-build-card:before{background:linear-gradient(100deg,rgba(7,13,19,.14),rgba(7,13,19,.06) 52%,rgba(7,13,19,.14))}
+.profile-build-header{display:block;padding:14px 22px 11px;background:linear-gradient(90deg,rgba(7,14,20,.42),rgba(7,14,20,.16))}
+.profile-build-title-line{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px}
+.profile-build-title-line h2{margin:3px 0;color:#f1f6f8;font-size:clamp(23px,2.6vw,32px)}
+.profile-build-heading-copy>p{margin:2px 0 0;color:#d3dce1;font-size:11px}
+.profile-build-heading-copy>p span{margin:0 5px;color:#a9bac4}
+.profile-build-title-line .profile-build-rank-pills{margin:0;gap:6px}
+.profile-build-title-line .profile-build-rank-pills>span{padding:5px 8px;background:rgba(6,15,22,.86)}
+.profile-build-title-line .profile-build-rank-pills small{font-size:7px}
+.profile-build-title-line .profile-build-rank-pills strong{font-size:12px}
+.profile-build-title-line .profile-build-rank-pills .profile-build-tenure strong{font-size:10px}
+.profile-build-top-panels{grid-template-columns:minmax(0,1fr) minmax(175px,.32fr);align-items:stretch}
+.profile-build-side-panels{display:flex;flex-direction:column;gap:9px;min-width:0}
+.profile-build-info-card,.profile-build-sprite-card,.profile-build-weapon-card,.profile-build-cv-card{background:rgba(10,20,29,.9)}
+.profile-build-substats-card{background:rgba(8,18,26,.92)}
+.profile-build-substats-card h3{margin:0 0 10px;font-size:15px}
+.profile-build-substats-card dl{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.profile-build-substats-card dl>div{grid-template-columns:25px minmax(0,1fr);min-height:49px;padding:7px 9px;background:rgba(5,14,21,.76)}
+.profile-build-substats-card dl>div>img{width:21px;height:21px}
+.profile-build-substats-card dl dt{font-size:10px}
+.profile-build-substats-card dl dd{font-size:15px;line-height:1.15}
+.profile-build-chain-card h3{display:flex;align-items:center;gap:7px}
+.profile-build-chain-portrait{width:23px;height:23px;object-fit:cover;border:1px solid #4a737b;border-radius:50%}
+.profile-build-chain-card .profile-build-sequence{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.profile-build-chain-card .profile-build-sequence>span{display:flex;align-items:center;justify-content:flex-start;gap:6px;min-height:29px;padding:4px 6px}
+.profile-build-sequence>span>i{display:grid;place-items:center;width:19px;height:19px;border:1px solid #52727a;border-radius:50%;color:#91e4df}
+.profile-build-sequence>span>i svg{width:13px;height:13px}
+.profile-build-sequence>span>b{font-size:9px}
+.profile-build-skills-card{flex:1}
+.profile-build-skills{grid-template-columns:1fr;gap:5px}
+.profile-build-skills>div{grid-template-columns:23px minmax(0,1fr) auto;grid-template-rows:1fr;gap:7px;min-height:29px;padding:4px 7px;background:rgba(5,14,21,.76)}
+.profile-build-skills>div>span{grid-row:1;width:21px;height:21px}
+.profile-build-skills>div>span svg{width:14px;height:14px}
+.profile-build-skills>div strong{grid-column:3;grid-row:1;font-size:12px}
+.profile-build-skills>div small{grid-column:2;grid-row:1;font-size:9px}
+.profile-build-card .lb-echo{background:rgba(9,18,26,.9)}
+@media(max-width:1050px){.profile-build-top-panels{grid-template-columns:minmax(0,1fr) minmax(160px,.35fr)}}
+@media(max-width:700px){
+ .profile-build-header{padding:12px 14px 9px}
+ .profile-build-title-line{gap:7px}
+ .profile-build-title-line h2{font-size:22px}
+ .profile-build-title-line .profile-build-rank-pills>span{padding:4px 6px}
+ .profile-build-top-panels{grid-template-columns:1fr;gap:8px}
+ .profile-build-side-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+ .profile-build-chain-card,.profile-build-skills-card{min-width:0}
+ .profile-build-skills{grid-template-columns:1fr}
+ .profile-build-substats-card dl>div{min-height:48px}
+}
+@media(max-width:390px){
+ .profile-build-side-panels{grid-template-columns:1fr}
+ .profile-build-title-line .profile-build-rank-pills{flex-basis:100%}
+ .profile-build-substats-card dl dd{font-size:13px}
+}
