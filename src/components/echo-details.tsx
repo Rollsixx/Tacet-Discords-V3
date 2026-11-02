@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { featuredResonators } from "@/lib/resonators";
+import { profileResonatorActionIcons } from "@/lib/profile-resonator-action-icons";
 import { ResonatorPortrait } from "./resonator-portrait";
 import { defaultLeaderboardColumns, formatLeaderboardMetric } from "@/lib/leaderboards/metrics.mjs";
 import type { listBuilds } from "@/lib/server/queries";
@@ -97,7 +98,9 @@ export function PublicImage({src,alt,className}:{src:string;alt:string;className
  // eslint-disable-next-line @next/next/no-img-element
  <img className={className} src={src} alt={alt} loading="lazy" onError={()=>setFailed(true)} />;
 }
-function ProfileActionIcon({kind}:{kind:string}){
+function ProfileActionIcon({kind,src}:{kind:string;src?:string}){
+ const [failed,setFailed]=useState(false);
+ if(src&&!failed)return <Image className="profile-build-action-icon-image" src={src} alt="" width={30} height={30} unoptimized onError={()=>setFailed(true)}/>;
  const glyphs:Record<string,ReactNode>={
   Normal:<><path d="M5 19 18 6"/><path d="m14 5 5 5"/><path d="M4 20 8 16"/></>,
   Skill:<><path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4L12 3Z"/></>,
@@ -144,8 +147,8 @@ export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?
     <div className="profile-build-top-panels">
      <section className="profile-build-info-card profile-build-substats-card"><h3>Substats</h3><dl>{chip("Crit. Rate","/stat-icons/critrate.png",compactNumber(stats?.totalCritRate,true))}{chip("Crit. DMG","/stat-icons/critdamage.png",compactNumber(stats?.totalCritDMG,true))}{chip("HP","/stat-icons/hp.png",compactNumber(stats?.totalHp))}{chip("ATK","/stat-icons/atk.png",compactNumber(stats?.totalAtk))}{chip("DEF","/stat-icons/def.png",compactNumber(stats?.totalDef))}{chip(metrics.attribute.label,metrics.attribute.icon,formatLeaderboardMetric(stats?.[metrics.attribute.field],metrics.attribute.percent,metrics.attribute.field))}{chip("Energy Regen","/stat-icons/energyregen.png",compactNumber(stats?.energyRegen,true))}{chip(metrics.damage.label,metrics.damage.icon,formatLeaderboardMetric(stats?.[metrics.damage.field],metrics.damage.percent,metrics.damage.field))}</dl></section>
      <div className="profile-build-side-panels">
-      <section className="profile-build-info-card profile-build-chain-card"><h3><ResonatorPortrait name={build.character} className="profile-build-chain-portrait"/>Resonance Chain</h3><div className="profile-build-sequence">{Array.from({length:6},(_,i)=><span key={i} className={profileDetails?.resonanceChain!==undefined&&i<profileDetails.resonanceChain?"is-active":""}><i><ProfileActionIcon kind="Chain"/></i><b>{i===0?"S0":`S${i}`}</b></span>)}</div><small>{profileDetails?.resonanceChain===undefined?"Sequence level not recorded":`Sequence ${profileDetails.resonanceChain}`}</small></section>
-      <section className="profile-build-info-card profile-build-skills-card"><h3>Skills</h3><div className="profile-build-skills">{["Normal","Skill","Forte","Liberation","Intro"].map((name,index)=><div key={name}><span><ProfileActionIcon kind={name}/></span><strong>{profileDetails?.talents?.length===5?`${profileDetails.talents[index]}/10`:"—"}</strong><small>{name}</small></div>)}</div></section>
+      <section className="profile-build-info-card profile-build-chain-card"><h3><ResonatorPortrait name={build.character} className="profile-build-chain-portrait"/>Resonance Chain</h3><div className="profile-build-sequence">{Array.from({length:6},(_,i)=><span key={i} className={profileDetails?.resonanceChain!==undefined&&i<profileDetails.resonanceChain?"is-active":""}><i><ProfileActionIcon kind="Chain" src={profileResonatorActionIcons[build.character]?.chain[i]}/></i><b>{`S${i+1}`}</b></span>)}</div><small>{profileDetails?.resonanceChain===undefined?"Sequence level not recorded":`Sequence ${profileDetails.resonanceChain}`}</small></section>
+      <section className="profile-build-info-card profile-build-skills-card"><h3>Skills</h3><div className="profile-build-skills">{["Normal","Skill","Forte","Liberation","Intro"].map((name,index)=><div key={name}><span><ProfileActionIcon kind={name} src={profileResonatorActionIcons[build.character]?.skills[name as keyof (typeof profileResonatorActionIcons)[string]["skills"]]}/></span><strong>{profileDetails?.talents?.length===5?`${profileDetails.talents[index]}/10`:"—"}</strong><small>{name}</small></div>)}</div></section>
      </div>
     </div>
     <h3 className="profile-build-section-title profile-build-echo-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3>
