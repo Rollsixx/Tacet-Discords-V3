@@ -118,6 +118,17 @@ export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?
  const cv=build.data.slots.reduce((total,slot)=>total+echoCritValue(slot.substats),0);
  const chip=(label:string,icon:string,value:ReactNode)=><div>{profile&&<Image className="profile-build-stat-icon" src={icon} alt="" width={26} height={26} unoptimized/>}<dt>{!profile&&<Image src={icon} alt="" width={15} height={15} unoptimized/>}{label}</dt><dd>{value}</dd></div>;
  const statsPanel=<dl className={`lb-stat-chips${profile?" profile-build-stat-grid":""}`}>{chip("Echo CV","/stat-icons/critdamage.png",cv.toFixed(1))}{chip("Crit. Rate","/stat-icons/critrate.png",compactNumber(stats?.totalCritRate,true))}{chip("Crit. DMG","/stat-icons/critdamage.png",compactNumber(stats?.totalCritDMG,true))}{chip("HP","/stat-icons/hp.png",compactNumber(stats?.totalHp))}{chip("ATK","/stat-icons/atk.png",compactNumber(stats?.totalAtk))}{chip("DEF","/stat-icons/def.png",compactNumber(stats?.totalDef))}{chip(metrics.attribute.label,metrics.attribute.icon,formatLeaderboardMetric(stats?.[metrics.attribute.field],metrics.attribute.percent,metrics.attribute.field))}{chip("Energy Regen","/stat-icons/energyregen.png",compactNumber(stats?.energyRegen,true))}{chip(metrics.damage.label,metrics.damage.icon,formatLeaderboardMetric(stats?.[metrics.damage.field],metrics.damage.percent,metrics.damage.field))}{chip(profile?"Benchmark score":"Benchmark damage","/stat-icons/damages.png",build.score===null?'Unranked':build.score.toLocaleString(undefined,{maximumFractionDigits:2}))}</dl>;
+ const echoCards=<>
+  <div className="lb-echoes">{build.data.slots.map((slot,index)=>{
+   const identity=calculation?.identities?.[index];
+   return <article className="lb-echo" key={slot.slot} aria-label={`Echo ${slot.slot}`}>
+    <div className="lb-echo-art"><PublicImage src={`/api/assets/${build.id}-${slot.slot}-portrait`} alt={`Echo ${slot.slot} portrait`} className="lb-portrait" /><span className="lb-cv" title="Crit value from substats: 2 × Crit. Rate + Crit. DMG">{echoCritValue(slot.substats).toFixed(1)} CV</span><PublicImage src={`/api/assets/${build.id}-${slot.slot}-sonata`} alt={identity?readableName(identity.set):`Echo ${slot.slot} Sonata`} className="lb-sonata" /><span className="lb-cost">{slot.cost.value} cost</span></div>
+    <h3 title={identity?readableName(identity.echo):undefined}>{identity?readableName(identity.echo):`Echo ${slot.slot}`}</h3>
+    <div className="lb-main-stat"><span>{slot.mainStat.value}</span><strong>{mainStatAmount(slot.cost.value,slot.mainStat.value)}</strong></div>
+    <dl className="lb-substats">{slot.substats.map((field,i)=>{const stat=shortStat(field.value);return <div key={i} className={stat.critical?'lb-critical':''}><dt title={field.value}>{stat.label}</dt><dd>{stat.amount}</dd></div>;})}</dl>
+   </article>;
+  })}</div>
+ </>;
  return <section className={`lb-expanded${profile?' profile-build-card':''}`} id={'echo-details-'+(detailId||build.id)} aria-label={`${build.ign} Echo build`} style={profile&&splashArt?{backgroundImage:`linear-gradient(110deg,rgba(8,14,20,.34),rgba(8,14,20,.18) 58%,rgba(8,14,20,.28)),url("${splashArt}")`}:undefined}>
   {profile?<header className="profile-build-header"><div className="profile-build-heading-copy"><span className="profile-build-kicker">WUTHERING WAVES · RESONATOR BUILD</span><div className="profile-build-title-line profile-build-hero-copy"><h2>{build.character}</h2><div className="profile-build-rank-pills"><span><small>Current rank</small><strong>{build.rank===null?"Unranked":"#"+build.rank}</strong></span><span><small>Best rank</small><strong>{build.bestRank===null||build.bestRank===undefined?"—":"#"+build.bestRank}</strong></span>{build.bestRank===1&&<span className="profile-build-tenure"><small>Top-one tenure</small><strong>{build.bestTop1Days?`Held #1 for ${build.bestTop1Days} days`:build.rank===1?`Currently #1 for ${build.rankDays??0} days`:"Tracking started"}</strong></span>}</div></div><p>{build.ign} <span>·</span> UID {build.uid} <span>·</span> Submitted {new Date(build.createdAt).toLocaleDateString()}</p></div></header>:<header className="lb-expanded-heading"><div><span className="eyebrow">{build.character} · {build.ign}</span><div className="lb-resonator-achievements"><ResonatorPortrait name={build.character} className="lb-achievement-portrait"/><span>Current rank <strong>{build.rank===null?"Unranked":"#"+build.rank}</strong></span><span>Best rank <strong>{build.bestRank===null||build.bestRank===undefined?"—":"#"+build.bestRank}</strong></span>{build.bestRank===1&&<small>{build.bestTop1Days?`Longest #1 run ${build.bestTop1Days} days`:build.rank===1?`Currently #1 for ${build.rankDays??0} days`:"Top-one tenure tracking started"}</small>}</div><h2>Equipped Echoes</h2><p>UID {build.uid} · Submitted {new Date(build.createdAt).toLocaleDateString()}</p></div><Link className="outline-button" href={`/profiles?uid=${build.uid}&build=${build.id}`}>View profile ↗</Link></header>}
   {profile&&<div className="profile-build-layout">
@@ -138,17 +149,10 @@ export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?
      </div>
     </div>
     <h3 className="profile-build-section-title profile-build-echo-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3>
-  <div className="lb-echoes">{build.data.slots.map((slot,index)=>{
-   const identity=calculation?.identities?.[index];
-   return <article className="lb-echo" key={slot.slot} aria-label={`Echo ${slot.slot}`}>
-    <div className="lb-echo-art"><PublicImage src={`/api/assets/${build.id}-${slot.slot}-portrait`} alt={`Echo ${slot.slot} portrait`} className="lb-portrait" /><span className="lb-cv" title="Crit value from substats: 2 × Crit. Rate + Crit. DMG">{echoCritValue(slot.substats).toFixed(1)} CV</span><PublicImage src={`/api/assets/${build.id}-${slot.slot}-sonata`} alt={identity?readableName(identity.set):`Echo ${slot.slot} Sonata`} className="lb-sonata" /><span className="lb-cost">{slot.cost.value} cost</span></div>
-    <h3 title={identity?readableName(identity.echo):undefined}>{identity?readableName(identity.echo):`Echo ${slot.slot}`}</h3>
-    <div className="lb-main-stat"><span>{slot.mainStat.value}</span><strong>{mainStatAmount(slot.cost.value,slot.mainStat.value)}</strong></div>
-    <dl className="lb-substats">{slot.substats.map((field,i)=>{const stat=shortStat(field.value);return <div key={i} className={stat.critical?'lb-critical':''}><dt title={field.value}>{stat.label}</dt><dd>{stat.amount}</dd></div>;})}</dl>
-   </article>;
-  })}</div>
+    {echoCards}
+
    </main>
   </div>}
-  {!profile&&statsPanel}
+  {!profile&&<>{echoCards}{statsPanel}</>}
  </section>;
 }
