@@ -3,7 +3,8 @@ import {verifyHistoricalCorrections} from "@/lib/server/correction-workflow.mjs"
 import { authorize, failure, json, readJson } from "@/lib/server/http";
 import { HttpError, record } from "@/lib/server/validation";
 import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild, correctEchoSubstat } from "@/lib/server/store";
-import {listLeaderboardRankChanges,leaderboardConsistencyReport} from "@/lib/server/queries";
+import {listLeaderboardRankChanges,leaderboardConsistencyReport,refreshLeaderboardRankHistory} from "@/lib/server/queries";
+import {database} from "@/lib/server/database";
 export async function GET(request: Request) {
   try {
     authorize(request);
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
     }
     if(input.action==="rejected"&&!(["incomplete","mismatch","unsupported","other"] as unknown[]).includes(input.reasonCode))throw new HttpError(400,"Choose a rejection reason before rejecting this submission.");
     await moderate(input.id, input.action as "approved" | "rejected", input.reviewer.trim(), input.note, input.identityVerified, undefined, input.allowUnranked===true);
+    await refreshLeaderboardRankHistory(database());
     return json({ ok: true });
   } catch (error) { return failure(error); }
 }
@@ -47,9 +49,9 @@ export async function PATCH(request: Request) {
  try {
   authorize(request);const input=await readJson(request,4096);if(record(input)&&input.note===undefined)input.note="";
   if(!record(input)||typeof input.identityVerified!=="boolean"||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Valid player verification and moderator name required; note is optional.");
-  if(typeof input.uid==='string'&&/^\d{8,12}$/.test(input.uid))return json({ok:true,...await setUidVerification(input.uid,input.identityVerified,input.reviewer.trim(),input.note)});
+  if(typeof input.uid==='string'&&/^\d{8,12}$/.test(input.uid)){const result=await setUidVerification(input.uid,input.identityVerified,input.reviewer.trim(),input.note);await refreshLeaderboardRankHistory(database());return json({ok:true,...result});}
   if(typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id))throw new HttpError(400,'Valid player UID or approved build ID required.');
-  return json({ok:true,...await setPlayerVerification(input.id,input.identityVerified,input.reviewer.trim(),input.note)});
+  const result=await setPlayerVerification(input.id,input.identityVerified,input.reviewer.trim(),input.note);await refreshLeaderboardRankHistory(database());return json({ok:true,...result});
  }catch(error){return failure(error);}
 }
 
@@ -57,7 +59,7 @@ export async function DELETE(request: Request) {
  try {
   authorize(request);const input=await readJson(request,4096);if(record(input)&&input.note===undefined)input.note="";
   if(!record(input)||typeof input.id!=="string"||!/^[a-f0-9-]{36}$/.test(input.id)||input.confirm!==true||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Confirm deletion and provide a reviewer name and note.");
-  return json({ok:true,...await deleteBuild(input.id,input.reviewer.trim(),input.note)});
+  const result=await deleteBuild(input.id,input.reviewer.trim(),input.note);await refreshLeaderboardRankHistory(database());return json({ok:true,...result});
  }catch(error){return failure(error);}
 }
 
@@ -66,9 +68,9 @@ export async function PUT(request:Request){
   authorize(request);const input=await readJson(request,65536);if(record(input)&&input.note===undefined)input.note="";
   if(record(input)&&input.action==='verify-corrections'){
    if(typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id)||!Array.isArray(input.expectedCorrections)||typeof input.reviewer!=='string'||typeof input.note!=='string')throw new HttpError(400,'Invalid correction verification.');
-   return json({ok:true,...await verifyHistoricalCorrections(input.id,input.expectedCorrections,input.reviewer,input.verified,input.note)});
+   const result=await verifyHistoricalCorrections(input.id,input.expectedCorrections,input.reviewer,input.verified,input.note);await refreshLeaderboardRankHistory(database());return json({ok:true,...result});
   }
   if(!record(input)||typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id)||typeof input.slot!=='number'||typeof input.position!=='number'||typeof input.expected!=='string'||typeof input.replacement!=='string'||typeof input.reviewer!=='string'||typeof input.note!=='string')throw new HttpError(400,'Invalid Echo substat correction.');
-  return json({ok:true,...await correctEchoSubstat(input.id,input.slot,input.position,input.expected,input.replacement,input.reviewer,input.note)});
+  const result=await correctEchoSubstat(input.id,input.slot,input.position,input.expected,input.replacement,input.reviewer,input.note);await refreshLeaderboardRankHistory(database());return json({ok:true,...result});
  }catch(error){return failure(error);}
 }

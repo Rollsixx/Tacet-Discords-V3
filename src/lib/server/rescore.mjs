@@ -1,14 +1,18 @@
 import {hasRetainedRecovery,recoverVisualEvidence,recoveryMode} from './visual-recovery.mjs';
 import {initializeRotations,scoreActiveRotation} from './rotations/store.mjs';
 import {validateEchoSlot} from '../scanner/stat-validation.ts';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {assessEquipment,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring.mjs';
 import {correctionLedgerVerified} from './correction-workflow.mjs';
 import {recordRescoreSkip} from './rescore-report.mjs';
 // Reuse only previously server-validated evidence from this known data snapshot.
 // Old unsupported/no-evidence submissions must be resubmitted with an original.
-export async function rescoreStoredBuilds(db){
+export async function rescoreStoredBuilds(db,{force=false}={}){
  await initializeRotations(db);
+ const rotationState=await db.execute({sql:"SELECT a.character,a.version_id,v.spec_hash,v.engine_version,v.data_version,v.mechanics_version,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id ORDER BY a.character",args:[]});
+ const rescoreKey=createHash("sha256").update(JSON.stringify({engine:ENGINE_VERSION,data:DATA_VERSION,policy:POLICY_VERSION,rotations:rotationState.rows})).digest("hex");
+ const savedKey=await db.execute({sql:"SELECT value FROM app_settings WHERE key='rescore_signature'",args:[]});
+ if(!force&&String(savedKey.rows[0]?.value||"")===rescoreKey)return {updated:0,skipped:0,skippedReasons:{already_current:true},failed:0,awaitingRotationRecords:[],failedRecords:[],unchanged:true};
  const rows=await db.execute("SELECT s.id,s.uid,s.character,s.status,s.identity_verified,s.reviewed_at,s.data,v.id AS active_rotation_id,v.kind AS active_rotation_kind,v.policy_id AS active_policy_id,v.spec AS active_rotation_spec,v.engine_version AS active_rotation_engine_version,v.data_version AS active_rotation_data_version,v.mechanics_version AS active_rotation_mechanics_version FROM submissions s LEFT JOIN rotation_active a ON a.character=s.character LEFT JOIN rotation_versions v ON v.id=a.version_id WHERE s.status IN ('pending','approved') AND s.replaced_by IS NULL");
  const result={updated:0,skipped:0,skippedReasons:{},failed:0,awaitingRotationRecords:[],failedRecords:[]};
  for(const row of rows.rows){
@@ -64,5 +68,6 @@ export async function rescoreStoredBuilds(db){
    }finally{tx.close();}
   }catch(error){result.failed++;result.failedRecords.push({id:String(row.id),character:String(row.character),reason:(error instanceof Error?error.message:String(error)).slice(0,500)});}
  }
+ if(result.failed===0&&result.awaitingRotationRecords.length===0)await db.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('rescore_signature',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[rescoreKey,new Date().toISOString()]});
  return result;
 }

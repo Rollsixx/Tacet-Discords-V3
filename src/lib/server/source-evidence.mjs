@@ -16,25 +16,26 @@ let active=false;
 export async function assessSource(input){
  if(!input.sourceImage){console.info(JSON.stringify({event:'scanner.verification',outcome:'rejected',reason_code:'MISSING_SCREENSHOT',duration_ms:0}));return {eligible:false,reason:'Original screenshot evidence is required for scoring.'};}
  if(active){console.warn(JSON.stringify({event:'scanner.verification',outcome:'deferred',reason_code:'WORKER_BUSY',duration_ms:0}));return {eligible:false,reason:'Scoring worker busy; resubmit later for scoring.'};}
- active=true;const startedAt=Date.now();let metricOutcome='blocked';let metricCode='';const ocrReadings=[];let worker;let sourceUid;let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;let profileDetails;let stage='image';let retries=0;
+ active=true;const startedAt=Date.now();let metricOutcome='blocked';let metricCode='';const ocrReadings=[];let worker;let sourceUid;const stageMetrics={worker_startup_ms:0,image_processing_ms:0,recognition_ms:0,recognition_calls:0,rss_before:process.memoryUsage().rss,rss_after:null};let statsVerified=false;let sourceSlots;let sourceHash;let maxMainStatsVerified=false;let visualReport;let profileDetails;let stage='image';let retries=0;
  try{
   const image=input.sourceImage;
-  const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
+  const imageStarted=Date.now();const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
   if(metadata.width!==1920||metadata.height!==1080)throw sourceFailure('IMAGE_DIMENSIONS','Use an original 1920 × 1080 build card.');
-  const decoded=await decodeFingerprintSource(image);
-  stage='worker';
+  const decoded=await decodeFingerprintSource(image);stageMetrics.image_processing_ms+=Date.now()-imageStarted;
+  stage='worker';const workerStarted=Date.now();
   worker=await createWorker('eng',1,{langPath:languagePath,gzip:true,cacheMethod:'none',errorHandler:()=>{}});
   await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
-  stage='verify';
+  stageMetrics.worker_startup_ms=Date.now()-workerStarted;stage='verify';
   async function readResult(region,{scale=3,linear=false,padded=false,preserveLines=false}={}){
    const width=Math.round(region.width*scale),height=Math.round(region.height*scale);
    // Keep the existing grayscale/contrast transformation, but run it in libvips
    // instead of iterating every output pixel in JavaScript for every OCR crop.
-   let png=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}})
+   const processingStarted=Date.now();let png=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}})
     .extract(region).resize(width,height,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3})
     .greyscale().linear(1.5,-64).png().toBuffer();
    if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:width+32,height:height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
-   try{const {data:result}=await worker.recognize(png);const reading={text:preserveLines?result.text.trim():result.text.replace(/\s+/g,' ').trim(),confidence:result.confidence};ocrReadings.push({region,scale,linear,padded,...reading});return reading;}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
+   stageMetrics.image_processing_ms+=Date.now()-processingStarted;
+   try{const recognitionStarted=Date.now();const {data:result}=await worker.recognize(png);stageMetrics.recognition_ms+=Date.now()-recognitionStarted;stageMetrics.recognition_calls++;const reading={text:preserveLines?result.text.trim():result.text.replace(/\s+/g,' ').trim(),confidence:result.confidence};ocrReadings.push({region,scale,linear,padded,...reading});return reading;}catch{throw sourceFailure('OCR_SERVICE_UNAVAILABLE','Screenshot verification is temporarily unavailable. Please try again shortly.');}
   }
   const read=async(region,options)=>(await readResult(region,options)).text;
   async function confirm(primary,region,expected,key,slot,field){
@@ -133,7 +134,7 @@ export async function assessSource(input){
   console.warn('Source verification failed',JSON.stringify({code:failure.code,slot:failure.slot,field:failure.field}));
   return {eligible:false,sourceUid,statsVerified,rollsVerified:statsVerified,sourceSlots,sourceHash,ocrReadings,maxMainStatsVerified,visualReport,profileDetails,failure,reason:failure.message};
  }
- finally{try{await worker?.terminate();}catch{/* Keep the original diagnostic. */}console.info(JSON.stringify({event:'scanner.verification',outcome:metricOutcome,reason_code:metricCode||'UNCLASSIFIED',stage,duration_ms:Date.now()-startedAt,retries,stats_verified:statsVerified,max_main_stats_verified:maxMainStatsVerified}));active=false;}
+ finally{try{await worker?.terminate();}catch{/* Keep the original diagnostic. */}console.info(JSON.stringify({event:'scanner.verification',outcome:metricOutcome,reason_code:metricCode||'UNCLASSIFIED',stage,duration_ms:Date.now()-startedAt,retries,...stageMetrics,rss_after:process.memoryUsage().rss,rss_delta:process.memoryUsage().rss-stageMetrics.rss_before,stats_verified:statsVerified,max_main_stats_verified:maxMainStatsVerified}));active=false;}
 }
 
 

@@ -1,5 +1,6 @@
 import {authorize,failure,json,readJson} from '@/lib/server/http';
 import {database} from '@/lib/server/database';
+import {refreshLeaderboardRankHistory} from '@/lib/server/queries';
 import {HttpError,record} from '@/lib/server/validation';
 import {rotationWorkspace,saveRotationDraft,validateRotationDraft,sampleRotationDraft,startRotationPreview,stepRotationPreview,rotationPreview,activateRotation} from '@/lib/server/rotations/store.mjs';
 export const maxDuration=60;
@@ -16,7 +17,8 @@ export async function POST(request:Request){try{
   if(typeof body.runId!=='string'||!/^[a-f0-9-]{36}$/.test(body.runId))throw new HttpError(400,'Valid preview ID required.');
   if(body.operation==='step')return json(await stepRotationPreview(db,body.runId));
   if(typeof body.confirmation!=='string')throw new HttpError(400,'Explicit publication confirmation required.');
-  return json(await activateRotation(db,body.runId,body.confirmation,body.ownerReviewed===true));
+  const rotation=await db.execute({sql:'SELECT character FROM rotation_runs WHERE id=?',args:[body.runId]});const character=String(rotation.rows[0]?.character||'');
+  const result=await activateRotation(db,body.runId,body.confirmation,body.ownerReviewed===true);if(character)await refreshLeaderboardRankHistory(db,{characters:[character]});return json(result);
  }
  if(typeof body.character!=='string'||body.character.length>64)throw new HttpError(400,'Resonator required.');
  if(body.operation==='rollback'){
