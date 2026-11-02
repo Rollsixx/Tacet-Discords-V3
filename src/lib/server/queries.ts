@@ -151,7 +151,7 @@ async function profileRanksByCharacter(characters:string[],db:Client):Promise<Ma
  return result;
 }
 
-export async function medalStandings(db:Client=database()){
+async function computeMedalStandings(db:Client){
  const marks=SUPPORTED.map(()=>"?").join(",");
  const result=await db.execute({sql:`WITH candidates AS (SELECT s.id,s.uid,s.ign,s.character,p.avatar_character,c.score AS verified_score,row_number() OVER(PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best FROM submissions s JOIN players p ON p.uid=s.uid JOIN calculation_results c ON c.submission_id=s.id WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character IN (${marks}) AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)), ranked AS (SELECT *,row_number() OVER(PARTITION BY character ORDER BY verified_score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1) SELECT id,uid,ign,character,avatar_character,verified_score,global_rank FROM ranked WHERE global_rank<=3 ORDER BY character,global_rank`,args:[...SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
  const standings=aggregateMedalStandings(result.rows.map(row=>({id:String(row.id),uid:String(row.uid),ign:String(row.ign),character:String(row.character),avatarCharacter:row.avatar_character==null?null:String(row.avatar_character),rank:Number(row.global_rank),score:Number(row.verified_score)})));
@@ -160,6 +160,30 @@ export async function medalStandings(db:Client=database()){
  const timestamp=await db.execute({sql:"SELECT updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
  return {updatedAt:String(timestamp.rows[0]?.updated_at||new Date(now).toISOString()),players:standings.map(player=>{const saved=history[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
 }
+type MedalStandingsValue = Awaited<ReturnType<typeof computeMedalStandings>>;
+const medalStandingsCache = new WeakMap<object, {
+ expiresAt: number;
+ value?: MedalStandingsValue;
+ pending?: Promise<MedalStandingsValue>;
+}>();
+const MEDAL_STANDINGS_CACHE_TTL_MS = 10_000;
+
+export async function medalStandings(db:Client=database()):Promise<MedalStandingsValue>{
+ const now=Date.now(),cached=medalStandingsCache.get(db);
+ if(cached?.value&&cached.expiresAt>now)return cached.value;
+ if(cached?.pending)return cached.pending;
+ const pending=computeMedalStandings(db);
+ medalStandingsCache.set(db,{expiresAt:0,pending});
+ try{
+  const value=await pending;
+  medalStandingsCache.set(db,{expiresAt:Date.now()+MEDAL_STANDINGS_CACHE_TTL_MS,value});
+  return value;
+ }catch(error){
+  medalStandingsCache.delete(db);
+  throw error;
+ }
+}
+
 export async function refreshLeaderboardRankHistory(db:Client=database()){
  const characters=SUPPORTED;
  const active=await db.execute('SELECT a.character,v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id');
