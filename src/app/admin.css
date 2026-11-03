@@ -216,3 +216,68 @@
 @media(max-width:700px){.source-stat-review-slots{grid-template-columns:minmax(0,1fr)}}
 
 .bs-nav-progress{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:9px;min-height:32px;padding:5px 16px;border-bottom:1px solid #24414a;background:#0b1b24;color:#a9dce2;font-size:12px}.bs-nav-progress span,.bs-module-loading span{width:13px;height:13px;border:2px solid #42636d;border-top-color:#7bd9df;border-radius:50%;animation:bs-load-spin .75s linear infinite}.bs-module-loading{display:flex;align-items:center;gap:9px;min-height:82px;padding:16px;color:#a9bdc8;font-size:13px}.bs-module-loading span{flex:none}@keyframes bs-load-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.bs-nav-progress span,.bs-module-loading span{animation:none;border-top-color:#7bd9df}}
+
+
+/* Calm admin visual hierarchy; keeps all review controls and workflows intact. */
+.bs-console.moderation-panel{--surface:#101822;--surface-raised:#141f2b;--line:#273746;--muted:#a6b3c0;background:#080d12;color:#e5ebf1}
+.bs-console .bs-content{max-width:1540px;padding:34px clamp(20px,3vw,44px) 56px}
+.bs-console .bs-top{padding:14px clamp(20px,3vw,44px);background:#0c1219;border-color:#202d39}
+.bs-console .bs-heading{align-items:flex-end;margin:0 0 26px;padding:0 0 22px;border-bottom:1px solid #202d39}
+.bs-console .bs-heading h1{font-size:clamp(25px,2.2vw,32px);letter-spacing:-.035em;line-height:1.15}
+.bs-console .bs-heading p{max-width:720px;margin:8px 0 0;color:#a9b5c1;line-height:1.65}
+.bs-console .eyebrow{color:#9eb3c5;letter-spacing:.08em;text-transform:uppercase}
+.bs-console .bs-pill{border-color:#344656;background:#131d27;color:#c2d0dc}
+.bs-console .bs-sidebar{background:#0b1118;border-color:#202d39;padding:24px 14px}
+.bs-console .bs-sidebar nav{gap:4px}
+.bs-console .bs-sidebar nav button{min-height:42px;padding:10px 11px;color:#aab6c2}
+.bs-console .bs-sidebar nav button.active{background:#182632;border-color:#344957;color:#e5f0f5}
+.bs-console .bs-sidebar nav button:hover{background:#131e28}
+.bs-console .bs-sidebar nav button>span{display:grid;place-items:center;width:20px;height:20px;color:#91a9ba}
+.bs-console .bs-sidebar nav svg{width:17px;height:17px}
+.bs-console .bs-sidebar-footer{border-color:#202d39}
+.bs-console .bs-panel{padding:22px;border-color:#263541;background:#101820;box-shadow:none}
+.bs-console .bs-panel h2{font-size:16px;letter-spacing:-.01em}
+.bs-console .bs-metrics{gap:12px;margin-bottom:22px}
+.bs-console .bs-metrics>div{min-height:116px;padding:18px 18px 16px 54px;border-color:#263541;border-radius:13px;background:#111b24;box-shadow:none}
+.bs-console .bs-metrics>div:before{left:16px;top:18px;border-color:#354a57;background:#182731;color:#a9d6d8}
+.bs-console .bs-metrics>div:hover{transform:none;border-color:#344955;background:#131e27}
+.bs-console .bs-controls{padding:18px;margin-bottom:22px;background:#101820}
+.bs-console .bs-controls input,.bs-console .bs-controls select,.bs-console .field input,.bs-console .field textarea,.bs-console .field select{border-color:#303f4b;background:#0c131a;border-radius:9px}
+.bs-console .bs-workspace{gap:18px}
+.bs-console .bs-queue{padding:16px 12px}
+.bs-console .bs-rows{gap:7px}
+.bs-console .bs-row{padding:11px 10px;background:#0d151d}
+.bs-console .bs-row.selected{border-color:#476576;background:#14232d}
+.bs-console .bs-selected-build{display:grid;gap:16px;min-width:0}
+.bs-console .bs-selected-build>.bs-panel-heading{margin:0;padding:0 0 14px;border-bottom:1px solid #263541}
+.bs-console .bs-selected-build>.build-card{margin:0;padding:18px;border-color:#293a46;background:#0d151c}
+.bs-console .bs-selected-build>.identity-review,.bs-console .bs-selected-build>.source-stat-review,.bs-console .bs-selected-build>.scoring-readiness,.bs-console .bs-selected-build>.readiness-requirements{margin:0}
+.bs-console .bs-review-fields{padding:16px;border:1px solid #263541;border-radius:12px;background:#0d151c;gap:14px}
+.bs-console .bs-review-actions{gap:8px}
+.bs-console .bs-review-actions button{border-radius:9px}
+.bs-console .bs-selected-build>#moderation-decision{box-shadow:0 8px 30px #0008}
+.bs-console details{border-color:#293945}
+.bs-console details>summary{color:#c0d0dc}
+.bs-console details[open]>summary{margin-bottom:12px}
+.bs-console .rotation-manager{gap:18px}
+.bs-console .rotation-selector{max-width:360px;padding:14px 16px;border:1px solid #263541;border-radius:12px;background:#101820}
+.bs-console .rotation-columns{gap:16px}
+.bs-console .rotation-columns>.bs-panel{padding:20px;border-color:#263541;background:#101820}
+.bs-console .rotation-summary{padding-bottom:14px;border-bottom:1px solid #263541}
+.bs-console .rotation-summary h2{font-size:18px}
+.bs-console .rotation-actions{gap:8px}
+.bs-console .rotation-actions li{gap:10px;padding:12px;border-color:#293945;background:#0c141b}
+.bs-console .rotation-action-buttons{gap:6px}
+.bs-console .rotation-action-buttons button{min-width:38px;border-radius:8px}
+.bs-console .rotation-effects{border-color:#293945}
+.bs-console .rotation-effects summary{color:#b8cbd8}
+.bs-console .rotation-warning,.bs-console .rotation-validation-issue{border-radius:12px}
+.bs-console :focus-visible{outline:2px solid #9bc5d4;outline-offset:2px}
+@media(max-width:700px){
+ .bs-console .bs-content{padding:22px 14px 36px}
+ .bs-console .bs-heading{align-items:flex-start}
+ .bs-console .bs-panel{padding:16px}
+ .bs-console .bs-metrics>div{min-height:104px;padding:15px 12px 14px 46px}
+ .bs-console .bs-review-fields{padding:12px}
+ .bs-console .rotation-columns>.bs-panel{padding:15px}
+}
