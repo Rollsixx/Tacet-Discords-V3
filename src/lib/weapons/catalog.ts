@@ -750,7 +750,7 @@ export const weaponCatalog:WeaponOption[]=[
     "rarity": 1
   }
 ];
-import {featuredResonators} from "../resonators.ts";
+
 const weaponTypeAliases:Record<string,WeaponType>={Sword:"Sword",Broadblade:"Broadblade",Rectifier:"Rectifier",Pistols:"Pistols",Gauntlets:"Gauntlets"};
 export function weaponTypeForCharacter(character:string):WeaponType|null{
  const weapon=featuredResonators.find(item=>item.name===character)?.weapon;
