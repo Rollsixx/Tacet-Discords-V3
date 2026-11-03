@@ -165,4 +165,13 @@ export const migrations = [
     "DROP TRIGGER IF EXISTS leaderboard_rank_submission_insert",
     `CREATE TRIGGER leaderboard_rank_submission_insert AFTER INSERT ON submissions WHEN NEW.status='approved' AND NEW.identity_verified=1 AND NEW.replaced_by IS NULL BEGIN INSERT INTO leaderboard_rank_clock(character,revision,dirty) VALUES(NEW.character,1,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1,dirty=1; END`,
   ]},
+  {version:17,statements:[
+    `CREATE TABLE submission_profile_assets (
+      id TEXT PRIMARY KEY,
+      submission_id TEXT NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind='weapon'),
+      png BLOB NOT NULL CHECK(length(png) BETWEEN 50 AND 153600),
+      UNIQUE(submission_id,kind)
+    )`,
+  ]},
 ];
