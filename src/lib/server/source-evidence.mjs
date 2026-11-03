@@ -148,12 +148,42 @@ async function readProfileDetails(worker,readResult,decoded){
    {left:1184,top:588,width:105,height:30},
   ];
   await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'LV0123456789/'});
-  const reads=[];for(const region of nodes)reads.push(await readResult(region,{scale:4,linear:true}));
-  const talents=reads.map(({data})=>{const match=data.text.replace(/\s+/g,'').toUpperCase().match(/LV(\d{1,2})\/10/);return match?Number(match[1]):null;});
+  const parseTalent=text=>{
+   const match=text.replace(/\s+/g,'').toUpperCase().match(/L[VY]?(\d{1,2})\/?10/);
+   if(!match)return null;
+   const level=Number(match[1]);
+   return level>=1&&level<=10?level:null;
+  };
+  const talents=[];
+  for(const region of nodes){
+   const reading=await readResult(region,{scale:4,linear:true});
+   let level=parseTalent(reading.text);
+   if(level===null){
+    const alternatives=[
+     await readResult(region,{scale:5,linear:true}),
+     await readResult(region,{scale:4,linear:true,padded:true}),
+    ];
+    const recovered=alternatives.map(candidate=>({level:parseTalent(candidate.text),confidence:candidate.confidence||0})).filter(candidate=>candidate.level!==null).sort((a,b)=>b.confidence-a.confidence)[0];
+    level=recovered?.level??null;
+   }
+   talents.push(level);
+  }
   await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 &-.'});
-  const weaponRead=await readResult({left:1590,top:455,width:230,height:46},{scale:4,linear:true});
-  const weapon=weaponRead.data.text.replace(/[^\p{L}\p{N} '&-]/gu,'').replace(/\s+/g,' ').trim();
-  const safeWeapon=weapon.length>=3&&weapon.length<=40&&!/^(LV|Level|Ascension|Attack)/i.test(weapon)?weapon:undefined;
+  const parseWeapon=text=>{
+   const value=text.replace(/[^\p{L}\p{N} '&-]/gu,'').replace(/\s+/g,' ').trim();
+   return value.length>=3&&value.length<=40&&!/^(LV|Level|Ascension|Attack)/i.test(value)?value:undefined;
+  };
+  const weaponRegion={left:1590,top:455,width:230,height:46};
+  const weaponRead=await readResult(weaponRegion,{scale:4,linear:true});
+  let weapon=parseWeapon(weaponRead.text);
+  if(!weapon||(weaponRead.confidence||0)<45){
+   const alternatives=[
+    await readResult(weaponRegion,{scale:5,linear:true}),
+    await readResult(weaponRegion,{scale:4,linear:true,padded:true}),
+   ];
+   const recovered=alternatives.map(candidate=>({weapon:parseWeapon(candidate.text),confidence:candidate.confidence||0})).filter(candidate=>candidate.weapon).sort((a,b)=>b.confidence-a.confidence)[0];
+   if(recovered&&(!weapon||recovered.confidence>(weaponRead.confidence||0)))weapon=recovered.weapon;
+  }
   const crop=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).extract({left:102,top:548,width:556,height:82}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
   let resonanceChain=0,chainPixels=0;
   for(let node=0;node<6;node++){
@@ -164,6 +194,6 @@ async function readProfileDetails(worker,readResult,decoded){
    }
    chainPixels+=gold;if(gold>75)resonanceChain++;
   }
-  return {...(safeWeapon?{weapon:safeWeapon}:{}),...(talents.every(level=>level!==null&&level>=1&&level<=10)?{talents}:{}),...(chainPixels>150?{resonanceChain}:{})};
+  return {...(weapon?{weapon}:{}),...(talents.some(level=>level!==null)?{talents}:{}),...(chainPixels>150?{resonanceChain}:{})};
  }catch{return undefined;}
 }
