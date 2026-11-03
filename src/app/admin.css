@@ -214,3 +214,5 @@
 .source-stat-review-slots ol {padding-left:22px}
 .source-stat-review input:not([type=checkbox]) {width:100%}
 @media(max-width:700px){.source-stat-review-slots{grid-template-columns:minmax(0,1fr)}}
+
+.bs-nav-progress{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:9px;min-height:32px;padding:5px 16px;border-bottom:1px solid #24414a;background:#0b1b24;color:#a9dce2;font-size:12px}.bs-nav-progress span,.bs-module-loading span{width:13px;height:13px;border:2px solid #42636d;border-top-color:#7bd9df;border-radius:50%;animation:bs-load-spin .75s linear infinite}.bs-module-loading{display:flex;align-items:center;gap:9px;min-height:82px;padding:16px;color:#a9bdc8;font-size:13px}.bs-module-loading span{flex:none}@keyframes bs-load-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.bs-nav-progress span,.bs-module-loading span{animation:none;border-top-color:#7bd9df}}
