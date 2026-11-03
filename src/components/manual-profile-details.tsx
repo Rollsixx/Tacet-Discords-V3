@@ -45,7 +45,7 @@ export function ManualProfileDetails({buildId,token,reviewer,details,onSaved}:Pr
   event.preventDefault();setBusy(true);setError("");setSaved(false);
   try{
    const response=await fetch("/api/admin/profile-details",{method:"PUT",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({
-    id:buildId,reviewer,details:{weapon,resonanceChain:chain===""?null:Number(chain),talents},weaponIcon:icon,removeWeaponIcon,
+    id:buildId,reviewer,details:{weapon,resonanceChain:chain===""?null:Number(chain),talents},weaponIcon:icon,removeWeaponIcon:removeIcon,
    })});
    const result=await response.json();
    if(!response.ok)throw new Error(result.error||"Could not save profile details.");
