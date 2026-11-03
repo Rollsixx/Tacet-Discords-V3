@@ -16,11 +16,11 @@ export async function PUT(request:Request){
    if(source.weapon.trim())details.weapon=source.weapon.trim();
   }
   if(source.resonanceChain!==undefined&&source.resonanceChain!==null){
-   if(!Number.isInteger(source.resonanceChain)||Number(source.resonanceChain)<0||Number(source.resonanceChain)>6)throw new HttpError(400,"Resonance Chain must be between S0 and S6.");
+   if(typeof source.resonanceChain!=="number"||!Number.isInteger(source.resonanceChain)||source.resonanceChain<0||source.resonanceChain>6)throw new HttpError(400,"Resonance Chain must be between S0 and S6.");
    details.resonanceChain=Number(source.resonanceChain);
   }
   if(source.talents!==undefined){
-   if(!Array.isArray(source.talents)||source.talents.length!==5||source.talents.some(value=>value!==null&&(!Number.isInteger(value)||Number(value)<1||Number(value)>10)))throw new HttpError(400,"Enter five skill levels from 1 to 10, or leave them blank.");
+   if(!Array.isArray(source.talents)||source.talents.length!==5||source.talents.some(value=>value!==null&&(typeof value!=="number"||!Number.isInteger(value)||value<1||value>10)))throw new HttpError(400,"Enter five skill levels from 1 to 10, or leave them blank.");
    details.talents=source.talents;
   }
   if(typeof input.removeWeaponIcon!=="boolean"||input.weaponIcon!==undefined&&input.removeWeaponIcon)throw new HttpError(400,"Choose either an icon upload or icon removal.");
