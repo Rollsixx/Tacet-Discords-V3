@@ -184,15 +184,18 @@ async function readProfileDetails(worker,readResult,decoded){
    const recovered=alternatives.map(candidate=>({weapon:parseWeapon(candidate.text),confidence:candidate.confidence||0})).filter(candidate=>candidate.weapon).sort((a,b)=>b.confidence-a.confidence)[0];
    if(recovered&&(!weapon||recovered.confidence>(weaponRead.confidence||0)))weapon=recovered.weapon;
   }
-  const crop=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).extract({left:102,top:548,width:556,height:82}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  // Count the illuminated glyph at each emblem's center. The gold border is
+  // present on empty nodes too, so border pixels cannot indicate a sequence.
+  const chainImage=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
   let resonanceChain=0;
-  for(let node=0;node<6;node++){
-   const left=Math.round(node*crop.info.width/6),right=Math.round((node+1)*crop.info.width/6);let gold=0;
-   for(let y=0;y<crop.info.height;y++)for(let x=left;x<right;x++){
-    const i=(y*crop.info.width+x)*4,r=crop.data[i],g=crop.data[i+1],b=crop.data[i+2];
-    if(r>150&&g>105&&r>g*1.08&&b<165)gold++;
+  const chainCenters=[190,270,350,430,510,590];
+  for(const centerX of chainCenters){
+   let glow=0;
+   for(let y=557;y<580;y++)for(let x=centerX-11;x<=centerX+11;x++){
+    const i=(y*chainImage.info.width+x)*4,r=chainImage.data[i],g=chainImage.data[i+1],b=chainImage.data[i+2];
+    if(r>=168&&g>=168&&b>=168&&Math.max(r,g,b)-Math.min(r,g,b)<48)glow++;
    }
-   if(node===resonanceChain&&gold>75)resonanceChain++;
+   if(glow>=12)resonanceChain++;else break;
   }
   return {...(weapon?{weapon}:{}),...(talents.some(level=>level!==null)?{talents}:{}),resonanceChain};
  }catch{return undefined;}
