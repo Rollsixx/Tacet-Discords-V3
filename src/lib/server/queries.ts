@@ -36,15 +36,16 @@ export async function listBuilds(options: { search?: string; character?: string;
   if(!options.includePending&&!options.pending&&(options.uid||options.id)&&builds.length){
     // This client may be an in-memory SQLite database with a single connection;
     // rank-history writes must not race one another inside Promise.all.
-    const histories=[] as Array<readonly [string, typeof builds]>;
+    const histories=new Map<string,RankHistoryEntry>();
     for(const resonator of [...new Set(builds.map(build=>build.character))]){
-      const board=await listLeaderboard({character:resonator,search:options.uid||builds.find(build=>build.character===resonator)!.uid},db);
-      histories.push([resonator,board.builds]);
+      const {state}=await ensureFreshRankHistory(resonator,db);
+      const uid=options.uid||builds.find(build=>build.character===resonator)!.uid;
+      const history=state[uid];
+      if(history)histories.set(resonator,history);
     }
-    const byCharacter=new Map(histories);
     builds=builds.map(build=>{
-      const ranked=byCharacter.get(build.character)?.find(candidate=>candidate.uid===build.uid);
-      return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.rankHasHistory??false};
+      const ranked=histories.get(build.character);
+      return {...build,rank:ranked?.rank??null,rankMovement:ranked?.movement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.trackingSince??null,rankDays:ranked?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(ranked.rankSince))/86400000)):null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.previousRank!==null&&ranked?.previousRank!==undefined};
     });
   }
   let hasMore=rankedProfile?builds.length>page*20:result.rows.length>20;
@@ -54,7 +55,7 @@ export async function listBuilds(options: { search?: string; character?: string;
   }
   let medalStanding=null;
   if(options.uid&&!options.includePending&&!options.pending){
-    const overall=(await medalStandings(db)).players.find(player=>player.uid===options.uid);
+    const overall=(await medalStandings(db,{refresh:false})).players.find(player=>player.uid===options.uid);
     if(overall)medalStanding=overall;
   }
   const medals={top1:medalStanding?.gold||0,top2:medalStanding?.silver||0,top3:medalStanding?.bronze||0,total:medalStanding?.total||0};
@@ -183,8 +184,8 @@ async function loadRankedBuilds(entries:Array<{character:string;uid:string;histo
  return entries.flatMap(entry=>{const row=byId.get(String(entry.history.buildId));return row?[rankedBuild(row,entry.history)]:[];});
 }
 
-export async function medalStandings(db:Client=database()){
- await refreshLeaderboardRankHistory(db);
+export async function medalStandings(db:Client=database(),options:{refresh?:boolean}={}){
+ if(options.refresh!==false)await refreshLeaderboardRankHistory(db);
  const marks=SUPPORTED.map(()=>"?").join(",");
  const snapshots=await db.execute({sql:`SELECT character,state FROM leaderboard_rank_history WHERE character IN (${marks})`,args:SUPPORTED});
  const candidates:Array<{id:string;uid:string;ign:string;character:string;rank:number;score:number}>=[];
@@ -200,9 +201,18 @@ export async function medalStandings(db:Client=database()){
  }
  const standings=aggregateMedalStandings(candidates.map(row=>({...row,avatarCharacter:avatars.get(row.uid)||null})));
  const historyRows=standings.map(player=>({uid:player.uid,ign:player.ign,global_rank:player.rank,id:player.buildId,score:player.points,verified_score:player.points} as unknown as Row));
- const history=await synchronizeRankHistory("__medal_standings__",historyRows,db,false),now=Date.now();
- const timestamp=await db.execute({sql:"SELECT updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
- return {updatedAt:String(timestamp.rows[0]?.updated_at||new Date(now).toISOString()),players:standings.map(player=>{const saved=history?.[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
+ const now=Date.now();
+ let history:Record<string,RankHistoryEntry>|null,updatedAt:string;
+ if(options.refresh===false){
+  const saved=await db.execute({sql:"SELECT state,updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
+  history=parseRankState(saved.rows[0]?.state);
+  updatedAt=String(saved.rows[0]?.updated_at||new Date(now).toISOString());
+ }else{
+  history=await synchronizeRankHistory("__medal_standings__",historyRows,db,false);
+  const saved=await db.execute({sql:"SELECT updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
+  updatedAt=String(saved.rows[0]?.updated_at||new Date(now).toISOString());
+ }
+ return {updatedAt,players:standings.map(player=>{const saved=history?.[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
 }
 
 export async function listLeaderboard(options:{character?:string;search?:string;page?:number;rotationPolicyId?:string|null}={},db:Client=database()){
