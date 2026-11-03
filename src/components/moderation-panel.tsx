@@ -1,18 +1,29 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import {HistoricalCorrectionReview} from "./historical-correction-review";
-import {SubstatCorrection} from "./substat-correction";
-import {MainStatEvidenceReview} from "./main-stat-evidence-review";
-import {SourceStatReview} from "./source-stat-review";
-import {IdentityReview} from "./identity-review";
-import {ScoringReadinessCard} from "./scoring-readiness";
+
+
+
+
+
+
 import {assessmentReadiness} from "@/lib/scanner/scoring-readiness";
-import {RotationEditor} from "./rotation-editor";
-import {HomeFeaturedSettings} from "./home-featured-settings";
-import { BuildCard } from "./build-card";
+
+
+
 import {queueReadiness} from "@/lib/moderation/queue-readiness.mjs";
 import type { listAdminPlayers, adminPlayerBuilds, listBuilds, adminOverview, listAdminAudit } from "@/lib/server/queries";
+function AdminModuleLoading({label}:{label:string}){return <div className="bs-module-loading" role="status"><span aria-hidden="true"/>Loading {label}…</div>;}
+const HistoricalCorrectionReview=dynamic(()=>import("./historical-correction-review").then(module=>module.HistoricalCorrectionReview),{loading:()=> <AdminModuleLoading label="source evidence"/>});
+const SubstatCorrection=dynamic(()=>import("./substat-correction").then(module=>module.SubstatCorrection),{loading:()=> <AdminModuleLoading label="correction tools"/>});
+const MainStatEvidenceReview=dynamic(()=>import("./main-stat-evidence-review").then(module=>module.MainStatEvidenceReview),{loading:()=> <AdminModuleLoading label="main-stat evidence"/>});
+const SourceStatReview=dynamic(()=>import("./source-stat-review").then(module=>module.SourceStatReview),{loading:()=> <AdminModuleLoading label="source review"/>});
+const IdentityReview=dynamic(()=>import("./identity-review").then(module=>module.IdentityReview),{loading:()=> <AdminModuleLoading label="identity tools"/>});
+const ScoringReadinessCard=dynamic(()=>import("./scoring-readiness").then(module=>module.ScoringReadinessCard),{loading:()=> <AdminModuleLoading label="scoring readiness"/>});
+const RotationEditor=dynamic(()=>import("./rotation-editor").then(module=>module.RotationEditor),{loading:()=> <AdminModuleLoading label="rotation tools"/>});
+const HomeFeaturedSettings=dynamic(()=>import("./home-featured-settings").then(module=>module.HomeFeaturedSettings),{loading:()=> <AdminModuleLoading label="Home settings"/>});
+const BuildCard=dynamic(()=>import("./build-card").then(module=>module.BuildCard),{loading:()=> <AdminModuleLoading label="build card"/>});
 type Audit = Awaited<ReturnType<typeof listAdminAudit>>;
 type RankChanges={changes:{id:number;character:string;uid:string;ign:string;type:"moved"|"entered"|"left";oldRank:number|null;newRank:number|null;oldScore:number|null;newScore:number|null;buildId:string;changedAt:string}[]};
 type Consistency={checkedAt:string;ok:boolean;counts:{staleScores:number;duplicateBuilds:number;medalMismatches:number};issues:{type:string;id?:string;uid:string;character?:string;reason?:string;count?:number;profile?:unknown;standings?:unknown}[]};
@@ -160,7 +171,7 @@ export function ModerationPanel() {
   </form><small>Token access only. Your token stays in memory and is cleared on reload or when you lock the desk.</small><Link className="text-link" href="/">← Return to website</Link>
  </div>:<div className="bs-shell">
   <aside className="bs-sidebar"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMIN</small></div></Link><nav aria-label="Administration">{([['dashboard','Dashboard'],['home','Home page'],['submissions','Submissions'],['players','Players & builds'],['rotations','Rotations'],['audit','Audit history'],['rankChanges','Rank changes'],['system','System status']] as const).map(([key,label])=><button key={key} className={view===key?'active':''} aria-current={view===key?'page':undefined} disabled={rotationPending} onClick={()=>navigate(key)}><span><AdminIcon name={key}/></span>{label}{key==='submissions'&&Boolean(overview?.pending)&&<small>{overview?.pending}</small>}</button>)}</nav><div className="bs-sidebar-footer"><strong>{reviewer || 'Moderator'}</strong><span>Shared-token access</span><Link href="/profiles">View public website ↗</Link><button className="outline-button" disabled={rotationPending} onClick={lock}>Lock review desk</button></div></aside>
-  <div className="bs-main">{outdated&&<div className="import-blocked" role="alert">A newer admin release is available. Save any rotation draft, then reload to use the latest review controls. <button className="outline-button" disabled={busy||rotationPending} onClick={()=>window.location.reload()}>Reload updated admin</button></div>}<header className="bs-top"><span><i className="status-dot"/> Connected to live data · Admin {(process.env.NEXT_PUBLIC_APP_RELEASE||'local').slice(0,7)}</span><button className="outline-button" disabled={busy||rotationPending} onClick={()=>view==='home'?setHomeRefresh(value=>value+1):view==='rotations'?setRotationRefresh(value=>value+1):view==='audit'?loadAudit(audit?.page||1):view==='rankChanges'?loadRankChanges():view==='system'?navigate('system'):view==='players'?loadPlayers(page):load(page)}>{busy?'Working…':'Refresh'}</button></header>
+  <div className="bs-main">{busy&&<div className="bs-nav-progress" role="status" aria-live="polite"><span aria-hidden="true"/>Loading ${names[view].toLowerCase()}…</div>}{outdated&&<div className="import-blocked" role="alert">A newer admin release is available. Save any rotation draft, then reload to use the latest review controls. <button className="outline-button" disabled={busy||rotationPending} onClick={()=>window.location.reload()}>Reload updated admin</button></div>}<header className="bs-top"><span><i className="status-dot"/> Connected to live data · Admin {(process.env.NEXT_PUBLIC_APP_RELEASE||'local').slice(0,7)}</span><button className="outline-button" disabled={busy||rotationPending} onClick={()=>view==='home'?setHomeRefresh(value=>value+1):view==='rotations'?setRotationRefresh(value=>value+1):view==='audit'?loadAudit(audit?.page||1):view==='rankChanges'?loadRankChanges():view==='system'?navigate('system'):view==='players'?loadPlayers(page):load(page)}>{busy?'Working…':'Refresh'}</button></header>
    <div className="bs-content"><div className="bs-heading"><div><span className="eyebrow">Tacet Discords / Black Shores</span><h1>{names[view]}</h1><p>{view==='dashboard'?'Review submissions, verify players, and track every moderation decision.':view==='rankChanges'?'See the latest leaderboard movements and the score update that produced each change.':view==='home'?'Choose the three Resonators featured on the public Home page.':view==='audit'?'Server-recorded decisions, including deleted submissions.':view==='system'?'Current database connectivity and scoring availability.':view==='rotations'?'Author rotation drafts, inspect expected damage, and manage versioned publication.':view==='players'?'Players are grouped by UID. Open a player to see all pending and approved builds.':'Select a build to inspect its five Echoes and take action.'}</p></div><span className="bs-pill">Authenticated workspace</span></div>
     <div aria-live="polite">{message&&<p className="bs-success" role="status">✓ {message}</p>}{error&&!confirmation&&<p className="field-error bs-error" role="alert">{error}</p>}</div>
     {view==='dashboard'&&overview&&<div className="bs-metrics">{[[overview.pending,'Pending submissions','Awaiting a decision','pending'],[overview.unverified,'Unverified players','Approved players needing identity checks','unverified'],[overview.approved,'Approved builds','Visible in public Profiles','approved'],[overview.players,'Players','UIDs with stored builds','players']].map(([value,label,detail,key])=><button type="button" key={String(label)} onClick={()=>{setMessage('');setError('');if(key==='players'){setView('players');void loadPlayers(1,'','');}else{setView('submissions');void load(1,key==='approved'?'approved':'pending','','');}}}><span>{label}</span><strong>{value}</strong><small>{detail}</small></button>)}{overview.oldestPendingAgeHours!==null&&<p className="bs-oldest-pending">Oldest pending: {overview.oldestPendingAgeHours<24?`${overview.oldestPendingAgeHours} hours`:`${Math.floor(overview.oldestPendingAgeHours/24)} days`} old</p>}</div>}
