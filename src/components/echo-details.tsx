@@ -121,7 +121,7 @@ function ProfileWeaponIcon({buildId,alt}:{buildId:string;alt:string}){
 export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?:boolean;detailId?:string}){
  const calculation=build.data.assessment?.calculation;
  const stats=calculation?.displayStats||calculation?.finalStats;
- const profileDetails=build.data.assessment?.profileDetails;
+ const profileDetails=build.data.manualProfileDetails??build.data.assessment?.profileDetails;
  const resonator=featuredResonators.find(item=>item.name===build.character)||featuredResonators[0];
  const splashArt=resonatorSplashArt[build.character];
  const metrics=defaultLeaderboardColumns(resonator);
