@@ -25,7 +25,6 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
   const weaponCrop = input.sourceImage && assessment.sourceUid === input.uid
     ? await sharp(input.sourceImage).extract({left:1450,top:444,width:145,height:140}).resize(96,96,{fit:"contain",background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
     : null;
-  if(weaponCrop)assessment.profileDetails={...assessment.profileDetails,weaponIcon:true};
   let data = {
     assessment,
     character: input.character,
