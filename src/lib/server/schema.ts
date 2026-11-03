@@ -174,4 +174,12 @@ export const migrations = [
       UNIQUE(submission_id,kind)
     )`,
   ]},
+  {version:18,statements:[
+    `CREATE TABLE submission_profile_overrides (
+      submission_id TEXT PRIMARY KEY REFERENCES submissions(id) ON DELETE CASCADE,
+      details TEXT NOT NULL,
+      reviewer TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+  ]},
 ];
