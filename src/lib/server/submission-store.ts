@@ -41,18 +41,25 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
   const createdAt = new Date().toISOString();
   const tx = await db.transaction("write");
   try {
-    const duplicate = await tx.execute({ sql: "SELECT id FROM submissions WHERE fingerprint=?", args: [fingerprint] });
-    if (duplicate.rows.length) throw new HttpError(409, "This build has already been submitted.");
-    const recent = await tx.execute({ sql: "SELECT COUNT(*) AS count FROM submissions WHERE uid=? AND created_at>?", args: [input.uid, new Date(Date.now() - 60000).toISOString()] });
-    if (Number(recent.rows[0].count) >= 10) throw new HttpError(429, "Please wait before submitting another build for this UID.");
+    const preflight = await tx.execute({
+      sql: "SELECT (SELECT id FROM submissions WHERE fingerprint=? LIMIT 1) AS duplicate_id, (SELECT COUNT(*) FROM submissions WHERE uid=? AND created_at>?) AS recent_count",
+      args: [fingerprint, input.uid, new Date(Date.now() - 60000).toISOString()],
+    });
+    if (preflight.rows[0].duplicate_id) throw new HttpError(409, "This build has already been submitted.");
+    if (Number(preflight.rows[0].recent_count) >= 10) throw new HttpError(429, "Please wait before submitting another build for this UID.");
     await tx.execute({ sql: "INSERT INTO players(uid,created_at) VALUES (?,?) ON CONFLICT(uid) DO NOTHING", args: [input.uid, createdAt] });
     if(input.avatarCharacter && assessment.sourceUid === input.uid) await tx.execute({sql:"UPDATE players SET avatar_character=? WHERE uid=?",args:[input.avatarCharacter,input.uid]});
     await tx.execute({ sql: "INSERT INTO submissions(id,uid,ign,character,fingerprint,data,created_at,identity_verified) VALUES (?,?,?,?,?,?,?,(SELECT identity_verified FROM players WHERE uid=?))", args: [id, input.uid, input.ign, input.character, fingerprint, JSON.stringify(data), createdAt, input.uid] });
     if(input.sourceImage&&assessment.sourceUid===input.uid)await tx.execute({sql:'INSERT INTO submission_source_evidence VALUES (?,?,?,?,?,?,?)',args:[id,input.sourceImage,assessment.sourceHash||createHash('sha256').update(input.sourceImage).digest('hex'),JSON.stringify(sourceAssessment.ocrReadings||[]),JSON.stringify(assessment.sourceSlots||[]),JSON.stringify(input.slots.map(({slot,cost,mainStat,substats})=>({slot,cost,mainStat,substats}))),createdAt]});
-    for (const slot of sourceCrops) {
-      for (const kind of ["portrait", "sonata"] as const) {
-        await tx.execute({ sql: "INSERT INTO assets(id,submission_id,slot,kind,png) VALUES (?,?,?,?,?)", args: [`${id}-${slot.slot}-${kind}`, id, slot.slot, kind, slot[kind]] });
-      }
+    const assetRows = sourceCrops.flatMap(slot => (["portrait", "sonata"] as const).map(kind => [
+      `${id}-${slot.slot}-${kind}`, id, slot.slot, kind, slot[kind],
+    ]));
+    if (assetRows.length) {
+      const values = assetRows.map(() => "(?,?,?,?,?)").join(",");
+      await tx.execute({
+        sql: `INSERT INTO assets(id,submission_id,slot,kind,png) VALUES ${values}`,
+        args: assetRows.flat(),
+      });
     }
     await tx.commit();
     let status:"pending"|"approved"="pending";
