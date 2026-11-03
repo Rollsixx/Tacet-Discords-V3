@@ -165,4 +165,4 @@ export const migrations = [
     "DROP TRIGGER IF EXISTS leaderboard_rank_submission_insert",
     `CREATE TRIGGER leaderboard_rank_submission_insert AFTER INSERT ON submissions WHEN NEW.status='approved' AND NEW.identity_verified=1 AND NEW.replaced_by IS NULL BEGIN INSERT INTO leaderboard_rank_clock(character,revision,dirty) VALUES(NEW.character,1,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1,dirty=1; END`,
   ]},
-];\n
+];
