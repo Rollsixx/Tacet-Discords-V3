@@ -36,11 +36,12 @@ export async function listBuilds(options: { search?: string; character?: string;
   if(!options.includePending&&!options.pending&&(options.uid||options.id)&&builds.length){
     // This client may be an in-memory SQLite database with a single connection;
     // rank-history writes must not race one another inside Promise.all.
+    const resonators=[...new Set(builds.map(build=>build.character))];
+    const snapshots=await ensureFreshRankHistories(resonators,db);
     const histories=new Map<string,RankHistoryEntry>();
-    for(const resonator of [...new Set(builds.map(build=>build.character))]){
-      const {state}=await ensureFreshRankHistory(resonator,db);
+    for(const resonator of resonators){
       const uid=options.uid||builds.find(build=>build.character===resonator)!.uid;
-      const history=state[uid];
+      const history=snapshots.get(resonator)?.[uid];
       if(history)histories.set(resonator,history);
     }
     builds=builds.map(build=>{
@@ -143,6 +144,25 @@ async function ensureFreshRankHistory(character:string,db:Client,force=false):Pr
   if(state)return {state,refreshed:true};
  }
  throw new HttpError(503,"Rank history is updating. Try again shortly.");
+}
+
+async function ensureFreshRankHistories(characters:string[],db:Client):Promise<Map<string,Record<string,RankHistoryEntry>>>{
+ const unique=[...new Set(characters)];
+ if(!unique.length)return new Map();
+ await db.execute({sql:`INSERT INTO leaderboard_rank_clock(character,revision,dirty) VALUES ${unique.map(()=>"(?,1,1)").join(",")} ON CONFLICT(character) DO NOTHING`,args:unique});
+ const marks=unique.map(()=>"?").join(",");
+ const rows=await db.execute({sql:`SELECT c.character,c.revision,c.dirty,h.state,h.source_revision FROM leaderboard_rank_clock c LEFT JOIN leaderboard_rank_history h ON h.character=c.character WHERE c.character IN (${marks})`,args:unique});
+ const states=new Map<string,Record<string,RankHistoryEntry>>(),stale:string[]=[];
+ for(const row of rows.rows){
+  const character=String(row.character),revision=Number(row.revision);
+  if(Number(row.dirty)!==0||Number(row.source_revision)!==revision)stale.push(character);
+  else states.set(character,parseRankState(row.state));
+ }
+ for(const character of stale){
+  const {state}=await ensureFreshRankHistory(character,db);
+  states.set(character,state);
+ }
+ return states;
 }
 
 export async function refreshLeaderboardRankHistory(db:Client=database(),options:{force?:boolean;characters?:string[]}={}){
