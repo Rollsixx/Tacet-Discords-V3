@@ -1441,3 +1441,5 @@ input[readonly] { opacity: .75; cursor: default; }
  .profile-build-card .profile-build-skills small{font-size:10px}
 }
 
+
+.profile-build-weapon-image{width:62px;height:62px;object-fit:contain;right:8px;top:9px;filter:drop-shadow(0 2px 5px #0008)}
