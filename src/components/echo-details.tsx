@@ -112,6 +112,12 @@ function ProfileActionIcon({kind,src}:{kind:string;src?:string}){
  };
  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{glyphs[kind]||glyphs.Chain}</svg>;
 }
+function ProfileWeaponIcon({buildId,alt}:{buildId:string;alt:string}){
+ const [failed,setFailed]=useState(false);
+ return failed?<span className="profile-build-weapon-icon" role="img" aria-label={alt+" unavailable"}>⚔</span>:
+ // eslint-disable-next-line @next/next/no-img-element
+ <img className="profile-build-weapon-icon profile-build-weapon-image" src={`/api/assets/${buildId}-weapon`} alt={alt} loading="lazy" onError={()=>setFailed(true)}/>;
+}
 export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?:boolean;detailId?:string}){
  const calculation=build.data.assessment?.calculation;
  const stats=calculation?.displayStats||calculation?.finalStats;
@@ -141,7 +147,7 @@ export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?
      <div className="profile-build-sprite-art">{resonatorSpriteArt[build.character]?<img src={resonatorSpriteArt[build.character]} alt={`${build.character} full character sprite`} />:<ResonatorPortrait name={build.character} className="profile-build-artwork"/>}</div>
      <div className="profile-build-sprite-name"><span>{resonator?.element||"Resonator"}</span><h3>{build.character}</h3><p>{build.ign} · UID {build.uid}</p></div>
     </section>
-    <section className="profile-build-weapon-card"><span className="profile-build-card-label">Equipped weapon</span><span className="profile-build-weapon-icon" aria-hidden="true">⚔</span><strong>{profileDetails?.weapon||"Not recorded"}</strong><small>{profileDetails?.weapon?"Read from submitted build":"Weapon details weren’t readable in this scan."}</small></section>
+    <section className="profile-build-weapon-card"><span className="profile-build-card-label">Equipped weapon</span>{profileDetails?.weaponIcon?<ProfileWeaponIcon buildId={build.id} alt={`${profileDetails.weapon||"Equipped weapon"} icon`}/>:<span className="profile-build-weapon-icon" aria-hidden="true">⚔</span>}<strong>{profileDetails?.weapon||"Not recorded"}</strong><small>{profileDetails?.weapon?"Read from submitted build":"Weapon details weren’t readable in this scan."}</small></section>
     <section className="profile-build-cv-card"><span className="profile-build-card-label">Overall Echo CV</span><strong>{cv.toFixed(1)}</strong><small>Combined Echo crit value</small></section>
    </aside>
    <main className="profile-build-main">
