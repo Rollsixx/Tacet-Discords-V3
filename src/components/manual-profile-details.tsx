@@ -27,17 +27,18 @@ export function ManualProfileDetails({buildId,token,reviewer,details,onSaved}:Pr
  const [talents,setTalents]=useState<(number|null)[]>(()=>Array.from({length:5},(_,i)=>details?.talents?.[i]??null));
  const [icon,setIcon]=useState<string|undefined>();
  const [preview,setPreview]=useState<string>();
+ const [originalPreview,setOriginalPreview]=useState<string>();
  const [removeIcon,setRemoveIcon]=useState(false);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const [saved,setSaved]=useState(false);
  useEffect(()=>{
   let active=true,objectUrl:string|undefined;
-  setIcon(undefined);setPreview(undefined);setRemoveIcon(false);setSaved(false);setError("");
+  setIcon(undefined);setPreview(undefined);setOriginalPreview(undefined);setRemoveIcon(false);setSaved(false);setError("");
   fetch(`/api/assets/${buildId}-weapon`,{headers:{Authorization:"Bearer "+token},cache:"no-store"}).then(async response=>{
    if(!response.ok)return;
    const url=URL.createObjectURL(await response.blob());
-   if(active){objectUrl=url;setPreview(url);}else URL.revokeObjectURL(url);
+   if(active){objectUrl=url;setPreview(url);setOriginalPreview(url);}else URL.revokeObjectURL(url);
   }).catch(()=>{});
   return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
  },[buildId,token]);
@@ -62,7 +63,7 @@ export function ManualProfileDetails({buildId,token,reviewer,details,onSaved}:Pr
     <label>Resonance Chain<select value={chain} onChange={event=>setChain(event.target.value)}><option value="">Not recorded</option>{Array.from({length:7},(_,i)=><option key={i} value={i}>S{i}</option>)}</select></label>
    </div>
    <fieldset className="manual-profile-skills"><legend>Skill levels</legend>{skillFields.map(field=><label key={field.index}>{field.label}<select value={talents[field.index]??""} onChange={event=>setTalents(current=>current.map((value,index)=>index===field.index?(event.target.value===""?null:Number(event.target.value)):value))}><option value="">Not recorded</option>{Array.from({length:10},(_,i)=><option key={i+1} value={i+1}>{i+1}/10</option>)}</select></label>)}</fieldset>
-   <div className="manual-profile-icon-row"><div>{preview&&<img src={preview} alt="Current weapon icon preview"/>}<label>Weapon icon<input type="file" accept="image/*" onChange={async event=>{const file=event.target.files?.[0];if(!file)return;try{const image=await pngData(file);setIcon(image);setRemoveIcon(false);setPreview(image);}catch(cause){setError(cause instanceof Error?cause.message:"Could not read that image.");}}}/></label></div><label className="manual-profile-remove"><input type="checkbox" checked={removeIcon} onChange={event=>{setRemoveIcon(event.target.checked);if(event.target.checked){setIcon(undefined);setPreview(undefined);}}}/> Remove existing weapon icon</label></div>
+   <div className="manual-profile-icon-row"><div>{preview&&<img src={preview} alt="Current weapon icon preview"/>}<label>Weapon icon<input type="file" accept="image/*" onChange={async event=>{const file=event.target.files?.[0];if(!file)return;try{const image=await pngData(file);setIcon(image);setRemoveIcon(false);setPreview(image);}catch(cause){setError(cause instanceof Error?cause.message:"Could not read that image.");}}}/></label></div><label className="manual-profile-remove"><input type="checkbox" checked={removeIcon} onChange={event=>{setRemoveIcon(event.target.checked);if(event.target.checked){setIcon(undefined);setPreview(undefined);}else setPreview(icon||originalPreview);}}/> Remove existing weapon icon</label></div>
    {error&&<p className="manual-profile-error" role="alert">{error}</p>}{saved&&<p className="manual-profile-success" role="status">Profile details saved.</p>}
    <div className="manual-profile-actions"><span>Icons are fitted to a square preview.</span><button className="primary-button" type="submit" disabled={busy}>{busy?"Saving…":"Save display details"}</button></div>
   </form>
