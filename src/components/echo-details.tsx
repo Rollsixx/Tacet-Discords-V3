@@ -96,7 +96,6 @@ const resonatorSpriteArt: Record<string,string> = {
 type Build=Awaited<ReturnType<typeof listBuilds>>['builds'][number];
 export function PublicImage({src,alt,className}:{src:string;alt:string;className:string}){
  const [failed,setFailed]=useState(false);
- const src=weaponKey?weaponImageUrl(weaponKey):`/api/assets/${buildId}-weapon`;
  useEffect(()=>{setFailed(false);},[src]);
  return failed?<span className={`${className} lb-image-missing`} role="img" aria-label={alt+' unavailable'}>—</span>:
  // eslint-disable-next-line @next/next/no-img-element
