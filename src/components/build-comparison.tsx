@@ -48,9 +48,9 @@ function rowsFor(character: string): StatRow[] {
     { key: "totalCritDMG", label: "Crit. DMG", field: "totalCritDMG", percent: true },
     { key: "atk", label: "ATK", field: "atk", percent: false },
     { key: "def", label: "DEF", field: "def", percent: false },
-    { key: columns.attribute.field, label: columns.attribute.label, field: columns.attribute.field, percent: columns.attribute.percent },
+    { key: columns.attribute.field, label: columns.attribute.label, field: columns.attribute.field, percent: Boolean(columns.attribute.percent) },
     { key: "energyRegen", label: "Energy Regen", field: "energyRegen", percent: true },
-    { key: columns.damage.field, label: columns.damage.label, field: columns.damage.field, percent: columns.damage.percent },
+    { key: columns.damage.field, label: columns.damage.label, field: columns.damage.field, percent: Boolean(columns.damage.percent) },
   ];
   return rows.filter((row, index) => rows.findIndex((item) => item.key === row.key) === index);
 }
