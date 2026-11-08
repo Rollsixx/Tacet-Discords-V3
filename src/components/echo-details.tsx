@@ -1,4 +1,5 @@
 "use client";
+import { BuildComparison } from "./build-comparison";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -162,7 +163,7 @@ export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?
       <section className="profile-build-info-card profile-build-skills-card"><h3>Skills</h3><div className="profile-build-skills">{[{name:"Normal",index:0},{name:"Skill",index:1},{name:"Forte",index:2},{name:"Liberation",index:4},{name:"Intro",index:3}].map(({name,index})=><div key={name}><span><ProfileActionIcon kind={name} src={profileResonatorActionIcons[build.character]?.skills[name as ProfileActionName]}/></span><strong>{profileDetails?.talents?.[index]!==undefined&&profileDetails.talents[index]!==null?`${profileDetails.talents[index]}/10`:"—"}</strong><small>{name}</small></div>)}</div></section>
      </div>
     </div>
-    <h3 className="profile-build-section-title profile-build-echo-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3>
+    <div className="profile-build-echo-heading"><h3 className="profile-build-section-title profile-build-echo-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3><BuildComparison own={build}/></div>
     {echoCards}
 
    </main>
