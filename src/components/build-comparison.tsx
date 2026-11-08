@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { listBuilds } from "@/lib/server/queries";
 import { featuredResonators } from "@/lib/resonators";
 import { ResonatorPortrait } from "./resonator-portrait";
 import { defaultLeaderboardColumns, formatLeaderboardMetric } from "@/lib/leaderboards/metrics.mjs";
 import { echoCritValue, readableName, shortStat, compactNumber } from "@/lib/leaderboards/display";
-import styles from "./build-comparison.module.css";
 
 type Build = Awaited<ReturnType<typeof listBuilds>>["builds"][number];
 type Page = { builds: Build[]; page: number; hasMore: boolean };
@@ -56,25 +56,34 @@ function rowsFor(character: string): StatRow[] {
 }
 
 function BuildSummary({ build, label }: { build: Build; label: string }) {
-  return (
-    <div className={styles.summary}>
-      <div className={styles.summaryTop}>
-        <div className={styles.portraitWrap}><ResonatorPortrait name={build.character} className={styles.portrait}/></div>
-        <div className={styles.identity}>
-          <span>{label}</span>
-          <strong>{build.ign}</strong>
-          <small>UID {build.uid}</small>
-        </div>
-      </div>
-      <div className={styles.summaryMetrics}>
-        <div><span>Rank</span><strong>{build.rank == null ? "Unranked" : `#${build.rank}`}</strong></div>
-        <div><span>Score</span><strong>{build.score == null ? "—" : compactNumber(build.score)}</strong></div>
-        <div><span>Echo CV</span><strong>{echoCv(build).toFixed(1)}</strong></div>
-      </div>
+  return <article className="bc-summary">
+    <div className="bc-summary-top">
+      <ResonatorPortrait name={build.character} className="bc-portrait"/>
+      <div className="bc-identity"><span>{label}</span><strong>{build.ign}</strong><small>UID {build.uid}</small></div>
     </div>
-  );
+    <div className="bc-summary-metrics">
+      <div><span>Rank</span><strong>{build.rank == null ? "Unranked" : `#${build.rank}`}</strong></div>
+      <div><span>Score</span><strong>{build.score == null ? "—" : compactNumber(build.score)}</strong></div>
+      <div><span>Echo CV</span><strong>{echoCv(build).toFixed(1)}</strong></div>
+    </div>
+  </article>;
 }
 
+function EchoPreview({ build, slot }: { build: Build; slot: Build["data"]["slots"][number] }) {
+  const identity = build.data.assessment?.calculation?.identities?.[build.data.slots.findIndex((item) => item.slot === slot.slot)];
+  const stat = shortStat(slot.mainStat.value);
+  return <article className="bc-echo-preview">
+    <div className="bc-echo-image">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`/api/assets/${build.id}-${slot.slot}-portrait`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.opacity = "0"; }}/>
+      <span>{echoCritValue(slot.substats).toFixed(1)} CV</span>
+    </div>
+    <div className="bc-echo-copy">
+      <strong>{identity ? readableName(identity.echo) : `Echo ${slot.slot}`}</strong>
+      <small>{slot.cost.value} cost · {slot.mainStat.value} {stat.amount}</small>
+    </div>
+  </article>;
+}
 
 export function BuildComparison({ own }: { own: Build }) {
   const [open, setOpen] = useState(false);
@@ -84,12 +93,31 @@ export function BuildComparison({ own }: { own: Build }) {
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const others = useMemo(() => builds.filter((build) => build.uid !== own.uid), [builds, own.uid]);
   const selected = others.find((build) => build.id === selectedId) || others[0];
   const statRows = useMemo(() => rowsFor(own.character), [own.character]);
 
   useEffect(() => {
-    if (!open || page > 0) return;
+    if (!open) return;
+    const priorOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    closeRef.current?.focus();
+    return () => {
+      document.body.style.overflow = priorOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+      triggerRef.current?.focus();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || loaded) return;
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -102,8 +130,8 @@ export function BuildComparison({ own }: { own: Build }) {
         setBuilds(result.builds || []);
         setPage(result.page || 1);
         setHasMore(Boolean(result.hasMore));
-        const firstOther = (result.builds || []).find((build) => build.uid !== own.uid);
-        setSelectedId(firstOther?.id || "");
+        setSelectedId((result.builds || []).find((build) => build.uid !== own.uid)?.id || "");
+        setLoaded(true);
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError") return;
@@ -111,7 +139,7 @@ export function BuildComparison({ own }: { own: Build }) {
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [open, page, own.character, own.uid]);
+  }, [open, loaded, own.character, own.uid]);
 
   async function loadMore() {
     if (!hasMore || loading) return;
@@ -131,73 +159,56 @@ export function BuildComparison({ own }: { own: Build }) {
     }
   }
 
-  const leftEchoes = own.data.slots;
-  const rightEchoes = selected?.data.slots || [];
-  return (
-    <section className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <div><span className={styles.eyebrow}>BUILD COMPARISON</span><p>Compare Echo stats with another {own.character} build.</p></div>
-        <button type="button" className={styles.toggle} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-          {open ? "Close comparison" : "Compare builds"}
-        </button>
-      </div>
-      {open && <div className={styles.content}>
-        {loading && page === 0 ? <p className={styles.message}>Loading ranked {own.character} builds…</p> : error && page === 0 ? <p className={styles.error} role="alert">{error}</p> : !others.length ? <p className={styles.message}>No other ranked {own.character} builds are available yet.</p> : <>
-          <label className={styles.selectLabel} htmlFor={`compare-${own.id}`}>Compare against
-            <select id={`compare-${own.id}`} value={selected?.id || ""} onChange={(event) => setSelectedId(event.target.value)}>
-              {others.map((build) => <option key={build.id} value={build.id}>{build.rank == null ? "Unranked" : `#${build.rank}`} · {build.ign} · {build.score == null ? "No score" : compactNumber(build.score)}</option>)}
-            </select>
-          </label>
-          {selected && <>
-            <div className={styles.summaries}><BuildSummary build={own} label="Profile build" /><BuildSummary build={selected} label="Selected build" /></div>
-            <div className={styles.statsWrap}>
-              <h4>Build stats</h4>
-              <div className={styles.tableScroll}><table className={styles.statsTable}><thead><tr><th>Stat</th><th>{own.ign}</th><th>{selected.ign}</th><th>Difference</th></tr></thead><tbody>
-                {statRows.map((row) => {
-                  const left = numericValue(row, own);
-                  const right = numericValue(row, selected);
-                  const delta = left === undefined || right === undefined ? null : normalizedValue(row, left) - normalizedValue(row, right);
-                  return <tr key={row.key}><th scope="row">{row.label}</th><td>{displayValue(row, own)}</td><td>{displayValue(row, selected)}</td><td>{delta == null ? "—" : `${delta > 0 ? "+" : ""}${delta.toLocaleString(undefined, { maximumFractionDigits: 1 })}${row.percent ? " pp" : ""}`}</td></tr>;
-                })}
-              </tbody></table></div>
-              <p className={styles.note}>Differences show the profile build minus the compared build. Both scores use the current leaderboard rules.</p>
-            </div>
-            <div className={styles.echoSection}>
-              <div className={styles.echoHeading}><h4>Equipped Echoes</h4><span>Yours <i/> Selected <i/></span></div>
-              <div className={styles.echoColumns}>
-                {Array.from({ length: Math.max(leftEchoes.length, rightEchoes.length) }, (_, index) => {
-                  const left = leftEchoes[index];
-                  const right = rightEchoes[index];
-                  return <div className={styles.echoRow} key={index}>
-                    <div>{left ? <EchoPreview build={own} slot={left}/> : <span className={styles.emptyEcho}>No Echo</span>}</div>
-                    <div>{right ? <EchoPreview build={selected} slot={right}/> : <span className={styles.emptyEcho}>No Echo</span>}</div>
-                  </div>;
-                })}
-              </div>
-            </div>
-          </>}
-          {error && <p className={styles.error} role="alert">{error}</p>}
-          {hasMore && <button type="button" className={styles.loadMore} disabled={loading} onClick={loadMore}>{loading ? "Loading…" : "Load more players"}</button>}
+  const dialog = open ? <div className="bc-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+    <section className="bc-dialog" role="dialog" aria-modal="true" aria-labelledby={`bc-title-${own.id}`}>
+      <header className="bc-header">
+        <div><span className="bc-eyebrow">BUILD COMPARISON</span><h2 id={`bc-title-${own.id}`}>Compare {own.character} builds</h2><p>Compare Echo stats and equipment side by side.</p></div>
+        <button ref={closeRef} type="button" className="bc-close" onClick={() => setOpen(false)} aria-label="Close build comparison">×</button>
+      </header>
+      {loading && page === 0 ? <p className="bc-message">Loading ranked {own.character} builds…</p> : error && page === 0 ? <p className="bc-error" role="alert">{error}</p> : !others.length ? <p className="bc-message">No other ranked {own.character} builds are available yet.</p> : <>
+        <label className="bc-select-label" htmlFor={`compare-${own.id}`}>Compare against
+          <select id={`compare-${own.id}`} value={selected?.id || ""} onChange={(event) => setSelectedId(event.target.value)}>
+            {others.map((build) => <option key={build.id} value={build.id}>{build.rank == null ? "Unranked" : `#${build.rank}`} · {build.ign} · {build.score == null ? "No score" : compactNumber(build.score)}</option>)}
+          </select>
+        </label>
+        {selected && <>
+          <div className="bc-summaries"><BuildSummary build={own} label="Profile build"/><BuildSummary build={selected} label="Compared build"/></div>
+          <section className="bc-stats">
+            <h3>Build stats</h3>
+            <div className="bc-table-scroll"><table className="bc-table"><thead><tr><th scope="col">Stat</th><th scope="col">{own.ign}</th><th scope="col">{selected.ign}</th><th scope="col">Difference</th></tr></thead><tbody>
+              {statRows.map((row) => {
+                const left = numericValue(row, own);
+                const right = numericValue(row, selected);
+                const delta = left === undefined || right === undefined ? null : normalizedValue(row, left) - normalizedValue(row, right);
+                return <tr key={row.key}><th scope="row">{row.label}</th><td>{displayValue(row, own)}</td><td>{displayValue(row, selected)}</td><td>{delta == null ? "—" : `${delta > 0 ? "+" : ""}${delta.toLocaleString(undefined, { maximumFractionDigits: 1 })}${row.percent ? " pp" : ""}`}</td></tr>;
+              })}
+            </tbody></table></div>
+            <p className="bc-note">Differences show the profile build minus the compared build. Percent differences use percentage points.</p>
+          </section>
+          <section className="bc-echoes">
+            <div className="bc-section-heading"><div><span className="bc-eyebrow">ECHO LOADOUT</span><h3>Equipped Echoes</h3></div><p>Matched by slot</p></div>
+            <div className="bc-echo-headings"><span>Profile build · {own.ign}</span><span>Compared build · {selected.ign}</span></div>
+            <div className="bc-echo-list">{Array.from({ length: Math.max(own.data.slots.length, selected.data.slots.length) }, (_, index) => {
+              const left = own.data.slots[index], right = selected.data.slots[index];
+              return <div className="bc-echo-row" key={index}>
+                <div>{left ? <EchoPreview build={own} slot={left}/> : <span className="bc-empty-echo">No Echo in this slot</span>}</div>
+                <div>{right ? <EchoPreview build={selected} slot={right}/> : <span className="bc-empty-echo">No Echo in this slot</span>}</div>
+              </div>;
+            })}</div>
+          </section>
         </>}
-      </div>}
+        {error && <p className="bc-error" role="alert">{error}</p>}
+        {hasMore && <button type="button" className="bc-load-more" disabled={loading} onClick={loadMore}>{loading ? "Loading…" : "Load more players"}</button>}
+      </>}
     </section>
-  );
-}
+  </div> : null;
 
-function EchoPreview({ build, slot }: { build: Build; slot: Build["data"]["slots"][number] }) {
-  const identity = build.data.assessment?.calculation?.identities?.[build.data.slots.findIndex((item) => item.slot === slot.slot)];
-  const stat = shortStat(slot.mainStat.value);
-  return (
-    <article className={styles.echoPreview}>
-      <div className={styles.previewImage}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/api/assets/${build.id}-${slot.slot}-portrait`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.opacity = "0"; }} />
-        <span>{echoCritValue(slot.substats).toFixed(1)} CV</span>
-      </div>
-      <div className={styles.previewCopy}>
-        <strong>{identity ? readableName(identity.echo) : `Echo ${slot.slot}`}</strong>
-        <small>{slot.cost.value} cost · {slot.mainStat.value} {stat.amount}</small>
-      </div>
-    </article>
-  );
+  return <>
+    <button ref={triggerRef} type="button" className="bc-trigger" onClick={() => setOpen(true)}>
+      <span className="bc-trigger-icon" aria-hidden="true">⇄</span>
+      <span><strong>Compare builds</strong><small>View other {own.character} Echo builds</small></span>
+      <span className="bc-trigger-arrow" aria-hidden="true">↗</span>
+    </button>
+    {open && typeof document !== "undefined" ? createPortal(dialog, document.body) : null}
+  </>;
 }

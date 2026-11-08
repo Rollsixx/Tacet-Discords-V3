@@ -154,6 +154,7 @@ export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?
     </section>
     <section className="profile-build-weapon-card"><span className="profile-build-card-label">Equipped weapon</span><ProfileWeaponIcon buildId={build.id} weaponKey={profileDetails?.weaponKey} alt={`${profileDetails?.weapon||"Equipped weapon"} icon`}/><strong>{profileDetails?.weapon||"Not recorded"}</strong><small>{profileDetails?.weapon?"Read from submitted build":"Weapon details weren’t readable in this scan."}</small></section>
     <section className="profile-build-cv-card"><span className="profile-build-card-label">Overall Echo CV</span><strong>{cv.toFixed(1)}</strong><small>Combined Echo crit value</small></section>
+    <BuildComparison own={build}/>
    </aside>
    <main className="profile-build-main">
     <div className="profile-build-top-panels">
@@ -163,7 +164,7 @@ export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?
       <section className="profile-build-info-card profile-build-skills-card"><h3>Skills</h3><div className="profile-build-skills">{[{name:"Normal",index:0},{name:"Skill",index:1},{name:"Forte",index:2},{name:"Liberation",index:4},{name:"Intro",index:3}].map(({name,index})=><div key={name}><span><ProfileActionIcon kind={name} src={profileResonatorActionIcons[build.character]?.skills[name as ProfileActionName]}/></span><strong>{profileDetails?.talents?.[index]!==undefined&&profileDetails.talents[index]!==null?`${profileDetails.talents[index]}/10`:"—"}</strong><small>{name}</small></div>)}</div></section>
      </div>
     </div>
-    <div className="profile-build-echo-heading"><h3 className="profile-build-section-title profile-build-echo-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3><BuildComparison own={build}/></div>
+    <h3 className="profile-build-section-title profile-build-echo-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3>
     {echoCards}
 
    </main>
