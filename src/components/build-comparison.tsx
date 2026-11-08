@@ -85,7 +85,7 @@ function EchoPreview({ build, slot }: { build: Build; slot: Build["data"]["slots
   </article>;
 }
 
-export function BuildComparison({ own }: { own: Build }) {
+export function BuildComparison({ own, compact = false, ownLabel = "Profile build" }: { own: Build; compact?: boolean; ownLabel?: string }) {
   const [open, setOpen] = useState(false);
   const [builds, setBuilds] = useState<Build[]>([]);
   const [page, setPage] = useState(0);
@@ -172,7 +172,7 @@ export function BuildComparison({ own }: { own: Build }) {
           </select>
         </label>
         {selected && <>
-          <div className="bc-summaries"><BuildSummary build={own} label="Profile build"/><BuildSummary build={selected} label="Compared build"/></div>
+          <div className="bc-summaries"><BuildSummary build={own} label={ownLabel}/><BuildSummary build={selected} label="Compared build"/></div>
           <section className="bc-stats">
             <h3>Build stats</h3>
             <div className="bc-table-scroll"><table className="bc-table"><thead><tr><th scope="col">Stat</th><th scope="col">{own.ign}</th><th scope="col">{selected.ign}</th><th scope="col">Difference</th></tr></thead><tbody>
@@ -204,7 +204,7 @@ export function BuildComparison({ own }: { own: Build }) {
   </div> : null;
 
   return <>
-    <button ref={triggerRef} type="button" className="bc-trigger" onClick={() => setOpen(true)}>
+    <button ref={triggerRef} type="button" className={`bc-trigger${compact ? " bc-trigger-compact" : ""}`} onClick={() => setOpen(true)}>
       <span className="bc-trigger-icon" aria-hidden="true">⇄</span>
       <span><strong>Compare builds</strong><small>View other {own.character} Echo builds</small></span>
       <span className="bc-trigger-arrow" aria-hidden="true">↗</span>
