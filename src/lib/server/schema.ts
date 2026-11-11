@@ -204,4 +204,10 @@ export const migrations = [
     `CREATE TABLE hof_audit_events (id TEXT PRIMARY KEY,tournament_slug TEXT,match_id TEXT,actor_id TEXT NOT NULL,actor_role TEXT NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',before_state TEXT NOT NULL DEFAULT '{}',after_state TEXT NOT NULL DEFAULT '{}',outcome TEXT NOT NULL,created_at TEXT NOT NULL)`,
     `CREATE INDEX hof_audit_recent ON hof_audit_events(created_at DESC,id DESC)`
   ]},
+  {version:20,statements:[
+    "ALTER TABLE hof_staff ADD COLUMN title TEXT NOT NULL DEFAULT 'bloom_bearer'",
+    "UPDATE hof_staff SET title='chief_steward' WHERE role='hall_of_fame_admin'",
+    "UPDATE hof_staff SET title='bloom_bearer' WHERE role='organizer'",
+    "UPDATE hof_staff SET title='consultant' WHERE role='referee'",
+  ]},
 ];
