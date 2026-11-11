@@ -1,14 +1,23 @@
 import {catalogCompleteness} from "@/lib/server/catalog-completeness.mjs";
 import {verifyHistoricalCorrections} from "@/lib/server/correction-workflow.mjs";
-import { authorize, failure, json, readJson } from "@/lib/server/http";
+import { failure, json, readJson } from "@/lib/server/http";
+import { authorizeWorkspace } from "@/lib/server/workspace-auth";
 import { HttpError, record } from "@/lib/server/validation";
 import { listAdminPlayers, adminPlayerBuilds, setUidVerification, listBuilds, moderate, setPlayerVerification, adminOverview, listAdminAudit, deleteBuild, correctEchoSubstat } from "@/lib/server/store";
 import {listLeaderboardRankChanges,leaderboardConsistencyReport,refreshLeaderboardRankHistory} from "@/lib/server/queries";
 import {database} from "@/lib/server/database";
 export async function GET(request: Request) {
   try {
-    authorize(request);
+    const actor=await authorizeWorkspace(request);
     const params=new URL(request.url).searchParams;
+    const requestedView=params.get("view")||"";
+    if(actor.title==="consultant"){
+      if(requestedView==="summary")return json({builds:[],overview:await adminOverview(),activity:[],hasMore:false,page:1});
+      if(requestedView==="players")return json({...await listAdminPlayers({page:Number(params.get("page"))||1,search:params.get("search")||"",character:params.get("character")||""}),overview:await adminOverview()});
+      if(requestedView==="player"){const uid=params.get("uid")||"";if(!/^\\d{8,12}$/.test(uid))throw new HttpError(400,"Valid player UID required.");return json(await adminPlayerBuilds(uid,Number(params.get("page"))||1));}
+      throw new HttpError(403,"Consultant access is read-only and limited to overview and player builds.");
+    }
+    if(actor.title==="bloom_bearer"&&["catalog","consistency","audit","rank-changes"].includes(requestedView))throw new HttpError(403,"Bloom Bearer access is limited to dashboard, submissions, and player builds.");
     if(params.get("view")==="catalog")return json(await catalogCompleteness());
     if(params.get("view")==="consistency")return json(await leaderboardConsistencyReport());
     const page=Number(params.get("page"))||1;
@@ -29,9 +38,9 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   try {
-    authorize(request);
+    const actor=await authorizeWorkspace(request);if(actor.title==="consultant")throw new HttpError(403,"Consultant access is read-only.");
     const input = await readJson(request, 4096);
-    if(record(input)&&input.note===undefined)input.note="";
+    if(record(input)){if(input.note===undefined)input.note="";input.reviewer=actor.label;}
     if (!record(input) || typeof input.id !== "string" || !/^[a-f0-9-]{36}$/.test(input.id) ||
       !["approved", "rejected"].includes(String(input.action)) || typeof input.reviewer !== "string" ||
       input.reviewer.trim().length < 2 || input.reviewer.length > 64 ||
@@ -47,7 +56,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
  try {
-  authorize(request);const input=await readJson(request,4096);if(record(input)&&input.note===undefined)input.note="";
+  const actor=await authorizeWorkspace(request);if(actor.title==="consultant")throw new HttpError(403,"Consultant access is read-only.");const input=await readJson(request,4096);if(record(input)){if(input.note===undefined)input.note="";input.reviewer=actor.label;}
   if(!record(input)||typeof input.identityVerified!=="boolean"||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Valid player verification and moderator name required; note is optional.");
   if(typeof input.uid==='string'&&/^\d{8,12}$/.test(input.uid)){const result=await setUidVerification(input.uid,input.identityVerified,input.reviewer.trim(),input.note);await refreshLeaderboardRankHistory(database());return json({ok:true,...result});}
   if(typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id))throw new HttpError(400,'Valid player UID or approved build ID required.');
@@ -57,7 +66,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
  try {
-  authorize(request);const input=await readJson(request,4096);if(record(input)&&input.note===undefined)input.note="";
+  const actor=await authorizeWorkspace(request);if(actor.title==="consultant")throw new HttpError(403,"Consultant access is read-only.");const input=await readJson(request,4096);if(record(input)){if(input.note===undefined)input.note="";input.reviewer=actor.label;}
   if(!record(input)||typeof input.id!=="string"||!/^[a-f0-9-]{36}$/.test(input.id)||input.confirm!==true||typeof input.reviewer!=="string"||input.reviewer.trim().length<2||input.reviewer.length>64||typeof input.note!=="string"||input.note.length>500)throw new HttpError(400,"Confirm deletion and provide a reviewer name and note.");
   const result=await deleteBuild(input.id,input.reviewer.trim(),input.note);await refreshLeaderboardRankHistory(database());return json({ok:true,...result});
  }catch(error){return failure(error);}
@@ -65,7 +74,7 @@ export async function DELETE(request: Request) {
 
 export async function PUT(request:Request){
  try{
-  authorize(request);const input=await readJson(request,65536);if(record(input)&&input.note===undefined)input.note="";
+  const actor=await authorizeWorkspace(request);if(actor.title==="consultant")throw new HttpError(403,"Consultant access is read-only.");const input=await readJson(request,65536);if(record(input)){if(input.note===undefined)input.note="";input.reviewer=actor.label;}
   if(record(input)&&input.action==='verify-corrections'){
    if(typeof input.id!=='string'||!/^[a-f0-9-]{36}$/.test(input.id)||!Array.isArray(input.expectedCorrections)||typeof input.reviewer!=='string'||typeof input.note!=='string')throw new HttpError(400,'Invalid correction verification.');
    const result=await verifyHistoricalCorrections(input.id,input.expectedCorrections,input.reviewer,input.verified,input.note);await refreshLeaderboardRankHistory(database());return json({ok:true,...result});
