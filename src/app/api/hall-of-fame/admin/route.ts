@@ -328,10 +328,10 @@ export async function POST(request:Request){
    if(!["archived","finalized"].includes(String(row.status)))throw new HttpError(409,"Only archived tournaments can be edited here.");
    const title=text(body.title,"Title",120),boss=text(body.boss,"Hologram boss",80);
    const eventDate=body.eventDate?text(body.eventDate,"Event date",40):null;
-   if(eventDate&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(eventDate))throw new HttpError(400,"Event date must be a valid date.");
+   if(eventDate&&!/^\d{4}-\d{2}-\d{2}$/.test(eventDate))throw new HttpError(400,"Event date must be a valid date.");
    const rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000);
    let artwork=String(row.artwork_data_url||"");
-   if(body.artworkDataUrl!==undefined){artwork=String(body.artworkDataUrl||"");if(artwork.length>2100000||!/^data:image\\/(png|jpeg|webp);base64,/.test(artwork))throw new HttpError(400,"Artwork must be PNG, JPG, or WebP under 1.5 MB.");}
+   if(body.artworkDataUrl!==undefined){artwork=String(body.artworkDataUrl||"");if(artwork.length>2100000||!/^data:image\/(png|jpeg|webp);base64,/.test(artwork))throw new HttpError(400,"Artwork must be PNG, JPG, or WebP under 1.5 MB.");}
    await db.execute({sql:"UPDATE hof_tournaments SET title=?,boss=?,event_date=?,rules=?,public_notice=?,artwork_data_url=?,updated_at=?,version=version+1 WHERE slug=?",args:[title,boss,eventDate,rules,notice,artwork,now,slug]});
    await audit(db,actor,action,slug,{title:row.title,boss:row.boss,eventDate:row.event_date},{title,boss,eventDate,rules,publicNotice:notice,artworkChanged:body.artworkDataUrl!==undefined});
    return json({ok:true});
