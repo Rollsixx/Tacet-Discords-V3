@@ -46,7 +46,7 @@ async function eventHistoryForParticipant(id:string,db:any){
  if(!base.rows.length)return null;
  const events=await db.execute({sql:`SELECT t.slug,t.title,t.boss,t.event_date,t.status,r.state roster_state,m.medal FROM hof_roster r JOIN hof_tournaments t ON t.slug=r.tournament_slug LEFT JOIN hof_medals m ON m.tournament_slug=t.slug AND m.participant_id=r.participant_id AND m.published=1 WHERE r.participant_id=? AND r.published=1 AND r.state='confirmed' AND t.status IN (${placeholders}) ORDER BY COALESCE(t.event_date,t.updated_at) DESC,t.slug`,args:[id,...publicStates]});
  const row=base.rows[0],history=events.rows.map((item:any)=>({slug:String(item.slug),title:String(item.title),boss:String(item.boss),date:item.event_date?String(item.event_date):null,medal:item.medal?String(item.medal):null}));
- return {id:String(row.id),name:String(row.display_name),resonatorIcon:String(row.resonator_icon),gold:history.filter(item=>item.medal==='gold').length,silver:history.filter(item=>item.medal==='silver').length,bronze:history.filter(item=>item.medal==='bronze').length,contestsJoined:history.length,history};
+ return {id:String(row.id),name:String(row.display_name),resonatorIcon:String(row.resonator_icon),gold:history.filter((item:any)=>item.medal==='gold').length,silver:history.filter((item:any)=>item.medal==='silver').length,bronze:history.filter((item:any)=>item.medal==='bronze').length,contestsJoined:history.length,history};
 }
 
 export async function GET(request:Request){
