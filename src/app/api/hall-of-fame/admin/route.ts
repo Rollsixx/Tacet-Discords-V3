@@ -90,6 +90,62 @@ async function prepareSingleElimination(db:any,slug:string,actor:Actor,now:strin
   await tx.commit();return {ok:true,entrants:entrants.length,byes:byeCount};
  }catch(error){await tx.rollback();throw error}
 }
+async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:string){
+ const tx=await db.transaction("write");
+ try{
+  const event=(await tx.execute({sql:"SELECT status,format,capacity_min FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];
+  if(!event)throw new HttpError(404,"Tournament not found.");
+  await requireCan(actor,"manage_event",slug,null,db);
+  if(event.format!=="double_elimination")throw new HttpError(409,"This tournament is not configured for double elimination.");
+  if(event.status!=="registration_closed")throw new HttpError(409,"Close registration before preparing a bracket.");
+  const existing=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=?",args:[slug]});
+  if(Number(existing.rows[0]?.total||0))throw new HttpError(409,"A bracket already exists. Use an audited correction workflow instead of reshuffling.");
+  const roster=await tx.execute({sql:"SELECT p.id FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? AND r.state='confirmed' AND r.published=1 ORDER BY r.seed_position,p.display_name COLLATE NOCASE,p.id",args:[slug]});
+  const entrants=shuffled(roster.rows.map((row:any)=>String(row.id))),n=entrants.length;
+  if(n<4||n>128||(n&(n-1))!==0)throw new HttpError(409,"Double elimination currently needs 4, 8, 16, 32, 64, or 128 confirmed entrants. Adjust the roster or choose single elimination.");
+  if(n<Number(event.capacity_min))throw new HttpError(409,"The confirmed roster is below this event's minimum capacity.");
+  const rounds=Math.log2(n),upper:any[][]=[];let nodes:any[]=entrants.map((id:string)=>({kind:"player",id}));
+  for(let r=1;r<=rounds;r++){
+   const next:any[]=[];for(let i=0;i<nodes.length;i+=2){const match=await addMatch(tx,slug,r,r===rounds?"Upper Bracket Final":"Upper Bracket Round "+r,i/2+1,"upper",nodes[i],nodes[i+1],now);next.push(match);}
+   upper.push(next);nodes=next;
+  }
+  let lower:any[]=[];
+  if(rounds>1){
+   let order=0;for(let i=0;i<upper[0].length;i+=2){
+    const id=randomUUID();order++;
+    await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Lower Bracket Round 1',?,'lower',NULL,NULL,'awaiting_competitors',?)",args:[id,slug,1,order,now]});
+    await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'loser'),(?,?,'loser')",args:[id,upper[0][i].id,id,upper[0][i+1].id]});
+    lower.push({kind:"match",id,round:1,order});
+   }
+   let lowerRound=2;
+   for(let r=2;r<=rounds;r++){
+    const current:any[]=[];
+    for(let i=0;i<upper[r-1].length;i++){
+     const id=randomUUID(),side=r===rounds?"lower":"lower",label=r===rounds?"Lower Bracket Final":"Lower Bracket Round "+lowerRound,order=i+1;
+     await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,?,? ,?,NULL,NULL,'awaiting_competitors',?)",args:[id,slug,lowerRound,label,order,side,now]});
+     const prior=lower[Math.min(i,lower.length-1)];
+     await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner'),(?,?,'loser')",args:[id,prior.id,id,upper[r-1][i].id]});
+     current.push({kind:"match",id,round:lowerRound,order});
+    }
+    lower=current;lowerRound++;
+    if(r<rounds&&lower.length>1){
+     const compact:any[]=[];for(let i=0;i<lower.length;i+=2){
+      const id=randomUUID(),order=compact.length+1;
+      await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Lower Bracket Round',?,'lower',NULL,NULL,'awaiting_competitors',?)",args:[id,slug,lowerRound,order,now]});
+      await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner'),(?,?,'winner')",args:[id,lower[i].id,id,lower[i+1].id]});
+      compact.push({kind:"match",id,round:lowerRound,order});
+     }lower=compact;lowerRound++;
+    }
+   }
+  }
+  const upperFinal=upper[rounds-1][0],lowerFinal=lower[0],grandId=randomUUID();
+  await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Grand Final',1,'grand_final',NULL,NULL,'awaiting_competitors',?)",args:[grandId,slug,rounds+lowerRound,now]});
+  await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner'),(?,?,'winner')",args:[grandId,upperFinal.id,grandId,lowerFinal.id]});
+  await tx.execute({sql:"UPDATE hof_tournaments SET status='bracket_prepared',bracket_published=0,updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});
+  await audit(tx,actor,"prepare_bracket",slug,{}, {format:"double_elimination",entrants:n,upperRounds:rounds,thirdPlace:"loser of Lower Bracket Final",grandFinalId:grandId});
+  await tx.commit();return {ok:true,entrants:n,format:"double_elimination"};
+ }catch(error){await tx.rollback();throw error}
+}
 export async function GET(request:Request){
  try{
   await migrateOnce();const db=database(),actor=await actorFor(request,db),url=new URL(request.url);
@@ -167,7 +223,7 @@ export async function POST(request:Request){
   }
   if(action==="prepare_bracket"){
    if(!slug)throw new HttpError(400,"Tournament is required.");
-   const result=await prepareSingleElimination(db,slug,actor,now);return json(result);
+   const format=await db.execute({sql:"SELECT format FROM hof_tournaments WHERE slug=?",args:[slug]});const result=String(format.rows[0]?.format)==="double_elimination"?await prepareDoubleElimination(db,slug,actor,now):await prepareSingleElimination(db,slug,actor,now);return json(result);
   }
   if(action==="reveal_bracket"){
    if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"manage_event",slug,null,db);
