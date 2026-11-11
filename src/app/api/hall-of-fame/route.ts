@@ -54,6 +54,7 @@ export async function GET(request:Request){
  try{
   await migrateOnce();
   const db=database(),url=new URL(request.url),section=url.searchParams.get("section")||"overview";
+  if(section==="invite"){const result=await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hall_of_fame_join_contest_url"]});const value=String(result.rows[0]?.value||"");let valid="";try{const invite=new URL(value);if(invite.protocol==="https:"&&(invite.hostname==="discord.gg"||invite.hostname==="discord.com"&&invite.pathname.startsWith("/invite/")))valid=value;}catch{}return Response.json({joinContestUrl:valid},{headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});}
   if(section==="artwork"){
    const slug=url.searchParams.get("slug")||"";
    const row=await db.execute({sql:"SELECT artwork_data_url FROM hof_tournaments WHERE slug=? AND status IN ("+placeholders+")",args:[slug,...publicStates]});
