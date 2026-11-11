@@ -215,4 +215,5 @@ export const migrations = [
     "ALTER TABLE hof_tournaments ADD COLUMN tournament_kind TEXT NOT NULL DEFAULT 'hologram'",
     "ALTER TABLE hof_tournaments ADD COLUMN bracket_mode TEXT NOT NULL DEFAULT 'single_elimination'"
   ]},
+  {version:22,statements:["ALTER TABLE hof_match_dependencies ADD COLUMN target_slot TEXT NOT NULL DEFAULT ''"]},
 ];
