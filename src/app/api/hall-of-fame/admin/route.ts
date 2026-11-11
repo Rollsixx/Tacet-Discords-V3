@@ -114,7 +114,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
    let order=0;for(let i=0;i<upper[0].length;i+=2){
     const id=randomUUID();order++;
     await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Lower Bracket Round 1',?,'lower',NULL,NULL,'awaiting_competitors',?)",args:[id,slug,1,order,now]});
-    await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'loser'),(?,?,'loser')",args:[id,upper[0][i].id,id,upper[0][i+1].id]});
+    await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'loser','participant_a'),(?,?,'loser','participant_b')",args:[id,upper[0][i].id,id,upper[0][i+1].id]});
     lower.push({kind:"match",id,round:1,order});
    }
    let lowerRound=2;
@@ -124,7 +124,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
      const id=randomUUID(),side=r===rounds?"lower":"lower",label=r===rounds?"Lower Bracket Final":"Lower Bracket Round "+lowerRound,order=i+1;
      await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,?,? ,?,NULL,NULL,'awaiting_competitors',?)",args:[id,slug,lowerRound,label,order,side,now]});
      const prior=lower[Math.min(i,lower.length-1)];
-     await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner'),(?,?,'loser')",args:[id,prior.id,id,upper[r-1][i].id]});
+     await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner','participant_a'),(?,?,'loser','participant_b')",args:[id,prior.id,id,upper[r-1][i].id]});
      current.push({kind:"match",id,round:lowerRound,order});
     }
     lower=current;lowerRound++;
@@ -132,7 +132,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
      const compact:any[]=[];for(let i=0;i<lower.length;i+=2){
       const id=randomUUID(),order=compact.length+1;
       await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Lower Bracket Round',?,'lower',NULL,NULL,'awaiting_competitors',?)",args:[id,slug,lowerRound,order,now]});
-      await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner'),(?,?,'winner')",args:[id,lower[i].id,id,lower[i+1].id]});
+      await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner','participant_a'),(?,?,'winner','participant_b')",args:[id,lower[i].id,id,lower[i+1].id]});
       compact.push({kind:"match",id,round:lowerRound,order});
      }lower=compact;lowerRound++;
     }
@@ -140,7 +140,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
   }
   const upperFinal=upper[rounds-1][0],lowerFinal=lower[0],grandId=randomUUID();
   await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Grand Final',1,'grand_final',NULL,NULL,'awaiting_competitors',?)",args:[grandId,slug,rounds+lowerRound,now]});
-  await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner'),(?,?,'winner')",args:[grandId,upperFinal.id,grandId,lowerFinal.id]});
+  await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner','participant_a'),(?,?,'winner','participant_b')",args:[grandId,upperFinal.id,grandId,lowerFinal.id]});
   await tx.execute({sql:"UPDATE hof_tournaments SET status='bracket_prepared',bracket_published=0,updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});
   await audit(tx,actor,"prepare_bracket",slug,{}, {format:"double_elimination",entrants:n,upperRounds:rounds,thirdPlace:"loser of Lower Bracket Final",grandFinalId:grandId});
   await tx.commit();return {ok:true,entrants:n,format:"double_elimination"};
@@ -254,11 +254,11 @@ export async function POST(request:Request){
    if(!match||match.state!=="pending_publication"||!match.winner_id)throw new HttpError(409,"Only a recorded result can be published.");
    const dispute=await tx.execute({sql:"SELECT 1 FROM hof_disputes WHERE match_id=? AND state='open' LIMIT 1",args:[matchId]});
    if(dispute.rows.length)throw new HttpError(409,"Resolve the open dispute before publication.");
-   const deps=await tx.execute({sql:"SELECT d.match_id,d.dependency_type,target.participant_a,target.participant_b,source.match_order source_order FROM hof_match_dependencies d JOIN hof_matches target ON target.id=d.match_id JOIN hof_matches source ON source.id=d.depends_on_match_id WHERE d.depends_on_match_id=? ORDER BY d.match_id",args:[matchId]});
+   const deps=await tx.execute({sql:"SELECT d.match_id,d.dependency_type,d.target_slot,target.participant_a,target.participant_b,source.match_order source_order FROM hof_match_dependencies d JOIN hof_matches target ON target.id=d.match_id JOIN hof_matches source ON source.id=d.depends_on_match_id WHERE d.depends_on_match_id=? ORDER BY d.match_id",args:[matchId]});
    for(const dep of deps.rows){
     const advancing=dep.dependency_type==="loser"?(match.winner_id===match.participant_a?match.participant_b:match.participant_a):match.winner_id;
     if(!advancing)throw new HttpError(409,"The advancing participant is missing.");
-    const slot=Number(dep.source_order)%2===1?"participant_a":"participant_b";
+    const slot=dep.target_slot==="participant_a"||dep.target_slot==="participant_b"?String(dep.target_slot):Number(dep.source_order)%2===1?"participant_a":"participant_b";
     const occupied=dep[slot];
     if(occupied&&occupied!==advancing)throw new HttpError(409,"The next match slot is already occupied by another participant.");
     const other=slot==="participant_a"?dep.participant_b:dep.participant_a;
