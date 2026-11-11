@@ -114,7 +114,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
    let order=0;for(let i=0;i<upper[0].length;i+=2){
     const id=randomUUID();order++;
     await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Lower Bracket Round 1',?,'lower',NULL,NULL,'awaiting_competitors',?)",args:[id,slug,1,order,now]});
-    await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'loser','participant_a'),(?,?,'loser','participant_b')",args:[id,upper[0][i].id,id,upper[0][i+1].id]});
+    await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'loser','participant_a'),(?,?,'loser','participant_b')",args:[id,upper[0][i].id,id,upper[0][i+1].id]});
     lower.push({kind:"match",id,round:1,order});
    }
    let lowerRound=2;
@@ -124,7 +124,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
      const id=randomUUID(),side=r===rounds?"lower":"lower",label=r===rounds?"Lower Bracket Final":"Lower Bracket Round "+lowerRound,order=i+1;
      await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,?,? ,?,NULL,NULL,'awaiting_competitors',?)",args:[id,slug,lowerRound,label,order,side,now]});
      const prior=lower[Math.min(i,lower.length-1)];
-     await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner','participant_a'),(?,?,'loser','participant_b')",args:[id,prior.id,id,upper[r-1][i].id]});
+     await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_a'),(?,?,'loser','participant_b')",args:[id,prior.id,id,upper[r-1][i].id]});
      current.push({kind:"match",id,round:lowerRound,order});
     }
     lower=current;lowerRound++;
@@ -132,7 +132,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
      const compact:any[]=[];for(let i=0;i<lower.length;i+=2){
       const id=randomUUID(),order=compact.length+1;
       await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Lower Bracket Round',?,'lower',NULL,NULL,'awaiting_competitors',?)",args:[id,slug,lowerRound,order,now]});
-      await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner','participant_a'),(?,?,'winner','participant_b')",args:[id,lower[i].id,id,lower[i+1].id]});
+      await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_a'),(?,?,'winner','participant_b')",args:[id,lower[i].id,id,lower[i+1].id]});
       compact.push({kind:"match",id,round:lowerRound,order});
      }lower=compact;lowerRound++;
     }
@@ -140,7 +140,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
   }
   const upperFinal=upper[rounds-1][0],lowerFinal=lower[0],grandId=randomUUID();
   await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,'Grand Final',1,'grand_final',NULL,NULL,'awaiting_competitors',?)",args:[grandId,slug,rounds+lowerRound,now]});
-  await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner','participant_a'),(?,?,'winner','participant_b')",args:[grandId,upperFinal.id,grandId,lowerFinal.id]});
+  await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_a'),(?,?,'winner','participant_b')",args:[grandId,upperFinal.id,grandId,lowerFinal.id]});
   await tx.execute({sql:"UPDATE hof_tournaments SET status='bracket_prepared',bracket_published=0,updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});
   await audit(tx,actor,"prepare_bracket",slug,{}, {format:"double_elimination",entrants:n,upperRounds:rounds,thirdPlace:"loser of Lower Bracket Final",grandFinalId:grandId});
   await tx.commit();return {ok:true,entrants:n,format:"double_elimination"};
