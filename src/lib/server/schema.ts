@@ -216,4 +216,8 @@ export const migrations = [
     "ALTER TABLE hof_tournaments ADD COLUMN bracket_mode TEXT NOT NULL DEFAULT 'single_elimination'"
   ]},
   {version:22,statements:["ALTER TABLE hof_match_dependencies ADD COLUMN target_slot TEXT NOT NULL DEFAULT ''"]},
+  {version:23,statements:[
+    "ALTER TABLE hof_roster ADD COLUMN display_name_snapshot TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE hof_roster ADD COLUMN resonator_icon_snapshot TEXT NOT NULL DEFAULT ''"
+  ]},
 ];
