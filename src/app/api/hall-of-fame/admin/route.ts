@@ -101,7 +101,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
   const existing=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=?",args:[slug]});
   if(Number(existing.rows[0]?.total||0))throw new HttpError(409,"A bracket already exists. Use an audited correction workflow instead of reshuffling.");
   const roster=await tx.execute({sql:"SELECT p.id FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? AND r.state='confirmed' AND r.published=1 ORDER BY r.seed_position,p.display_name COLLATE NOCASE,p.id",args:[slug]});
-  const entrants=shuffled(roster.rows.map((row:any)=>String(row.id))),n=entrants.length;
+  const entrants:string[]=shuffled<string>((roster.rows as any[]).map((row:any)=>String(row.id))),n=entrants.length;
   if(n<4||n>128||(n&(n-1))!==0)throw new HttpError(409,"Double elimination currently needs 4, 8, 16, 32, 64, or 128 confirmed entrants. Adjust the roster or choose single elimination.");
   if(n<Number(event.capacity_min))throw new HttpError(409,"The confirmed roster is below this event's minimum capacity.");
   const rounds=Math.log2(n),upper:any[][]=[];let nodes:any[]=entrants.map((id:string)=>({kind:"player",id}));
@@ -109,7 +109,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
    const next:any[]=[];for(let i=0;i<nodes.length;i+=2){const match=await addMatch(tx,slug,r,r===rounds?"Upper Bracket Final":"Upper Bracket Round "+r,i/2+1,"upper",nodes[i],nodes[i+1],now);next.push(match);}
    upper.push(next);nodes=next;
   }
-  let lower:any[]=[];
+  let lower:any[]=[],lowerRound=2;
   if(rounds>1){
    let order=0;for(let i=0;i<upper[0].length;i+=2){
     const id=randomUUID();order++;
@@ -117,7 +117,7 @@ async function prepareDoubleElimination(db:any,slug:string,actor:Actor,now:strin
     await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'loser','participant_a'),(?,?,'loser','participant_b')",args:[id,upper[0][i].id,id,upper[0][i+1].id]});
     lower.push({kind:"match",id,round:1,order});
    }
-   let lowerRound=2;
+   lowerRound=2;
    for(let r=2;r<=rounds;r++){
     const current:any[]=[];
     for(let i=0;i<upper[r-1].length;i++){
