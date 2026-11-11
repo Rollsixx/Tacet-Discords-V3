@@ -152,8 +152,8 @@ export async function GET(request:Request){
   const artworkSlug=url.searchParams.get("artwork");
   if(artworkSlug){await requireCan(actor,"manage_event",artworkSlug,null,db);const row=await db.execute({sql:"SELECT artwork_data_url FROM hof_tournaments WHERE slug=?",args:[artworkSlug]});return json({artworkDataUrl:String(row.rows[0]?.artwork_data_url||"")});}
 const slug=url.searchParams.get("slug");
-  let eventSql="SELECT slug,title,boss,status,format,event_date,capacity_min,capacity_max,roster_published,bracket_published,medals_published,CASE WHEN artwork_data_url='' THEN 0 ELSE 1 END has_artwork,tournament_kind,bracket_mode FROM hof_tournaments ORDER BY updated_at DESC",eventArgs:any[]=[];
-  if(actor.role==="organizer"||actor.role==="referee"){eventSql="SELECT DISTINCT t.slug,t.title,t.boss,t.status,t.format,t.event_date,t.capacity_min,t.capacity_max,t.roster_published,t.bracket_published,t.medals_published,CASE WHEN t.artwork_data_url='' THEN 0 ELSE 1 END has_artwork,t.tournament_kind,t.bracket_mode FROM hof_tournaments t JOIN hof_staff_assignments a ON a.tournament_slug=t.slug WHERE a.staff_id=? ORDER BY t.updated_at DESC";eventArgs=[actor.id]}
+  let eventSql="SELECT slug,title,boss,status,format,event_date,rules,public_notice,capacity_min,capacity_max,roster_published,bracket_published,medals_published,CASE WHEN artwork_data_url='' THEN 0 ELSE 1 END has_artwork,tournament_kind,bracket_mode FROM hof_tournaments ORDER BY updated_at DESC",eventArgs:any[]=[];
+  if(actor.role==="organizer"||actor.role==="referee"){eventSql="SELECT DISTINCT t.slug,t.title,t.boss,t.status,t.format,t.event_date,t.rules,t.public_notice,t.capacity_min,t.capacity_max,t.roster_published,t.bracket_published,t.medals_published,CASE WHEN t.artwork_data_url='' THEN 0 ELSE 1 END has_artwork,t.tournament_kind,t.bracket_mode FROM hof_tournaments t JOIN hof_staff_assignments a ON a.tournament_slug=t.slug WHERE a.staff_id=? ORDER BY t.updated_at DESC";eventArgs=[actor.id]}
   const events=await db.execute({sql:eventSql,args:eventArgs});
   const people=await db.execute("SELECT id,display_name,resonator_icon FROM hof_participants ORDER BY display_name COLLATE NOCASE LIMIT 300");
   const auditRows=await db.execute({sql:"SELECT action,actor_role,reason,outcome,created_at,tournament_slug FROM hof_audit_events "+((actor.role==="owner"||actor.role==="hall_of_fame_admin")?"":"WHERE tournament_slug IN (SELECT tournament_slug FROM hof_staff_assignments WHERE staff_id=?) ")+"ORDER BY created_at DESC LIMIT 30",args:(actor.role==="owner"||actor.role==="hall_of_fame_admin")?[]:[actor.id]});
@@ -319,6 +319,22 @@ export async function POST(request:Request){
    await tx.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,roster_published,bracket_published,medals_published,artwork_data_url,tournament_kind,bracket_mode,created_at,updated_at) VALUES(?,?,?,'single_elimination','archived',2,?,NULL,'UTC',?,?,?,1,0,1,?,'hologram','single_elimination',?,?)",args:[eventSlug,title,boss,capacityMax,rules,notice,eventDate,artwork,now,now]});
    for(const entrant of entrants){await tx.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,'confirmed',1,?)",args:[eventSlug,entrant.participantId,now]});if(entrant.medal)await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?)",args:[eventSlug,entrant.medal,entrant.participantId,actor.id,now]});}
    await audit(tx,actor,action,eventSlug,{}, {status:"archived",historical:true,participants:entrants.length,medals:medals.size});await tx.commit();tx=null;return json({ok:true,participants:entrants.length,medals:medals.size,slug:eventSlug});
+  }
+  if(action==="edit_tournament"){
+   await requireCan(actor,"global_admin",null,null,db);
+   if(!slug)throw new HttpError(400,"Choose a tournament.");
+   const current=await db.execute({sql:"SELECT slug,title,boss,status,event_date,rules,public_notice,artwork_data_url FROM hof_tournaments WHERE slug=?",args:[slug]});
+   const row=current.rows[0];if(!row)throw new HttpError(404,"Tournament not found.");
+   if(!["archived","finalized"].includes(String(row.status)))throw new HttpError(409,"Only archived tournaments can be edited here.");
+   const title=text(body.title,"Title",120),boss=text(body.boss,"Hologram boss",80);
+   const eventDate=body.eventDate?text(body.eventDate,"Event date",40):null;
+   if(eventDate&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(eventDate))throw new HttpError(400,"Event date must be a valid date.");
+   const rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000);
+   let artwork=String(row.artwork_data_url||"");
+   if(body.artworkDataUrl!==undefined){artwork=String(body.artworkDataUrl||"");if(artwork.length>2100000||!/^data:image\\/(png|jpeg|webp);base64,/.test(artwork))throw new HttpError(400,"Artwork must be PNG, JPG, or WebP under 1.5 MB.");}
+   await db.execute({sql:"UPDATE hof_tournaments SET title=?,boss=?,event_date=?,rules=?,public_notice=?,artwork_data_url=?,updated_at=?,version=version+1 WHERE slug=?",args:[title,boss,eventDate,rules,notice,artwork,now,slug]});
+   await audit(db,actor,action,slug,{title:row.title,boss:row.boss,eventDate:row.event_date},{title,boss,eventDate,rules,publicNotice:notice,artworkChanged:body.artworkDataUrl!==undefined});
+   return json({ok:true});
   }
   if(action==="create_tournament"){
    await requireCan(actor,"global_admin",null,null,db);
