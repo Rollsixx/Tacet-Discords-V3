@@ -10,6 +10,7 @@ type Tab=typeof tabs[number];
 function href(params:Record<string,string|null>){const u=new URL(location.href);for(const [k,v] of Object.entries(params))v?u.searchParams.set(k,v):u.searchParams.delete(k);return u.pathname+u.search+u.hash}
 function Medal({kind}:{kind:string}){return <span className={"hof-medal "+kind}>{kind==="gold"?"🥇":kind==="silver"?"🥈":"🥉"}</span>}
 export default function HallOfFamePage(){
+ const dialogRef=useRef<HTMLElement|null>(null);
  const [tab,setTab]=useState<Tab>("overview"),[data,setData]=useState<any>(null),[busy,setBusy]=useState(true),[error,setError]=useState(""),[query,setQuery]=useState(""),[page,setPage]=useState(1),[sort,setSort]=useState("medals"),[overlay,setOverlay]=useState<{type:string;key:string}|null>(null),[detail,setDetail]=useState<any>(null);
  const load=useCallback(async()=>{setBusy(true);setError("");try{const res=await fetch("/api/hall-of-fame?section="+tab+"&q="+encodeURIComponent(query)+"&page="+page+"&sort="+sort,{cache:"no-store"});if(!res.ok)throw new Error("Could not load Hall of Fame data.");setData(await res.json());}catch(e){setError(e instanceof Error?e.message:"Could not load data.");}finally{setBusy(false)}},[tab,query,page,sort]);
  useEffect(()=>{const sync=()=>{const p=new URLSearchParams(location.search);setTab(tabs.includes(p.get("tab") as Tab)?p.get("tab") as Tab:"overview");const type=p.get("view"),key=p.get("id")||p.get("slug");setOverlay(type&&key?{type,key}:null)};sync();addEventListener("popstate",sync);return()=>removeEventListener("popstate",sync)},[]);
