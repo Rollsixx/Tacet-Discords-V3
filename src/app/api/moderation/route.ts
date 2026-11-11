@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     if(actor.title==="consultant"){
       if(requestedView==="summary")return json({builds:[],overview:await adminOverview(),activity:[],hasMore:false,page:1});
       if(requestedView==="players")return json({...await listAdminPlayers({page:Number(params.get("page"))||1,search:params.get("search")||"",character:params.get("character")||""}),overview:await adminOverview()});
-      if(requestedView==="player"){const uid=params.get("uid")||"";if(!/^\\d{8,12}$/.test(uid))throw new HttpError(400,"Valid player UID required.");return json(await adminPlayerBuilds(uid,Number(params.get("page"))||1));}
+      if(requestedView==="player"){const uid=params.get("uid")||"";if(!/^\d{8,12}$/.test(uid))throw new HttpError(400,"Valid player UID required.");return json(await adminPlayerBuilds(uid,Number(params.get("page"))||1));}
       throw new HttpError(403,"Consultant access is read-only and limited to overview and player builds.");
     }
     if(actor.title==="bloom_bearer"&&["catalog","consistency","audit","rank-changes"].includes(requestedView))throw new HttpError(403,"Bloom Bearer access is limited to dashboard, submissions, and player builds.");
