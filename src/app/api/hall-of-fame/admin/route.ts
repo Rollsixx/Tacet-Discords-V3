@@ -236,15 +236,17 @@ export async function POST(request:Request){
    const identities=new Set<string>(),medals=new Set<string>();
    for(const entrant of entrants){const key=entrant.name.toLocaleLowerCase()+"|"+entrant.resonator.toLowerCase();if(identities.has(key))throw new HttpError(400,"Duplicate participant name and Resonator in the archive list: "+entrant.name+".");identities.add(key);if(entrant.medal){if(medals.has(entrant.medal))throw new HttpError(400,"Only one participant per medal can be recorded.");medals.add(entrant.medal);}}
    const capacityMax=Math.max(2,entrants.length);
-   await db.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,roster_published,bracket_published,medals_published,created_at,updated_at) VALUES(?,?,?,'single_elimination','archived',2,?,NULL,?,?,?,?,1,0,1,?,?)",args:[eventSlug,title,boss,capacityMax,timezone,rules,notice,eventDate,now,now]});
+   tx=await db.transaction("write");
+   await tx.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,roster_published,bracket_published,medals_published,created_at,updated_at) VALUES(?,?,?,'single_elimination','archived',2,?,NULL,?,?,?,?,1,0,1,?,?)",args:[eventSlug,title,boss,capacityMax,timezone,rules,notice,eventDate,now,now]});
    for(const entrant of entrants){
     const participantId=randomUUID(),icon=entrant.resonator;
-    await db.execute({sql:"INSERT INTO hof_participants(id,display_name,resonator_icon,created_at,updated_at) VALUES(?,?,?,?,?)",args:[participantId,entrant.name,icon,now,now]});
-    await db.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,'confirmed',1,?)",args:[eventSlug,participantId,now]});
-    if(entrant.medal)await db.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?)",args:[eventSlug,entrant.medal,participantId,actor.id,now]});
+    await tx.execute({sql:"INSERT INTO hof_participants(id,display_name,resonator_icon,created_at,updated_at) VALUES(?,?,?,?,?)",args:[participantId,entrant.name,icon,now,now]});
+    await tx.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,'confirmed',1,?)",args:[eventSlug,participantId,now]});
+    if(entrant.medal)await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?)",args:[eventSlug,entrant.medal,participantId,actor.id,now]});
    }
    const source=String(body.source||"Discord archive").trim().slice(0,500);
-   await audit(db,actor,action,eventSlug,{}, {status:"archived",historical:true,participants:entrants.length,medals:medals.size},source);
+   await audit(tx,actor,action,eventSlug,{}, {status:"archived",historical:true,participants:entrants.length,medals:medals.size},source);
+   await tx.commit();tx=null;
    return json({ok:true,participants:entrants.length,medals:medals.size});
   }
   if(action==="create_tournament"){
