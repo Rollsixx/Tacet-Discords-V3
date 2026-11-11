@@ -210,4 +210,9 @@ export const migrations = [
     "UPDATE hof_staff SET title='bloom_bearer' WHERE role='organizer'",
     "UPDATE hof_staff SET title='consultant' WHERE role='referee'",
   ]},
+  {version:21,statements:[
+    "ALTER TABLE hof_tournaments ADD COLUMN artwork_data_url TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE hof_tournaments ADD COLUMN tournament_kind TEXT NOT NULL DEFAULT 'hologram'",
+    "ALTER TABLE hof_tournaments ADD COLUMN bracket_mode TEXT NOT NULL DEFAULT 'single_elimination'"
+  ]},
 ];
