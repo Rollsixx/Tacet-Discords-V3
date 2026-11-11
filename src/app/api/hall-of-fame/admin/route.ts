@@ -218,6 +218,35 @@ export async function POST(request:Request){
    if(event.rows[0].status!=="finalized"||!event.rows[0].medals_published)throw new HttpError(409,"Publish final medals before archiving.");
    await db.execute({sql:"UPDATE hof_tournaments SET status='archived',updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});await audit(db,actor,action,slug,event.rows[0],{status:"archived"},text(body.reason,"Archive reason",500));return json({ok:true});
   }
+  if(action==="import_historical_tournament"){
+   await requireCan(actor,"global_admin",null,null,db);
+   const eventSlug=text(body.slug,"Slug",80).toLowerCase();if(!slugPattern.test(eventSlug))throw new HttpError(400,"Use a lowercase URL slug.");
+   const title=text(body.title,"Title",120),boss=text(body.boss,"Hologram boss",80);
+   const timezone=text(body.timezone||"UTC","Timezone",80),rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000);
+   const eventDate=body.eventDate?text(body.eventDate,"Event date",50):null;
+   if(eventDate&&Number.isNaN(Date.parse(eventDate)))throw new HttpError(400,"Enter a valid historical event date.");
+   if(!Array.isArray(body.participants)||body.participants.length<1||body.participants.length>256)throw new HttpError(400,"Add between 1 and 256 archived participants.");
+   const entrants=body.participants.map((entry:any,index:number)=>{
+    const name=text(entry?.name,"Participant "+(index+1),40),resonator=text(entry?.resonator,"Resonator",64);
+    if(!featuredResonators.some(r=>r.name.toLowerCase()===resonator.toLowerCase()))throw new HttpError(400,"Choose a supported Resonator for "+name+".");
+    const medal=entry?.medal?String(entry.medal).toLowerCase():"";
+    if(medal&&!["gold","silver","bronze"].includes(medal))throw new HttpError(400,"Medal must be Gold, Silver, Bronze, or blank.");
+    return {name,resonator:featuredResonators.find(r=>r.name.toLowerCase()===resonator.toLowerCase())!.name,medal};
+   });
+   const identities=new Set<string>(),medals=new Set<string>();
+   for(const entrant of entrants){const key=entrant.name.toLocaleLowerCase()+"|"+entrant.resonator.toLowerCase();if(identities.has(key))throw new HttpError(400,"Duplicate participant name and Resonator in the archive list: "+entrant.name+".");identities.add(key);if(entrant.medal){if(medals.has(entrant.medal))throw new HttpError(400,"Only one participant per medal can be recorded.");medals.add(entrant.medal);}}
+   const capacityMax=Math.max(2,entrants.length);
+   await db.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,roster_published,bracket_published,medals_published,created_at,updated_at) VALUES(?,?,?,'single_elimination','archived',2,?,NULL,?,?,?,?,1,0,1,?,?)",args:[eventSlug,title,boss,capacityMax,timezone,rules,notice,eventDate,now,now]});
+   for(const entrant of entrants){
+    const participantId=randomUUID(),icon=entrant.resonator;
+    await db.execute({sql:"INSERT INTO hof_participants(id,display_name,resonator_icon,created_at,updated_at) VALUES(?,?,?,?,?)",args:[participantId,entrant.name,icon,now,now]});
+    await db.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,'confirmed',1,?)",args:[eventSlug,participantId,now]});
+    if(entrant.medal)await db.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?)",args:[eventSlug,entrant.medal,participantId,actor.id,now]});
+   }
+   const source=String(body.source||"Discord archive").trim().slice(0,500);
+   await audit(db,actor,action,eventSlug,{}, {status:"archived",historical:true,participants:entrants.length,medals:medals.size},source);
+   return json({ok:true,participants:entrants.length,medals:medals.size});
+  }
   if(action==="create_tournament"){
    await requireCan(actor,"global_admin",null,null,db);
    const eventSlug=text(body.slug,"Slug",80).toLowerCase();if(!slugPattern.test(eventSlug))throw new HttpError(400,"Use a lowercase URL slug.");
