@@ -110,7 +110,13 @@ export async function GET(request:Request){
     matches=result.rows.filter((row:any)=>allowed.has(String(row.id)));
    }
   }
-  const staff=actor.role==="owner"? (await db.execute("SELECT id,label,role,created_at,revoked_at FROM hof_staff ORDER BY created_at DESC")).rows:[];
+  let staff:any[]=[];
+  if(actor.role==="owner"){
+   const rows=await db.execute({sql:"SELECT s.id,s.label,s.role,s.created_at,s.revoked_at,a.tournament_slug,a.match_id,t.title event_title,m.round_label,m.match_order FROM hof_staff s LEFT JOIN hof_staff_assignments a ON a.staff_id=s.id LEFT JOIN hof_tournaments t ON t.slug=a.tournament_slug LEFT JOIN hof_matches m ON m.id=a.match_id ORDER BY s.created_at DESC,t.title,m.round_number,m.match_order",args:[]});
+   const grouped=new Map<string,any>();
+   for(const row of rows.rows){const id=String(row.id);if(!grouped.has(id))grouped.set(id,{id,label:String(row.label),role:String(row.role),created_at:String(row.created_at),revoked_at:row.revoked_at?String(row.revoked_at):null,assignments:[]});if(row.tournament_slug)grouped.get(id).assignments.push({tournament_slug:String(row.tournament_slug),match_id:row.match_id?String(row.match_id):null,event_title:row.event_title?String(row.event_title):String(row.tournament_slug),round_label:row.round_label?String(row.round_label):null,match_order:row.match_order==null?null:Number(row.match_order)});}
+   staff=[...grouped.values()];
+  }
   return json({actor:{id:actor.id,role:actor.role,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,staff});
  }catch(e){return failure(e);}
 }
@@ -127,6 +133,15 @@ export async function POST(request:Request){
    const id=randomUUID(),plain=randomBytes(32).toString("base64url"),hash=tokenDigest(plain).toString("hex");
    await db.execute({sql:"INSERT INTO hof_staff(id,label,role,token_hash,created_by,created_at) VALUES(?,?,?,?,?,?)",args:[id,label,role,hash,actor.id,now]});
    await audit(db,actor,"create_staff",null,{}, {id,label,role});return json({ok:true,id,token:plain,oneTime:true});
+  }
+  if(action==="remove_staff_assignment"){
+   if(actor.role!=="owner")throw new HttpError(403,"Only the Owner can change staff assignments.");
+   const staffId=text(body.staffId,"Staff",80),eventSlug=text(body.slug,"Tournament",80),targetMatch=body.matchId?text(body.matchId,"Match",80):null;
+   const result=targetMatch
+    ?await db.execute({sql:"DELETE FROM hof_staff_assignments WHERE staff_id=? AND tournament_slug=? AND match_id=?",args:[staffId,eventSlug,targetMatch]})
+    :await db.execute({sql:"DELETE FROM hof_staff_assignments WHERE staff_id=? AND tournament_slug=? AND match_id IS NULL",args:[staffId,eventSlug]});
+   if(!result.rowsAffected)throw new HttpError(404,"Staff assignment not found.");
+   await audit(db,actor,action,eventSlug,{staffId,matchId:targetMatch},{removed:true});return json({ok:true});
   }
   if(action==="revoke_staff"){
    if(actor.role!=="owner")throw new HttpError(403,"Only the Owner can revoke staff credentials.");
