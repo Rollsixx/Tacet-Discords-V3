@@ -98,9 +98,17 @@ export async function GET(request:Request){
   const people=await db.execute("SELECT id,display_name,resonator_icon FROM hof_participants ORDER BY display_name COLLATE NOCASE LIMIT 300");
   const auditRows=await db.execute({sql:"SELECT action,actor_role,reason,outcome,created_at,tournament_slug FROM hof_audit_events "+((actor.role==="owner"||actor.role==="hall_of_fame_admin")?"":"WHERE tournament_slug IN (SELECT tournament_slug FROM hof_staff_assignments WHERE staff_id=?) ")+"ORDER BY created_at DESC LIMIT 30",args:(actor.role==="owner"||actor.role==="hall_of_fame_admin")?[]:[actor.id]});
   let matches:any[]=[];
-  if(slug&&await can(actor,"manage_event",slug,null,db)){
-   const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
-   matches=result.rows;
+  if(slug){
+   const mayManage=await can(actor,"manage_event",slug,null,db);
+   if(mayManage){
+    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
+    matches=result.rows;
+   }else if(actor.role==="referee"){
+    const assigned=await db.execute({sql:"SELECT match_id FROM hof_staff_assignments WHERE staff_id=? AND tournament_slug=? AND match_id IS NOT NULL",args:[actor.id,slug]});
+    const allowed=new Set(assigned.rows.map((row:any)=>String(row.match_id)));
+    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
+    matches=result.rows.filter((row:any)=>allowed.has(String(row.id)));
+   }
   }
   const staff=actor.role==="owner"? (await db.execute("SELECT id,label,role,created_at,revoked_at FROM hof_staff ORDER BY created_at DESC")).rows:[];
   return json({actor:{id:actor.id,role:actor.role,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,staff});
