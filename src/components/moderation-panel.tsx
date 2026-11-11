@@ -25,6 +25,8 @@ const RotationEditor=dynamic(()=>import("./rotation-editor").then(module=>module
 const HomeFeaturedSettings=dynamic(()=>import("./home-featured-settings").then(module=>module.HomeFeaturedSettings),{loading:()=> <AdminModuleLoading label="Home settings"/>});
 const BuildCard=dynamic(()=>import("./build-card").then(module=>module.BuildCard),{loading:()=> <AdminModuleLoading label="build card"/>});
 const ManualProfileDetails=dynamic(()=>import("./manual-profile-details").then(module=>module.ManualProfileDetails),{loading:()=> <AdminModuleLoading label="manual profile editor"/>});
+const HallOfFameAdmin=dynamic(()=>import("./hall-of-fame-admin"));
+const HallOfFameStaff=dynamic(()=>import("./hall-of-fame-staff"));
 type Audit = Awaited<ReturnType<typeof listAdminAudit>>;
 type RankChanges={changes:{id:number;character:string;uid:string;ign:string;type:"moved"|"entered"|"left";oldRank:number|null;newRank:number|null;oldScore:number|null;newScore:number|null;buildId:string;changedAt:string}[]};
 type Consistency={checkedAt:string;ok:boolean;counts:{staleScores:number;duplicateBuilds:number;medalMismatches:number};issues:{type:string;id?:string;uid:string;character?:string;reason?:string;count?:number;profile?:unknown;standings?:unknown}[]};
@@ -32,8 +34,9 @@ type Results = Awaited<ReturnType<typeof listBuilds>> & { overview: Awaited<Retu
 type Build = Results["builds"][number];
 type Players=Awaited<ReturnType<typeof listAdminPlayers>>;
 type PlayerDetail=Awaited<ReturnType<typeof adminPlayerBuilds>>;
-type View = "dashboard" | "home" | "submissions" | "players" | "audit" | "rankChanges" | "system" | "rotations";
-const names: Record<View,string> = {dashboard:"Command overview",home:"Home page",submissions:"Submission management",players:"Players & their builds",audit:"Audit history",rankChanges:"Rank changes",system:"System status",rotations:"Rotation management"};
+type View = "dashboard" | "home" | "submissions" | "players" | "audit" | "rankChanges" | "system" | "rotations" | "hallOfFame" | "staffTokens";
+type WorkspaceKind="moderator"|"hall_of_fame";
+const names: Record<View,string> = {dashboard:"Command overview",home:"Home page",submissions:"Submission management",players:"Players & their builds",audit:"Audit history",rankChanges:"Rank changes",system:"System status",rotations:"Rotation management",hallOfFame:"Manage Hall of Fame",staffTokens:"Staff tokens"};
 function date(value:string){ return new Date(value).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"}); }
 function AdminIcon({name}:{name:string}){const paths:Record<string,string>={dashboard:"M3 3h8v8H3z M13 3h8v5h-8z M13 10h8v11h-8z M3 13h8v8H3z",home:"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",submissions:"M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5",players:"M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 8v6 M17 11h6",rotations:"M20 7v5h-5 M4 17v-5h5 M5.6 9A7 7 0 0 1 18 6l2 6 M4 12l2 6a7 7 0 0 0 12.4-3",audit:"M12 8v5l3 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",rankChanges:"M4 16l5-5 4 3 7-8 M15 6h5v5",system:"M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M19 13.5l2 1.5-2 3-2.5-1-2 1v2h-4v-2l-2-1-2.5 1-2-3 2-1.5v-3L4 9l2-3 2.5 1 2-1V4h4v2l2 1 2.5-1 2 3-2 1.5z"};return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]||paths.dashboard}/></svg>;}
 function Activity({events}:{events:Audit["events"]}){const labels:Record<string,string>={approved:"Build approved",rejected:"Submission rejected",verified:"UID verified",unverified:"UID verification removed",deleted:"Build deleted",profile_details_updated:"Profile details corrected",substat_corrected:"Echo stat corrected",identity_reviewed:"Echo identities confirmed"};return events.length?<div className="bs-activity">{events.map(event=><div key={event.id}><span className="bs-activity-dot"/><div><strong>{labels[event.action]||event.action.replaceAll('_',' ')}</strong><p>{event.reviewer} · {date(event.createdAt)}</p><div className="bs-audit-links"><Link href={`/submission-status?id=${encodeURIComponent(event.submissionId)}`}>Submission status</Link>{event.uid&&<Link href={`/profiles?uid=${encodeURIComponent(event.uid)}`}>{event.character||'Player'} profile</Link>}</div>{event.note&&<p>{event.note}</p>}</div></div>)}</div>:<p className="bs-empty">No moderation activity yet.</p>;}
@@ -49,6 +52,10 @@ export function ModerationPanel() {
 
  const [reviewer,setReviewer]=useState("Moderator");
  const [authenticated,setAuthenticated]=useState(false);
+ const [workspaceKind,setWorkspaceKind]=useState<WorkspaceKind>("moderator");
+ const [hofActor,setHofActor]=useState<{id:string;role:string;label:string}|null>(null);
+ const [hofRefresh,setHofRefresh]=useState(0);
+ const [staffRefresh,setStaffRefresh]=useState(0);
  const [view,setView]=useState<View>("dashboard");
  const [rotationPending,setRotationPending]=useState(false);
  const [rotationRefresh,setRotationRefresh]=useState(0);
@@ -93,7 +100,7 @@ export function ModerationPanel() {
   if(dialog.current&&!dialog.current.open)dialog.current.showModal();
  }
  function changeReviewer(value:string){setReviewer(value);if(value.trim().length>=2&&error.startsWith("Enter a reviewer name"))setError("");}
- function lock(){setToken("");setAuthenticated(false);setResult(null);setPlayers(null);setPlayerDetail(null);setAudit(null);setSelected(null);setConfirmation(null);setNote("");setVerified(false);setError("");setMessage("");setView("dashboard");setSearch("");setCharacter("");setQueue("pending");setPage(1);setHealth(null);}
+ function lock(){setToken("");setAuthenticated(false);setWorkspaceKind("moderator");setHofActor(null);setResult(null);setPlayers(null);setPlayerDetail(null);setAudit(null);setSelected(null);setConfirmation(null);setNote("");setVerified(false);setError("");setMessage("");setView("dashboard");setSearch("");setCharacter("");setQueue("pending");setPage(1);setHealth(null);}
  async function request(path:string,options:RequestInit={}){
   const response=await fetch(path,{...options,cache:"no-store",headers:{Authorization:"Bearer "+token.trim(),...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
   const data=await response.json();
@@ -109,6 +116,25 @@ export function ModerationPanel() {
    select(data.builds[0]||null);
    return data;
   }catch(cause){setError(cause instanceof Error?cause.message:"Could not load submissions. Try Refresh.");}
+  finally{setBusy(false);}
+ }
+ async function unlock(){
+  setBusy(true);setError("");setMessage("");
+  const authToken=token.trim();
+  try{
+   const moderation=await fetch('/api/moderation?'+new URLSearchParams({page:'1',status:'pending',search:'',character:''}),{headers:{Authorization:"Bearer "+authToken},cache:"no-store"});
+   const moderationData=await moderation.json();
+   if(moderation.ok){
+    setResult(moderationData);setPage(1);setQueue("pending");setAuthenticated(true);setWorkspaceKind("moderator");setView("dashboard");select(moderationData.builds?.[0]||null);
+    const hof=await fetch('/api/hall-of-fame/admin',{headers:{Authorization:"Bearer "+authToken},cache:"no-store"}).catch(()=>null);
+    if(hof?.ok){const d=await hof.json();setHofActor(d.actor||null);}
+    return;
+   }
+   const hof=await fetch('/api/hall-of-fame/admin',{headers:{Authorization:"Bearer "+authToken},cache:"no-store"});
+   const hofData=await hof.json();
+   if(hof.ok){setHofActor(hofData.actor||null);setWorkspaceKind("hall_of_fame");setAuthenticated(true);setView("hallOfFame");setMessage("Hall of Fame access verified. Your role controls which actions are available.");return;}
+   throw new Error(moderationData.error||hofData.error||"This token does not have access to Black Shores.");
+  }catch(cause){setError(cause instanceof Error?cause.message:"Could not verify your access token.");}
   finally{setBusy(false);}
  }
  async function fetchPlayer(uid:string,target=1,preferredId?:string){
@@ -134,8 +160,7 @@ export function ModerationPanel() {
   if(next==='audit'){setBusy(true);try{setAudit(await request('/api/moderation?view=audit'));}catch(cause){setError(cause instanceof Error?cause.message:'Could not load history.');}finally{setBusy(false);}}
   else if(next==='rankChanges'){await loadRankChanges();}
   else if(next==='system'){setBusy(true);try{const [service,catalog,report]=await Promise.all([request('/api/health'),request('/api/moderation?view=catalog'),request('/api/moderation?view=consistency')]);setHealth({...service,catalog});setConsistency(report);}catch(cause){setError(cause instanceof Error?cause.message:'Could not check system health.');}finally{setBusy(false);}}
-  else if(next==='home'){return;}
-  else if(next==='rotations'){return;}
+  else if(next==='home'||next==='rotations'||next==='hallOfFame'||next==='staffTokens'){return;}
   else if(next==='players')await loadPlayers(1,'','');
   else await load(1,'pending','', '');
  }
@@ -166,10 +191,10 @@ export function ModerationPanel() {
  const active=[...(result?.builds||[])].sort((a,b)=>queueSort==='ready'?Number(queueReadiness(b).state==='ready')-Number(queueReadiness(a).state==='ready'):a.createdAt.localeCompare(b.createdAt));
  return <section className={`moderation-panel bs-console ${authenticated?'bs-unlocked':'bs-locked'}`} aria-label="Moderator workspace">
  {!authenticated?<div className="bs-login"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMINISTRATION</small></div></Link><span className="eyebrow">Restricted access</span><h1>Open the review desk.</h1><p>Manage submissions and player verification with your private moderator token.</p>
-  <form onSubmit={e=>{e.preventDefault();void load(1,'pending','','');}}>
-   <label className="field"><span>Moderator token</span><input type="password" autoComplete="off" required minLength={32} value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your moderator token" /></label>
-   <label className="field"><span>Reviewer name (audit trail)</span><input required minLength={2} maxLength={64} value={reviewer} onChange={e=>changeReviewer(e.target.value)} /><small>This label is recorded with every decision.</small></label>
-   <button className="action" disabled={busy}>{busy?'Checking access…':'Unlock review desk'}</button>
+  <form onSubmit={e=>{e.preventDefault();void unlock();}}>
+   <label className="field"><span>Black Shores access token</span><input type="password" autoComplete="off" required minLength={32} value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your Owner, moderator, or assigned Hall of Fame token" /><small>Moderator/Owner tokens open the full admin. Hall of Fame tokens open only your assigned tools.</small></label>
+   <label className="field"><span>Reviewer name (moderator actions only)</span><input required minLength={2} maxLength={64} value={reviewer} onChange={e=>changeReviewer(e.target.value)} /><small>Used for the audit trail when reviewing builds.</small></label>
+   <button className="action" disabled={busy}>{busy?'Checking access…':'Continue to workspace'}</button>
   </form><small>Token access only. Your token stays in memory and is cleared on reload or when you lock the desk.</small><Link className="text-link" href="/">← Return to website</Link>
  </div>:<div className="bs-shell">
   <aside className="bs-sidebar"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMIN</small></div></Link><nav aria-label="Administration">
