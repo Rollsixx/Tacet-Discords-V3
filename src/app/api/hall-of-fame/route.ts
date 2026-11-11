@@ -72,7 +72,8 @@ export async function GET(request:Request){
   }
   const all=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
   const events=all.rows.map(publicTournament);
-  const current=events[0]?await eventDetail(events[0],db):null;
+  const currentCandidate=events.find((event:any)=>["announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","suspended"].includes(event.status));
+  const current=currentCandidate?await eventDetail(currentCandidate,db):null;
   const medalistRows=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 ORDER BY COALESCE(event_date,updated_at) DESC,slug DESC LIMIT 12`,args:[]});
   const medalists=await Promise.all(medalistRows.rows.map(async(row:any)=>{const event=publicTournament(row);return {...event,medals:await officialMedals(event.slug,db)}}));
   const list=section==="hologram"?await participants((url.searchParams.get("q")||"").slice(0,50),pageNumber(url.searchParams.get("page")),url.searchParams.get("sort")||"medals",db):null;
