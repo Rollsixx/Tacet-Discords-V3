@@ -94,7 +94,6 @@ export function ModerationPanel() {
  const dialog=useRef<HTMLDialogElement>(null);
  const reviewerInput=useRef<HTMLInputElement>(null);
  useEffect(()=>{const current=dialog.current;if(!current)return;if(confirmation){if(!current.open)current.showModal();}else if(current.open)current.close();},[confirmation]);
- function changeReviewer(value:string){setReviewer(value);}
  function confirmReview(kind:"rejected"|"deleted"|"verified"){
   if(kind!=="verified"&&!selected){setError("Select a build before deleting or rejecting it.");return;}
   setError("");setConfirmation(kind);
