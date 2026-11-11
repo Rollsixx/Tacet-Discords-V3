@@ -121,7 +121,8 @@ const slug=url.searchParams.get("slug");
    for(const row of rows.rows){const id=String(row.id);if(!grouped.has(id))grouped.set(id,{id,label:String(row.label),role:String(row.role),title:String(row.title),created_at:String(row.created_at),revoked_at:row.revoked_at?String(row.revoked_at):null,assignments:[]});if(row.tournament_slug)grouped.get(id).assignments.push({tournament_slug:String(row.tournament_slug),match_id:row.match_id?String(row.match_id):null,event_title:row.event_title?String(row.event_title):String(row.tournament_slug),round_label:row.round_label?String(row.round_label):null,match_order:row.match_order==null?null:Number(row.match_order)});}
    staff=[...grouped.values()];
   }
-  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,staff});
+  let reserves:any[]=[];if(slug){const r=await db.execute({sql:"SELECT p.id,p.display_name,p.resonator_icon FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? AND r.state='reserve' ORDER BY r.reserve_order,p.display_name COLLATE NOCASE",args:[slug]});reserves=r.rows;}
+  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,staff});
  }catch(e){return failure(e);}
 }
 export async function POST(request:Request){
@@ -304,6 +305,15 @@ export async function POST(request:Request){
    await db.execute({sql:"UPDATE hof_roster SET state='confirmed',updated_at=? WHERE tournament_slug=? AND participant_id=?",args:[now,eventSlug,participantId]});
    await audit(db,actor,"substitute_reserve",eventSlug,{matchId,slot,participantId:prior},{matchId,slot,participantId,priorParticipantId:prior});
    return json({ok:true});
+  }
+  if(action==="edit_participant"){
+   await requireCan(actor,"global_admin",null,null,db);
+   const id=text(body.id,"Participant ID",80),name=text(body.name,"Participant display name",40),resonator=text(body.resonator,"Resonator",64);
+   if(!featuredResonators.some(r=>r.name.toLowerCase()===resonator.toLowerCase()))throw new HttpError(400,"Choose a supported Resonator.");
+   const icon=featuredResonators.find(r=>r.name.toLowerCase()===resonator.toLowerCase())!.name;
+   const old=await db.execute({sql:"SELECT display_name,resonator_icon FROM hof_participants WHERE id=?",args:[id]});if(!old.rows.length)throw new HttpError(404,"Participant not found.");
+   await db.execute({sql:"UPDATE hof_participants SET display_name=?,resonator_icon=?,updated_at=? WHERE id=?",args:[name,icon,now,id]});
+   await audit(db,actor,action,null,old.rows[0],{id,name,resonatorIcon:icon});return json({ok:true});
   }
   if(action==="add_roster"){
    if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"manage_event",slug,null,db);
