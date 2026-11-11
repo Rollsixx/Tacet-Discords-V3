@@ -55,7 +55,7 @@ async function prepareSingleElimination(db:any,slug:string,actor:Actor,now:strin
   if(Number(existing.rows[0]?.total||0)>0)throw new HttpError(409,"A bracket already exists. Use an audited correction workflow instead of reshuffling.");
   const roster=await tx.execute({sql:"SELECT p.id FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? AND r.state='confirmed' AND r.published=1 ORDER BY r.seed_position,p.display_name COLLATE NOCASE,p.id",args:[slug]});
   const entrants=shuffled(roster.rows.map((row:any)=>String(row.id)));
-  if(entrants.length<3)throw new HttpError(409,"At least three confirmed entrants are needed for a medal bracket.");
+  if(entrants.length<4)throw new HttpError(409,"At least four confirmed entrants are needed for a third-place medal bracket.");
   if(entrants.length<Number(event.capacity_min))throw new HttpError(409,"The confirmed roster is below this event's minimum capacity.");
   let size=1;while(size<entrants.length)size*=2;
   const byeCount=size-entrants.length;
@@ -358,7 +358,7 @@ export async function POST(request:Request){
    if(reserve.rows[0]?.state!=="reserve")throw new HttpError(409,"Choose someone on this tournament's reserve list.");
    await db.execute({sql:"UPDATE hof_matches SET "+slot+"=?,version=version+1,updated_at=? WHERE id=?",args:[participantId,now,matchId]});
    await db.execute({sql:"UPDATE hof_roster SET state='withdrawn',reserve_reason='Replaced from bracket slot',updated_at=? WHERE tournament_slug=? AND participant_id=?",args:[now,eventSlug,prior]});
-   await db.execute({sql:"UPDATE hof_roster SET state='confirmed',updated_at=? WHERE tournament_slug=? AND participant_id=?",args:[now,eventSlug,participantId]});
+   await db.execute({sql:"UPDATE hof_roster SET state='confirmed',published=1,updated_at=? WHERE tournament_slug=? AND participant_id=?",args:[now,eventSlug,participantId]});
    await audit(db,actor,"substitute_reserve",eventSlug,{matchId,slot,participantId:prior},{matchId,slot,participantId,priorParticipantId:prior});
    return json({ok:true});
   }
@@ -379,7 +379,7 @@ export async function POST(request:Request){
    const participant=await db.execute({sql:"SELECT id FROM hof_participants WHERE id=?",args:[participantId]});if(!participant.rows.length)throw new HttpError(404,"Participant not found.");
    await db.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,?,0,?) ON CONFLICT(tournament_slug,participant_id) DO UPDATE SET state=excluded.state,published=0,updated_at=excluded.updated_at",args:[slug,participantId,body.reserve?"reserve":"confirmed",now]});
    await db.execute({sql:"INSERT INTO hof_registrations(id,tournament_slug,participant_id,reaction_message_ref,reaction_at,verified_by,verified_at,state) VALUES(?,?,?,?,?,?,?,'confirmed') ON CONFLICT(tournament_slug,participant_id) DO UPDATE SET state='confirmed',verified_by=excluded.verified_by,verified_at=excluded.verified_at",args:[randomUUID(),slug,participantId,String(body.reactionRef||"manual-admin").slice(0,120),now,actor.id,now]});
-   await audit(db,actor,action,slug,{}, {participantId,state:"confirmed"});return json({ok:true});
+   await audit(db,actor,action,slug,{}, {participantId,state:body.reserve?"reserve":"confirmed"});return json({ok:true});
   }
   if(action==="publish_roster"){
    if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"manage_event",slug,null,db);
