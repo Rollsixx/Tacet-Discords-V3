@@ -159,37 +159,34 @@ export async function POST(request:Request){
    await audit(db,actor,"record_match_result",eventSlug,m.rows[0],{winnerId:winner,outcome,state:"pending_publication"});return json({ok:true});
   }
   if(action==="publish_match_result"){
-   if(!matchId)throw new HttpError(400,"Match is required.");const m=await db.execute({sql:"SELECT * FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
-   const eventSlug=String(m.rows[0].tournament_slug);await requireCan(actor,"publish_result",eventSlug,matchId,db);
-   if(m.rows[0].state!=="pending_publication"||!m.rows[0].winner_id)throw new HttpError(409,"Only a recorded result can be published.");
-   const dispute=await db.execute({sql:"SELECT 1 FROM hof_disputes WHERE match_id=? AND state='open' LIMIT 1",args:[matchId]});if(dispute.rows.length)throw new HttpError(409,"Resolve the open dispute before publication.");
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   const current=await db.execute({sql:"SELECT * FROM hof_matches WHERE id=?",args:[matchId]});
+   if(!current.rows.length)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(current.rows[0].tournament_slug);await requireCan(actor,"publish_result",eventSlug,matchId,db);
    tx=await db.transaction("write");
-   const deps=await tx.execute({sql:"SELECT d.match_id,d.dependency_type,target.participant_a,target.participant_b,source.match_order source_order,target.match_order target_order FROM hof_match_dependencies d JOIN hof_matches target ON target.id=d.match_id JOIN hof_matches source ON source.id=d.depends_on_match_id WHERE d.depends_on_match_id=?",args:[matchId]});
+   const locked=await tx.execute({sql:"SELECT * FROM hof_matches WHERE id=?",args:[matchId]});
+   const match=locked.rows[0];
+   if(!match||match.state!=="pending_publication"||!match.winner_id)throw new HttpError(409,"Only a recorded result can be published.");
+   const dispute=await tx.execute({sql:"SELECT 1 FROM hof_disputes WHERE match_id=? AND state='open' LIMIT 1",args:[matchId]});
+   if(dispute.rows.length)throw new HttpError(409,"Resolve the open dispute before publication.");
+   const deps=await tx.execute({sql:"SELECT d.match_id,d.dependency_type,target.participant_a,target.participant_b,source.match_order source_order FROM hof_match_dependencies d JOIN hof_matches target ON target.id=d.match_id JOIN hof_matches source ON source.id=d.depends_on_match_id WHERE d.depends_on_match_id=? ORDER BY d.match_id",args:[matchId]});
    for(const dep of deps.rows){
-    const advancing=dep.dependency_type==="loser"?(m.rows[0].winner_id===m.rows[0].participant_a?m.rows[0].participant_b:m.rows[0].participant_a):m.rows[0].winner_id;
+    const advancing=dep.dependency_type==="loser"?(match.winner_id===match.participant_a?match.participant_b:match.participant_a):match.winner_id;
     if(!advancing)throw new HttpError(409,"The advancing participant is missing.");
-    const column=dep.participant_a?(!dep.participant_b?null:null):"participant_a";
-    let slot=column;
-    if(dep.participant_a&&dep.participant_b)throw new HttpError(409,"The next match already has both slots filled.");
-    if(dep.participant_a)slot="participant_b";
-    if(dep.participant_b)slot="participant_a";
-    if(!slot){slot=Number(dep.source_order)<Number(dep.target_order)?"participant_a":"participant_b";}
-    const state=(slot==="participant_a"?dep.participant_b:dep.participant_a)?"ready":"awaiting_competitors";
-    await tx.execute({sql:"UPDATE hof_matches SET "+slot+"=?,state=?,version=version+1,updated_at=? WHERE id=?",args:[advancing,state,now,dep.match_id]});
+    const slot=Number(dep.source_order)%2===1?"participant_a":"participant_b";
+    const occupied=dep[slot];
+    if(occupied&&occupied!==advancing)throw new HttpError(409,"The next match slot is already occupied by another participant.");
+    const other=slot==="participant_a"?dep.participant_b:dep.participant_a;
+    const nextState=other?"ready":"awaiting_competitors";
+    await tx.execute({sql:"UPDATE hof_matches SET "+slot+"=?,state=?,version=version+1,updated_at=? WHERE id=?",args:[advancing,nextState,now,dep.match_id]});
    }
-   await tx.execute({sql:"UPDATE hof_matches SET state='published',outcome_published=1,version=version+1,updated_at=? WHERE id=? AND version=?",args:[now,matchId,m.rows[0].version]});
-   const rosterCount=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_roster WHERE tournament_slug=? AND state='confirmed'",args:[eventSlug]});
-   if(Number(rosterCount.rows[0]?.total||0)===3){
-    const hasLoserTarget=await tx.execute({sql:"SELECT 1 FROM hof_match_dependencies WHERE depends_on_match_id=? AND dependency_type='loser' LIMIT 1",args:[matchId]});
-    if(!hasLoserTarget.rows.length){
-     const loser=m.rows[0].winner_id===m.rows[0].participant_a?m.rows[0].participant_b:m.rows[0].participant_a;
-     if(loser)await tx.execute({sql:"INSERT OR IGNORE INTO hof_medals(tournament_slug,medal,participant_id,published) VALUES(?,'bronze',?,0)",args:[eventSlug,loser]});
-    }
-   }
+   const published=await tx.execute({sql:"UPDATE hof_matches SET state='published',outcome_published=1,version=version+1,updated_at=? WHERE id=? AND version=? AND state='pending_publication'",args:[now,matchId,match.version]});
+   if(!published.rowsAffected)throw new HttpError(409,"Match changed during publication. Refresh and retry.");
    const incomplete=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=? AND state NOT IN ('published','no_result','cancelled')",args:[eventSlug]});
    const newStatus=Number(incomplete.rows[0]?.total||0)===0?"results_pending":"in_progress";
    await tx.execute({sql:"UPDATE hof_tournaments SET status=?,updated_at=?,version=version+1 WHERE slug=?",args:[newStatus,now,eventSlug]});
-   await audit(tx,actor,action,eventSlug,m.rows[0],{state:"published",outcomePublished:true});await tx.commit();tx=null;return json({ok:true});
+   await audit(tx,actor,action,eventSlug,current.rows[0],{state:"published",outcomePublished:true});
+   await tx.commit();tx=null;return json({ok:true});
   }
   if(action==="open_dispute"){
    if(!matchId)throw new HttpError(400,"Match is required.");const m=await db.execute({sql:"SELECT tournament_slug,state FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
