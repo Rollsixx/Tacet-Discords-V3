@@ -111,8 +111,8 @@ export async function GET(request:Request){
    }
   }
   let staff:any[]=[];
-  if(actor.role==="owner"){
-   const rows=await db.execute({sql:"SELECT s.id,s.label,s.role,s.created_at,s.revoked_at,a.tournament_slug,a.match_id,t.title event_title,m.round_label,m.match_order FROM hof_staff s LEFT JOIN hof_staff_assignments a ON a.staff_id=s.id LEFT JOIN hof_tournaments t ON t.slug=a.tournament_slug LEFT JOIN hof_matches m ON m.id=a.match_id ORDER BY s.created_at DESC,t.title,m.round_number,m.match_order",args:[]});
+  if(actor.role==="owner"||actor.role==="hall_of_fame_admin"){
+   const rows=await db.execute({sql:"SELECT s.id,s.label,s.role,s.title,s.created_at,s.revoked_at,a.tournament_slug,a.match_id,t.title event_title,m.round_label,m.match_order FROM hof_staff s LEFT JOIN hof_staff_assignments a ON a.staff_id=s.id LEFT JOIN hof_tournaments t ON t.slug=a.tournament_slug LEFT JOIN hof_matches m ON m.id=a.match_id ORDER BY s.created_at DESC,t.title,m.round_number,m.match_order",args:[]});
    const grouped=new Map<string,any>();
    for(const row of rows.rows){const id=String(row.id);if(!grouped.has(id))grouped.set(id,{id,label:String(row.label),role:String(row.role),title:String(row.title),created_at:String(row.created_at),revoked_at:row.revoked_at?String(row.revoked_at):null,assignments:[]});if(row.tournament_slug)grouped.get(id).assignments.push({tournament_slug:String(row.tournament_slug),match_id:row.match_id?String(row.match_id):null,event_title:row.event_title?String(row.event_title):String(row.tournament_slug),round_label:row.round_label?String(row.round_label):null,match_order:row.match_order==null?null:Number(row.match_order)});}
    staff=[...grouped.values()];
