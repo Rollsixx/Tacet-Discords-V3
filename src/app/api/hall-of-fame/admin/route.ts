@@ -6,17 +6,17 @@ import {featuredResonators} from "@/lib/resonators";
 
 const statuses=["draft","announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","finalized","archived","suspended","cancelled"];
 const slugPattern=/^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-type Actor={id:string;role:"owner"|"hall_of_fame_admin"|"organizer"|"referee";label:string};
+type Actor={id:string;role:"owner"|"hall_of_fame_admin"|"organizer"|"referee";title:WorkspaceTitle;label:string};
 function text(value:unknown,name:string,max=300){if(typeof value!=="string"||!value.trim()||value.trim().length>max)throw new HttpError(400,name+" is required.");return value.trim();}
 function tokenDigest(value:string){return createHash("sha256").update(value).digest();}
 async function actorFor(request:Request,db:any):Promise<Actor>{
  const supplied=(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");
  if(!supplied)throw new HttpError(401,"Moderator authorization required.");
  const ownerToken=process.env.MODERATOR_TOKEN;
- if(ownerToken&&ownerToken.length>=32&&timingSafeEqual(tokenDigest(supplied),tokenDigest(ownerToken)))return {id:"owner",role:"owner",label:"Owner"};
- const result=await db.execute({sql:"SELECT id,label,role,revoked_at FROM hof_staff WHERE token_hash=?",args:[tokenDigest(supplied).toString("hex")]});
+ if(ownerToken&&ownerToken.length>=32&&timingSafeEqual(tokenDigest(supplied),tokenDigest(ownerToken)))return {id:"owner",role:"owner",title:"arbiter",label:"Arbiter"};
+ const result=await db.execute({sql:"SELECT id,label,role,title,revoked_at FROM hof_staff WHERE token_hash=?",args:[tokenDigest(supplied).toString("hex")]});
  const row=result.rows[0];if(!row||row.revoked_at)throw new HttpError(401,"Moderator authorization required.");
- return {id:String(row.id),role:String(row.role) as Actor["role"],label:String(row.label)};
+ return {id:String(row.id),role:String(row.role) as Actor["role"],title:String(row.title) as WorkspaceTitle,label:String(row.label)};
 }
 async function can(actor:Actor,capability:string,slug:string|null,matchId:string|null,db:any){
  if(actor.role==="owner"||actor.role==="hall_of_fame_admin")return true;
@@ -31,7 +31,7 @@ async function requireCan(actor:Actor,capability:string,slug:string|null,matchId
  if(!(await can(actor,capability,slug,matchId,db)))throw new HttpError(403,"Your Hall of Fame role does not allow this action.");
 }
 async function audit(db:any,actor:Actor,action:string,slug:string|null,before:unknown,after:unknown,reason=""){
- await db.execute({sql:"INSERT INTO hof_audit_events(id,tournament_slug,actor_id,actor_role,action,reason,before_state,after_state,outcome,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",args:[randomUUID(),slug,actor.id,actor.role,action,reason,JSON.stringify(before||{}),JSON.stringify(after||{}),"success",new Date().toISOString()]});
+ await db.execute({sql:"INSERT INTO hof_audit_events(id,tournament_slug,actor_id,actor_role,action,reason,before_state,after_state,outcome,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",args:[randomUUID(),slug,actor.id,actor.title,action,reason,JSON.stringify(before||{}),JSON.stringify(after||{}),"success",new Date().toISOString()]});
 }
 async function addMatch(tx:any,slug:string,round:number,label:string,order:number,side:string,left:any,right:any,now:string){
  const leftId=left?.kind==="player"?left.id:null,rightId=right?.kind==="player"?right.id:null;
@@ -114,10 +114,10 @@ export async function GET(request:Request){
   if(actor.role==="owner"){
    const rows=await db.execute({sql:"SELECT s.id,s.label,s.role,s.created_at,s.revoked_at,a.tournament_slug,a.match_id,t.title event_title,m.round_label,m.match_order FROM hof_staff s LEFT JOIN hof_staff_assignments a ON a.staff_id=s.id LEFT JOIN hof_tournaments t ON t.slug=a.tournament_slug LEFT JOIN hof_matches m ON m.id=a.match_id ORDER BY s.created_at DESC,t.title,m.round_number,m.match_order",args:[]});
    const grouped=new Map<string,any>();
-   for(const row of rows.rows){const id=String(row.id);if(!grouped.has(id))grouped.set(id,{id,label:String(row.label),role:String(row.role),created_at:String(row.created_at),revoked_at:row.revoked_at?String(row.revoked_at):null,assignments:[]});if(row.tournament_slug)grouped.get(id).assignments.push({tournament_slug:String(row.tournament_slug),match_id:row.match_id?String(row.match_id):null,event_title:row.event_title?String(row.event_title):String(row.tournament_slug),round_label:row.round_label?String(row.round_label):null,match_order:row.match_order==null?null:Number(row.match_order)});}
+   for(const row of rows.rows){const id=String(row.id);if(!grouped.has(id))grouped.set(id,{id,label:String(row.label),role:String(row.role),title:String(row.title),created_at:String(row.created_at),revoked_at:row.revoked_at?String(row.revoked_at):null,assignments:[]});if(row.tournament_slug)grouped.get(id).assignments.push({tournament_slug:String(row.tournament_slug),match_id:row.match_id?String(row.match_id):null,event_title:row.event_title?String(row.event_title):String(row.tournament_slug),round_label:row.round_label?String(row.round_label):null,match_order:row.match_order==null?null:Number(row.match_order)});}
    staff=[...grouped.values()];
   }
-  return json({actor:{id:actor.id,role:actor.role,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,staff});
+  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,staff});
  }catch(e){return failure(e);}
 }
 export async function POST(request:Request){
@@ -127,15 +127,16 @@ export async function POST(request:Request){
   if(!body||typeof body!=="object")throw new HttpError(400,"Invalid request.");
   const action=text(body.action,"Action",60),now=new Date().toISOString(),slug=body.slug?text(body.slug,"Tournament",80):null,matchId=body.matchId?text(body.matchId,"Match",80):null;
   if(action==="create_staff"){
-   if(actor.role!=="owner")throw new HttpError(403,"Only the Owner can issue staff credentials.");
-   const label=text(body.label,"Staff label",64),role=text(body.role,"Staff role",32);
-   if(!["hall_of_fame_admin","organizer","referee"].includes(role))throw new HttpError(400,"Unsupported staff role.");
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only full-access Black Shores titles can issue staff credentials.");
+   const label=text(body.label,"Staff name",64),title=text(body.title,"Staff title",32) as WorkspaceTitle;
+   if(!["chief_steward","astral_modulator","bloom_bearer","consultant"].includes(title))throw new HttpError(400,"Choose a supported Black Shores title.");
+   const role=technicalRoleFor(title as Exclude<WorkspaceTitle,"arbiter">);
    const id=randomUUID(),plain=randomBytes(32).toString("base64url"),hash=tokenDigest(plain).toString("hex");
-   await db.execute({sql:"INSERT INTO hof_staff(id,label,role,token_hash,created_by,created_at) VALUES(?,?,?,?,?,?)",args:[id,label,role,hash,actor.id,now]});
-   await audit(db,actor,"create_staff",null,{}, {id,label,role});return json({ok:true,id,token:plain,oneTime:true});
+   await db.execute({sql:"INSERT INTO hof_staff(id,label,role,title,token_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?)",args:[id,label,role,title,hash,actor.id,now]});
+   await audit(db,actor,"create_staff",null,{}, {id,label,title});return json({ok:true,id,token:plain,oneTime:true});
   }
   if(action==="remove_staff_assignment"){
-   if(actor.role!=="owner")throw new HttpError(403,"Only the Owner can change staff assignments.");
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only full-access Black Shores titles can change staff assignments.");
    const staffId=text(body.staffId,"Staff",80),eventSlug=text(body.slug,"Tournament",80),targetMatch=body.matchId?text(body.matchId,"Match",80):null;
    const result=targetMatch
     ?await db.execute({sql:"DELETE FROM hof_staff_assignments WHERE staff_id=? AND tournament_slug=? AND match_id=?",args:[staffId,eventSlug,targetMatch]})
@@ -144,14 +145,14 @@ export async function POST(request:Request){
    await audit(db,actor,action,eventSlug,{staffId,matchId:targetMatch},{removed:true});return json({ok:true});
   }
   if(action==="revoke_staff"){
-   if(actor.role!=="owner")throw new HttpError(403,"Only the Owner can revoke staff credentials.");
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only full-access Black Shores titles can revoke staff credentials.");
    const id=text(body.staffId,"Staff",80);const before=await db.execute({sql:"SELECT id,label,role,revoked_at FROM hof_staff WHERE id=?",args:[id]});
    if(!before.rows.length)throw new HttpError(404,"Staff member not found.");
    await db.execute({sql:"UPDATE hof_staff SET revoked_at=?,revoked_by=? WHERE id=? AND revoked_at IS NULL",args:[now,actor.id,id]});
    await audit(db,actor,"revoke_staff",null,before.rows[0],{revoked:true});return json({ok:true});
   }
   if(action==="assign_staff"){
-   if(actor.role!=="owner")throw new HttpError(403,"Only the Owner can assign staff.");
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only full-access Black Shores titles can assign staff.");
    const staffId=text(body.staffId,"Staff",80),eventSlug=text(body.slug,"Tournament",80),targetMatch=body.matchId?text(body.matchId,"Match",80):null;
    const staffRow=await db.execute({sql:"SELECT role,revoked_at FROM hof_staff WHERE id=?",args:[staffId]});if(!staffRow.rows[0]||staffRow.rows[0].revoked_at)throw new HttpError(404,"Active staff member not found.");
    const role=String(staffRow.rows[0].role);if(role==="hall_of_fame_admin")throw new HttpError(400,"Global administrators do not need event assignments.");
