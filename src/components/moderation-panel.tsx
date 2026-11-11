@@ -193,7 +193,7 @@ export function ModerationPanel() {
  {!authenticated?<div className="bs-login"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMINISTRATION</small></div></Link><span className="eyebrow">Restricted access</span><h1>Open the review desk.</h1><p>Manage submissions and player verification with your private moderator token.</p>
   <form onSubmit={e=>{e.preventDefault();void unlock();}}>
    <label className="field"><span>Black Shores access token</span><input type="password" autoComplete="off" required minLength={32} value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your Owner, moderator, or assigned Hall of Fame token" /><small>Moderator/Owner tokens open the full admin. Hall of Fame tokens open only your assigned tools.</small></label>
-   <label className="field"><span>Reviewer name (moderator actions only)</span><input required minLength={2} maxLength={64} value={reviewer} onChange={e=>changeReviewer(e.target.value)} /><small>Used for the audit trail when reviewing builds.</small></label>
+   <label className="field"><span>Reviewer name (moderator actions only)</span><input minLength={2} maxLength={64} value={reviewer} onChange={e=>changeReviewer(e.target.value)} /><small>Used for the audit trail when reviewing builds.</small></label>
    <button className="action" disabled={busy}>{busy?'Checking access…':'Continue to workspace'}</button>
   </form><small>Token access only. Your token stays in memory and is cleared on reload or when you lock the desk.</small><Link className="text-link" href="/">← Return to website</Link>
  </div>:<div className="bs-shell">
