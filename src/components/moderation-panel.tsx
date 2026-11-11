@@ -35,7 +35,7 @@ type Build = Results["builds"][number];
 type Players=Awaited<ReturnType<typeof listAdminPlayers>>;
 type PlayerDetail=Awaited<ReturnType<typeof adminPlayerBuilds>>;
 type View = "dashboard" | "home" | "submissions" | "players" | "audit" | "rankChanges" | "system" | "rotations" | "hallOfFame" | "staffTokens";
-type WorkspaceKind="moderator"|"hall_of_fame";
+type WorkspaceKind="arbiter"|"chief_steward"|"astral_modulator"|"bloom_bearer"|"consultant";
 const names: Record<View,string> = {dashboard:"Command overview",home:"Home page",submissions:"Submission management",players:"Players & their builds",audit:"Audit history",rankChanges:"Rank changes",system:"System status",rotations:"Rotation management",hallOfFame:"Manage Hall of Fame",staffTokens:"Staff tokens"};
 function date(value:string){ return new Date(value).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"}); }
 function AdminIcon({name}:{name:string}){const paths:Record<string,string>={dashboard:"M3 3h8v8H3z M13 3h8v5h-8z M13 10h8v11h-8z M3 13h8v8H3z",home:"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",submissions:"M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5",players:"M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 8v6 M17 11h6",rotations:"M20 7v5h-5 M4 17v-5h5 M5.6 9A7 7 0 0 1 18 6l2 6 M4 12l2 6a7 7 0 0 0 12.4-3",audit:"M12 8v5l3 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",rankChanges:"M4 16l5-5 4 3 7-8 M15 6h5v5",system:"M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M19 13.5l2 1.5-2 3-2.5-1-2 1v2h-4v-2l-2-1-2.5 1-2-3 2-1.5v-3L4 9l2-3 2.5 1 2-1V4h4v2l2 1 2.5-1 2 3-2 1.5z"};return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]||paths.dashboard}/></svg>;}
@@ -52,8 +52,8 @@ export function ModerationPanel() {
 
  const [reviewer,setReviewer]=useState("Moderator");
  const [authenticated,setAuthenticated]=useState(false);
- const [workspaceKind,setWorkspaceKind]=useState<WorkspaceKind>("moderator");
- const [hofActor,setHofActor]=useState<{id:string;role:string;label:string}|null>(null);
+ const [workspaceKind,setWorkspaceKind]=useState<WorkspaceKind>("arbiter");
+ const [hofActor,setHofActor]=useState<{id:string;role:string;title:WorkspaceKind;label:string}|null>(null);
  const [hofRefresh,setHofRefresh]=useState(0);
  const [staffRefresh,setStaffRefresh]=useState(0);
  const [view,setView]=useState<View>("dashboard");
@@ -100,7 +100,7 @@ export function ModerationPanel() {
   if(dialog.current&&!dialog.current.open)dialog.current.showModal();
  }
  function changeReviewer(value:string){setReviewer(value);if(value.trim().length>=2&&error.startsWith("Enter a reviewer name"))setError("");}
- function lock(){setToken("");setAuthenticated(false);setWorkspaceKind("moderator");setHofActor(null);setResult(null);setPlayers(null);setPlayerDetail(null);setAudit(null);setSelected(null);setConfirmation(null);setNote("");setVerified(false);setError("");setMessage("");setView("dashboard");setSearch("");setCharacter("");setQueue("pending");setPage(1);setHealth(null);}
+ function lock(){setToken("");setAuthenticated(false);setWorkspaceKind("arbiter");setHofActor(null);setResult(null);setPlayers(null);setPlayerDetail(null);setAudit(null);setSelected(null);setConfirmation(null);setNote("");setVerified(false);setError("");setMessage("");setView("dashboard");setSearch("");setCharacter("");setQueue("pending");setPage(1);setHealth(null);}
  async function request(path:string,options:RequestInit={}){
   const response=await fetch(path,{...options,cache:"no-store",headers:{Authorization:"Bearer "+token.trim(),...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
   const data=await response.json();
@@ -122,18 +122,20 @@ export function ModerationPanel() {
   setBusy(true);setError("");setMessage("");
   const authToken=token.trim();
   try{
-   const moderation=await fetch('/api/moderation?'+new URLSearchParams({page:'1',status:'pending',search:'',character:''}),{headers:{Authorization:"Bearer "+authToken},cache:"no-store"});
-   const moderationData=await moderation.json();
-   if(moderation.ok){
-    setResult(moderationData);setPage(1);setQueue("pending");setAuthenticated(true);setWorkspaceKind("moderator");setView("dashboard");select(moderationData.builds?.[0]||null);
-    const hof=await fetch('/api/hall-of-fame/admin',{headers:{Authorization:"Bearer "+authToken},cache:"no-store"}).catch(()=>null);
-    if(hof?.ok){const d=await hof.json();setHofActor(d.actor||null);}
-    return;
-   }
    const hof=await fetch('/api/hall-of-fame/admin',{headers:{Authorization:"Bearer "+authToken},cache:"no-store"});
    const hofData=await hof.json();
-   if(hof.ok){setHofActor(hofData.actor||null);setWorkspaceKind("hall_of_fame");setAuthenticated(true);setView("hallOfFame");setMessage("Hall of Fame access verified. Your role controls which actions are available.");return;}
-   throw new Error(moderationData.error||hofData.error||"This token does not have access to Black Shores.");
+   if(!hof.ok)throw new Error(hofData.error||"This token does not have access to Black Shores.");
+   const actor=hofData.actor as {id:string;role:string;title:WorkspaceKind;label:string};
+   setHofActor(actor);setWorkspaceKind(actor.title);setReviewer(actor.title==="arbiter"?"Arbiter":actor.label);
+   const consultant=actor.title==="consultant";
+   const endpoint=consultant?"/api/moderation?view=summary":"/api/moderation?page=1&status=pending&search=&character=";
+   const moderation=await fetch(endpoint,{headers:{Authorization:"Bearer "+authToken},cache:"no-store"});
+   const data=await moderation.json();
+   if(!moderation.ok)throw new Error(data.error||"Could not open the Black Shores workspace.");
+   if(consultant){setResult({...data,builds:[],activity:[]});setView("dashboard");}
+   else{setResult(data);setPage(1);setQueue("pending");select(data.builds?.[0]||null);setView("dashboard");}
+   setAuthenticated(true);
+   setMessage("Hello, "+(actor.title==="arbiter"?"Arbiter":actor.label)+" · "+actor.title.replaceAll("_"," ")+".");
   }catch(cause){setError(cause instanceof Error?cause.message:"Could not verify your access token.");}
   finally{setBusy(false);}
  }
@@ -170,7 +172,7 @@ export function ModerationPanel() {
   const target=selected;const targetUid=target?.uid||playerDetail!.player.uid;setActionBusy(true);setBusy(true);setError("");setMessage("");
   try{
    const method=kind==='deleted'?'DELETE':kind==='verified'?'PATCH':'POST';
-   await request('/api/moderation',{method,body:JSON.stringify({id:target?.id,uid:kind==='verified'?targetUid:undefined,action:kind,reasonCode:kind==='rejected'?rejectCode:undefined,allowUnranked,confirm:kind==='deleted',reviewer:reviewer.trim(),note:kind==='rejected'?`${rejectCode.toUpperCase()}: ${note.trim()}`:note,identityVerified:kind==='verified'?value:verified})});
+   await request('/api/moderation',{method,body:JSON.stringify({id:target?.id,uid:kind==='verified'?targetUid:undefined,action:kind,reasonCode:kind==='rejected'?rejectCode:undefined,allowUnranked,confirm:kind==='deleted',reviewer:hofActor?.title==="arbiter"?"Arbiter":hofActor?.label||"Moderator",note:kind==='rejected'?`${rejectCode.toUpperCase()}: ${note.trim()}`:note,identityVerified:kind==='verified'?value:verified})});
    setConfirmation(null);setNote("");setVerified(false);
    const label=kind==='approved'?`Approved ${target?.character}. The build is now public.${target?.data.assessment?.eligible?'':' It remains unranked until its scoring requirements are satisfied.'}`:kind==='rejected'?`Rejected and deleted ${target?.character}.` :kind==='deleted'?`Deleted ${target?.character} and its stored evidence.`:value?'Player verified. Eligible approved builds can now rank.':'Player verification revoked. Their builds no longer rank.';
    // The mutation succeeded even if a subsequent refresh fails: report it clearly.
