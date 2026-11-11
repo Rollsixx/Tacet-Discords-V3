@@ -7,11 +7,11 @@ import {orderProfileBuildsByRank} from '../leaderboards/profile-rank-order.mjs';
 import {buildDataConsistencyReport} from '../leaderboards/consistency-report.mjs';
 import {database} from './database.ts';
 import {HttpError} from './validation.ts';
-import {featuredResonators,latestResonators} from '../resonators.ts';
+import {featuredResonators} from '../resonators.ts';
 import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 import {scoringReadiness} from './scoring-info.ts';
 import {rotationPolicyReady} from '../game-data/scoring-policies.mjs';
-import {resolveHomeFeatured} from './home-featured.mjs';
+import {HOME_FEATURED_ROTATION_MS,resolveHomeRotation} from './home-featured.mjs';
 type RankHistoryEntry={rank:number;previousRank:number|null;movement:number|null;rankSince:string|null;trackingSince?:string;bestRank?:number;bestTop1Days?:number;buildId?:string;score?:number;ign?:string;active?:boolean};
 export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean; patchMajor?: string } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
@@ -346,18 +346,41 @@ export async function homeRankings(db: Client = database()) {
  const byBuild=new Map(ranked.map(build=>[build.id,build]));
  const boards=names.map(character=>({character,players:entries.filter(entry=>entry.character===character).flatMap(entry=>{const build=byBuild.get(entry.history.buildId||"");return build?[{id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}]:[]})}));
  const standings=await medalStandings(db);
- return {boards,featured:configuration.featured,topPlayers:standings.players,topPlayersUpdatedAt:standings.updatedAt};
+ return {boards,featured:configuration.featured,topPlayers:standings.players,topPlayersUpdatedAt:standings.updatedAt,nextShuffleAt:configuration.nextShuffleAt,rotationCycle:configuration.cycle,featuredThisCycle:configuration.featuredThisCycle,rotationPoolSize:configuration.poolSize};
 }
 
 export async function homeFeaturedSettings(db:Client=database()) {
  const supported=featuredResonators.map(character=>character.name);
- const fallback=latestResonators.map(character=>character.name);
- const result=await db.execute({sql:"SELECT value FROM app_settings WHERE key='home_latest_resonators'",args:[]});
- let saved:unknown;
- try{saved=JSON.parse(String(result.rows[0]?.value||'null'));}catch{saved=null;}
- const names=resolveHomeFeatured(saved,supported,fallback);
  const byName=new Map(featuredResonators.map(character=>[character.name,character]));
- return {selected:names,featured:names.map(name=>byName.get(name)!).filter(Boolean),options:featuredResonators.map(character=>({name:character.name,label:character.displayName||character.name,element:character.element}))};
+ const readSaved=async(client:Client):Promise<unknown>=>{
+  const result=await client.execute({sql:"SELECT value FROM app_settings WHERE key='home_featured_rotation_v1'",args:[]});
+  try{return JSON.parse(String(result.rows[0]?.value||'null'));}catch{return null;}
+ };
+ let saved=await readSaved(db);
+ let resolved=resolveHomeRotation(saved,supported,Date.now());
+ if(resolved.changed&&resolved.state){
+  const tx=await db.transaction("write");
+  try{
+   saved=await readSaved(tx as unknown as Client);
+   resolved=resolveHomeRotation(saved,supported,Date.now());
+   if(resolved.changed&&resolved.state){
+    await tx.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('home_featured_rotation_v1',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[JSON.stringify(resolved.state),new Date().toISOString()]});
+   }
+   await tx.commit();
+  }finally{tx.close();}
+ }
+ const state=resolved.state;
+ const names=state?.featured||[];
+ return {
+  selected:names,
+  featured:names.map(name=>byName.get(name)!).filter(Boolean),
+  options:featuredResonators.map(character=>({name:character.name,label:character.displayName||character.name,element:character.element})),
+  nextShuffleAt:state?new Date(state.nextShuffleAt).toISOString():null,
+  cycle:state?.cycle||1,
+  featuredThisCycle:state?.played.length||0,
+  poolSize:state?.pool.length||supported.length,
+  rotationIntervalMs:HOME_FEATURED_ROTATION_MS,
+ };
 }
 
 export async function listAdminPlayers(options:{search?:string;character?:string;page?:number}={},db:Client=database()){
