@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useState} from "react";
+import type {FormEvent} from "react";
 import Link from "next/link";
 
 type Staff={id:string;label:string;role:string;title:string;revoked_at:string|null};
@@ -19,7 +20,7 @@ export default function HallOfFameStaff({initialToken="",embedded=false}:Props){
   const data=await response.json();if(!response.ok)throw new Error(data.error||"Black Shores request failed.");return data;
  }
  async function refresh(){setLoading(true);setError("");try{const data=await api("GET");setActor(data.actor);setStaff(data.staff||[]);}catch(cause){setError(cause instanceof Error?cause.message:"Could not load staff tokens.");}finally{setLoading(false);}}
- async function createStaff(event:React.FormEvent<HTMLFormElement>){event.preventDefault();const form=new FormData(event.currentTarget);setLoading(true);setError("");setMessage("");try{const data=await api("POST",{action:"create_staff",label:form.get("label"),title:form.get("title")});setOneTime(data.token||"");setMessage("Token created. Copy it now; it is shown only once.");event.currentTarget.reset();await refresh();}catch(cause){setError(cause instanceof Error?cause.message:"Could not create token.");}finally{setLoading(false);}}
+ async function createStaff(event:FormEvent<HTMLFormElement>){event.preventDefault();const form=new FormData(event.currentTarget);setLoading(true);setError("");setMessage("");try{const data=await api("POST",{action:"create_staff",label:form.get("label"),title:form.get("title")});setOneTime(data.token||"");setMessage("Token created. Copy it now; it is shown only once.");event.currentTarget.reset();await refresh();}catch(cause){setError(cause instanceof Error?cause.message:"Could not create token.");}finally{setLoading(false);}}
  async function revoke(member:Staff){if(!window.confirm("Revoke this token? The member will lose access immediately."))return;setLoading(true);setError("");setMessage("");try{await api("POST",{action:"revoke_staff",staffId:member.id});setMessage(member.label+"'s token was revoked.");await refresh();}catch(cause){setError(cause instanceof Error?cause.message:"Could not revoke token.");}finally{setLoading(false);}}
  useEffect(()=>{if(token.length>20){void refresh();}},[token]);
  const isFull=actor&&(actor.role==="owner"||actor.role==="hall_of_fame_admin");
