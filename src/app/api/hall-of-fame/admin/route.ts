@@ -96,8 +96,8 @@ export async function GET(request:Request){
   const artworkSlug=url.searchParams.get("artwork");
   if(artworkSlug){await requireCan(actor,"manage_event",artworkSlug,null,db);const row=await db.execute({sql:"SELECT artwork_data_url FROM hof_tournaments WHERE slug=?",args:[artworkSlug]});return json({artworkDataUrl:String(row.rows[0]?.artwork_data_url||"")});}
 const slug=url.searchParams.get("slug");
-  let eventSql="SELECT slug,title,boss,status,format,event_date,capacity_min,capacity_max,roster_published,bracket_published,medals_published FROM hof_tournaments ORDER BY updated_at DESC",eventArgs:any[]=[];
-  if(actor.role==="organizer"||actor.role==="referee"){eventSql="SELECT DISTINCT t.slug,t.title,t.boss,t.status,t.format,t.event_date,t.capacity_min,t.capacity_max,t.roster_published,t.bracket_published,t.medals_published FROM hof_tournaments t JOIN hof_staff_assignments a ON a.tournament_slug=t.slug WHERE a.staff_id=? ORDER BY t.updated_at DESC";eventArgs=[actor.id]}
+  let eventSql="SELECT slug,title,boss,status,format,event_date,capacity_min,capacity_max,roster_published,bracket_published,medals_published,CASE WHEN artwork_data_url='' THEN 0 ELSE 1 END has_artwork,tournament_kind,bracket_mode FROM hof_tournaments ORDER BY updated_at DESC",eventArgs:any[]=[];
+  if(actor.role==="organizer"||actor.role==="referee"){eventSql="SELECT DISTINCT t.slug,t.title,t.boss,t.status,t.format,t.event_date,t.capacity_min,t.capacity_max,t.roster_published,t.bracket_published,t.medals_published,CASE WHEN t.artwork_data_url='' THEN 0 ELSE 1 END has_artwork,t.tournament_kind,t.bracket_mode FROM hof_tournaments t JOIN hof_staff_assignments a ON a.tournament_slug=t.slug WHERE a.staff_id=? ORDER BY t.updated_at DESC";eventArgs=[actor.id]}
   const events=await db.execute({sql:eventSql,args:eventArgs});
   const people=await db.execute("SELECT id,display_name,resonator_icon FROM hof_participants ORDER BY display_name COLLATE NOCASE LIMIT 300");
   const auditRows=await db.execute({sql:"SELECT action,actor_role,reason,outcome,created_at,tournament_slug FROM hof_audit_events "+((actor.role==="owner"||actor.role==="hall_of_fame_admin")?"":"WHERE tournament_slug IN (SELECT tournament_slug FROM hof_staff_assignments WHERE staff_id=?) ")+"ORDER BY created_at DESC LIMIT 30",args:(actor.role==="owner"||actor.role==="hall_of_fame_admin")?[]:[actor.id]});
@@ -127,7 +127,7 @@ const slug=url.searchParams.get("slug");
 export async function POST(request:Request){
  let tx:any;
  try{
-  await migrateOnce();const db=database(),actor=await actorFor(request,db),body:any=await readJson(request,50000);
+  await migrateOnce();const db=database(),actor=await actorFor(request,db),body:any=await readJson(request,2400000);
   if(!body||typeof body!=="object")throw new HttpError(400,"Invalid request.");
   const action=text(body.action,"Action",60),now=new Date().toISOString(),slug=body.slug?text(body.slug,"Tournament",80):null,matchId=body.matchId?text(body.matchId,"Match",80):null;
   if(action==="create_staff"){
@@ -240,43 +240,38 @@ export async function POST(request:Request){
   }
   if(action==="import_historical_tournament"){
    await requireCan(actor,"global_admin",null,null,db);
-   const eventSlug=text(body.slug,"Slug",80).toLowerCase();if(!slugPattern.test(eventSlug))throw new HttpError(400,"Use a lowercase URL slug.");
-   const title=text(body.title,"Title",120),boss=text(body.boss,"Hologram boss",80);
-   const timezone=text(body.timezone||"UTC","Timezone",80),rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000);
-   const eventDate=body.eventDate?text(body.eventDate,"Event date",50):null;
+   const eventSlug=(String(body.slug||"archive-"+randomUUID().slice(0,8))).toLowerCase();
+   if(!slugPattern.test(eventSlug))throw new HttpError(400,"Generated event identifier is invalid.");
+   const title=text(body.title,"Title",120),boss=text(body.boss,"Hologram boss",80),rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000);
+   const eventDate=body.eventDate?text(body.eventDate,"Event date",50):null,artwork=String(body.artworkDataUrl||"");
+   if(!/^data:image\/(png|jpeg|webp);base64,/.test(artwork)||artwork.length>2100000)throw new HttpError(400,"Upload a tournament image under 1.5 MB (PNG, JPG, or WebP).");
    if(eventDate&&Number.isNaN(Date.parse(eventDate)))throw new HttpError(400,"Enter a valid historical event date.");
-   if(!Array.isArray(body.participants)||body.participants.length<1||body.participants.length>256)throw new HttpError(400,"Add between 1 and 256 archived participants.");
-   const entrants=body.participants.map((entry:any,index:number)=>{
-    const name=text(entry?.name,"Participant "+(index+1),40),resonator=text(entry?.resonator,"Resonator",64);
-    if(!featuredResonators.some(r=>r.name.toLowerCase()===resonator.toLowerCase()))throw new HttpError(400,"Choose a supported Resonator for "+name+".");
-    const medal=entry?.medal?String(entry.medal).toLowerCase():"";
-    if(medal&&!["gold","silver","bronze"].includes(medal))throw new HttpError(400,"Medal must be Gold, Silver, Bronze, or blank.");
-    return {name,resonator:featuredResonators.find(r=>r.name.toLowerCase()===resonator.toLowerCase())!.name,medal};
-   });
-   const identities=new Set<string>(),medals=new Set<string>();
-   for(const entrant of entrants){const key=entrant.name.toLocaleLowerCase()+"|"+entrant.resonator.toLowerCase();if(identities.has(key))throw new HttpError(400,"Duplicate participant name and Resonator in the archive list: "+entrant.name+".");identities.add(key);if(entrant.medal){if(medals.has(entrant.medal))throw new HttpError(400,"Only one participant per medal can be recorded.");medals.add(entrant.medal);}}
-   const capacityMax=Math.max(2,entrants.length);
-   tx=await db.transaction("write");
-   await tx.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,roster_published,bracket_published,medals_published,created_at,updated_at) VALUES(?,?,?,'single_elimination','archived',2,?,NULL,?,?,?,?,1,0,1,?,?)",args:[eventSlug,title,boss,capacityMax,timezone,rules,notice,eventDate,now,now]});
-   for(const entrant of entrants){
-    const participantId=randomUUID(),icon=entrant.resonator;
-    await tx.execute({sql:"INSERT INTO hof_participants(id,display_name,resonator_icon,created_at,updated_at) VALUES(?,?,?,?,?)",args:[participantId,entrant.name,icon,now,now]});
-    await tx.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,'confirmed',1,?)",args:[eventSlug,participantId,now]});
-    if(entrant.medal)await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?)",args:[eventSlug,entrant.medal,participantId,actor.id,now]});
+   if(!Array.isArray(body.participants)||body.participants.length<3||body.participants.length>256)throw new HttpError(400,"Add at least three archived participants from the directory.");
+   const entrants=[] as any[],ids=new Set<string>(),medals=new Set<string>();
+   for(const [index,entry] of body.participants.entries()){
+    const participantId=text(entry?.participantId,"Participant "+(index+1),80),medal=String(entry?.medal||"").toLowerCase();
+    if(medal&&!["gold","silver","bronze"].includes(medal))throw new HttpError(400,"Use Champion, 2nd place, or 3rd place.");
+    if(medal&&medals.has(medal))throw new HttpError(400,"Each podium place can be assigned once.");
+    const row=await db.execute({sql:"SELECT id FROM hof_participants WHERE id=?",args:[participantId]});
+    if(!row.rows.length)throw new HttpError(404,"A selected participant no longer exists.");
+    if(ids.has(participantId))throw new HttpError(400,"A participant can only be listed once.");
+    ids.add(participantId);if(medal)medals.add(medal);entrants.push({participantId,medal});
    }
-   const source=String(body.source||"Discord archive").trim().slice(0,500);
-   await audit(tx,actor,action,eventSlug,{}, {status:"archived",historical:true,participants:entrants.length,medals:medals.size},source);
-   await tx.commit();tx=null;
-   return json({ok:true,participants:entrants.length,medals:medals.size});
+   if(medals.size!==3)throw new HttpError(400,"Assign Champion, 2nd place, and 3rd place before importing.");
+   const capacityMax=Math.max(2,entrants.length);tx=await db.transaction("write");
+   await tx.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,roster_published,bracket_published,medals_published,artwork_data_url,tournament_kind,bracket_mode,created_at,updated_at) VALUES(?,?,?,'single_elimination','archived',2,?,NULL,'UTC',?,?,?,1,0,1,?,'hologram','single_elimination',?,?)",args:[eventSlug,title,boss,capacityMax,rules,notice,eventDate,artwork,now,now]});
+   for(const entrant of entrants){await tx.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,'confirmed',1,?)",args:[eventSlug,entrant.participantId,now]});if(entrant.medal)await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?)",args:[eventSlug,entrant.medal,entrant.participantId,actor.id,now]});}
+   await audit(tx,actor,action,eventSlug,{}, {status:"archived",historical:true,participants:entrants.length,medals:medals.size});await tx.commit();tx=null;return json({ok:true,participants:entrants.length,medals:medals.size,slug:eventSlug});
   }
   if(action==="create_tournament"){
    await requireCan(actor,"global_admin",null,null,db);
-   const eventSlug=text(body.slug,"Slug",80).toLowerCase();if(!slugPattern.test(eventSlug))throw new HttpError(400,"Use a lowercase URL slug.");
    const title=text(body.title,"Title",120),boss=text(body.boss,"Hologram boss",80),format=body.format==="double_elimination"?"double_elimination":"single_elimination";
-   const min=Math.max(2,Math.min(256,Number(body.capacityMin)||2)),max=Math.max(min,Math.min(256,Number(body.capacityMax)||32));
-   const timezone=text(body.timezone||"UTC","Timezone",80),rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000),eventDate=body.eventDate?text(body.eventDate,"Event date",50):null;
-   await db.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,created_at,updated_at) VALUES(?,?,?,?,'draft',?,?,NULL,?,?,?,?,?,?)",args:[eventSlug,title,boss,format,min,max,timezone,rules,notice,eventDate,now,now]});
-   await audit(db,actor,action,eventSlug,{}, {slug:eventSlug,title,boss,format,status:"draft"});return json({ok:true});
+   const base=title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,54)||"hologram-event",eventSlug=base+"-"+randomUUID().slice(0,8);
+   const min=Math.max(2,Math.min(256,Number(body.capacityMin)||2)),max=Math.max(min,Math.min(256,Number(body.capacityMax)||32)),rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000),eventDate=body.eventDate?text(body.eventDate,"Event date",50):null,artwork=String(body.artworkDataUrl||"");
+   if(!/^data:image\/(png|jpeg|webp);base64,/.test(artwork)||artwork.length>2100000)throw new HttpError(400,"Upload a tournament image under 1.5 MB (PNG, JPG, or WebP).");
+   if(eventDate&&Number.isNaN(Date.parse(eventDate)))throw new HttpError(400,"Enter a valid event date.");
+   await db.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,artwork_data_url,tournament_kind,bracket_mode,created_at,updated_at) VALUES(?,?,?,?,'draft',?,?,NULL,'UTC',?,?,?,?, 'hologram',?,?,?)",args:[eventSlug,title,boss,format,min,max,rules,notice,eventDate,artwork,format,now,now]});
+   await audit(db,actor,action,eventSlug,{}, {title,boss,format,status:"draft"});return json({ok:true,slug:eventSlug});
   }
   if(action==="set_status"){
    if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"manage_event",slug,null,db);
