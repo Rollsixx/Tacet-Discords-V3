@@ -192,16 +192,16 @@ export async function POST(request:Request){
    await audit(tx,actor,action,eventSlug,m.rows[0],{state:"published",outcomePublished:true});await tx.commit();tx=null;return json({ok:true});
   }
   if(action==="open_dispute"){
-   if(!matchId)throw new HttpError(400,"Match is required.");const m=await db.execute({sql:"SELECT tournament_slug,state FROM hof_matches WHERE id=?",args:[matchId]);if(!m.rows.length)throw new HttpError(404,"Match not found.");
+   if(!matchId)throw new HttpError(400,"Match is required.");const m=await db.execute({sql:"SELECT tournament_slug,state FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
    const eventSlug=String(m.rows[0].tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);if(["published","cancelled"].includes(String(m.rows[0].state)))throw new HttpError(409,"A published match needs an administrator correction workflow.");
    const reason=text(body.reason,"Dispute reason",1500),id=randomUUID();
    await db.execute({sql:"INSERT INTO hof_disputes(id,match_id,opened_by,reason,created_at) VALUES(?,?,?,?,?)",args:[id,matchId,actor.id,reason,now]});
-   await db.execute({sql:"UPDATE hof_matches SET state='disputed',version=version+1,updated_at=? WHERE id=?",args:[now,matchId]);await audit(db,actor,action,eventSlug,{}, {matchId,disputeId:id,state:"disputed"});return json({ok:true});
+   await db.execute({sql:"UPDATE hof_matches SET state='disputed',version=version+1,updated_at=? WHERE id=?",args:[now,matchId]});await audit(db,actor,action,eventSlug,{}, {matchId,disputeId:id,state:"disputed"});return json({ok:true});
   }
   if(action==="resolve_dispute"){
    if(!matchId)throw new HttpError(400,"Match is required.");if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can resolve a dispute.");
    const rationale=text(body.reason,"Resolution rationale",1500),d=await db.execute({sql:"SELECT id FROM hof_disputes WHERE match_id=? AND state='open'",args:[matchId]});if(!d.rows.length)throw new HttpError(404,"Open dispute not found.");
-   const m=await db.execute({sql:"SELECT tournament_slug,winner_id,outcome FROM hof_matches WHERE id=?",args:[matchId]);if(!m.rows.length)throw new HttpError(404,"Match not found.");
+   const m=await db.execute({sql:"SELECT tournament_slug,winner_id,outcome FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
    const state=m.rows[0].winner_id?"pending_publication":"ready";
    await db.execute({sql:"UPDATE hof_disputes SET state='resolved',resolution=?,resolved_by=?,resolved_at=? WHERE match_id=? AND state='open'",args:[rationale,actor.id,now,matchId]});
    await db.execute({sql:"UPDATE hof_matches SET state=?,version=version+1,updated_at=? WHERE id=?",args:[state,now,matchId]});
@@ -243,7 +243,7 @@ export async function POST(request:Request){
    const participantId=text(body.participantId,"Participant",80),event=await db.execute({sql:"SELECT status,capacity_max FROM hof_tournaments WHERE slug=?",args:[slug]});if(!event.rows.length)throw new HttpError(404,"Tournament not found.");
    if(!["registration_open","registration_closed","draft"].includes(String(event.rows[0].status)))throw new HttpError(409,"Roster edits are closed for this event state.");
    const count=await db.execute({sql:"SELECT COUNT(*) total FROM hof_roster WHERE tournament_slug=? AND state='confirmed'",args:[slug]});if(Number(count.rows[0]?.total||0)>=Number(event.rows[0].capacity_max))throw new HttpError(409,"Tournament capacity has been reached.");
-   const participant=await db.execute({sql:"SELECT id FROM hof_participants WHERE id=?",args:[participantId]);if(!participant.rows.length)throw new HttpError(404,"Participant not found.");
+   const participant=await db.execute({sql:"SELECT id FROM hof_participants WHERE id=?",args:[participantId]});if(!participant.rows.length)throw new HttpError(404,"Participant not found.");
    await db.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,'confirmed',0,?) ON CONFLICT(tournament_slug,participant_id) DO UPDATE SET state='confirmed',published=0,updated_at=excluded.updated_at",args:[slug,participantId,now]});
    await db.execute({sql:"INSERT INTO hof_registrations(id,tournament_slug,participant_id,reaction_message_ref,reaction_at,verified_by,verified_at,state) VALUES(?,?,?,?,?,?,?,'confirmed') ON CONFLICT(tournament_slug,participant_id) DO UPDATE SET state='confirmed',verified_by=excluded.verified_by,verified_at=excluded.verified_at",args:[randomUUID(),slug,participantId,String(body.reactionRef||"manual-admin").slice(0,120),now,actor.id,now]});
    await audit(db,actor,action,slug,{}, {participantId,state:"confirmed"});return json({ok:true});
