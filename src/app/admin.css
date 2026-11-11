@@ -389,3 +389,7 @@
 .manual-profile-weapon-fallback{display:grid;place-items:center;color:#999;font-size:24px}
 .manual-profile-weapon-help{display:block;margin-top:6px;color:var(--muted,#a8a8b3);font-size:11px}
 @media(max-width:700px){.manual-profile-weapon-control{align-items:stretch}.manual-profile-weapon-preview{width:48px;height:48px;flex-basis:48px}}
+
+.bs-sidebar nav .bs-admin-nav-link { display:flex; align-items:center; gap:12px; width:100%; padding:12px; border:1px solid transparent; border-radius:9px; color:#aabbd1; text-decoration:none; text-align:left; font-size:12px; }
+.bs-sidebar nav .bs-admin-nav-link:hover { background:#192638; color:#d6eaff; }
+.bs-sidebar nav .bs-admin-nav-link span { width:18px; font-size:15px; }
