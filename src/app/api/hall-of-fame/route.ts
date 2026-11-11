@@ -1,5 +1,6 @@
 import {database,migrateOnce} from "@/lib/server/database";
 import {failure} from "@/lib/server/http";
+import {Buffer} from "node:buffer";
 
 const publicStates=["announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","finalized","archived","suspended"];
 const placeholders=publicStates.map(()=>"?").join(",");
@@ -7,7 +8,7 @@ const publicStatuses=new Set(publicStates);
 
 function pageNumber(value:string|null){const n=Number(value||1);return Number.isFinite(n)?Math.max(1,Math.min(10000,Math.floor(n))):1;}
 function publicTournament(row:any){
- return {slug:String(row.slug),title:String(row.title),boss:String(row.boss),format:String(row.format),status:String(row.status),capacityMin:Number(row.capacity_min),capacityMax:Number(row.capacity_max),registrationDeadline:row.registration_deadline?String(row.registration_deadline):null,timezone:String(row.timezone),rules:String(row.rules||""),publicNotice:String(row.public_notice||""),eventDate:row.event_date?String(row.event_date):null,rosterPublished:Boolean(row.roster_published),bracketPublished:Boolean(row.bracket_published),medalsPublished:Boolean(row.medals_published),updatedAt:String(row.updated_at)};
+ return {slug:String(row.slug),title:String(row.title),boss:String(row.boss),format:String(row.format),status:String(row.status),capacityMin:Number(row.capacity_min),capacityMax:Number(row.capacity_max),registrationDeadline:row.registration_deadline?String(row.registration_deadline):null,timezone:String(row.timezone),rules:String(row.rules||""),publicNotice:String(row.public_notice||""),eventDate:row.event_date?String(row.event_date):null,rosterPublished:Boolean(row.roster_published),bracketPublished:Boolean(row.bracket_published),medalsPublished:Boolean(row.medals_published),updatedAt:String(row.updated_at),artworkUrl:"/api/hall-of-fame?section=artwork&slug="+encodeURIComponent(String(row.slug))};
 }
 async function tournamentBySlug(slug:string,db:any){
  const result=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE slug=? AND status IN (${placeholders})`,args:[slug,...publicStates]});
@@ -53,6 +54,13 @@ export async function GET(request:Request){
  try{
   await migrateOnce();
   const db=database(),url=new URL(request.url),section=url.searchParams.get("section")||"overview";
+  if(section==="artwork"){
+   const slug=url.searchParams.get("slug")||"";
+   const row=await db.execute({sql:"SELECT artwork_data_url FROM hof_tournaments WHERE slug=? AND status IN ("+placeholders+")",args:[slug,...publicStates]});
+   const value=String(row.rows[0]?.artwork_data_url||""),match=value.match(/^data:(image\\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/);
+   if(!match)return new Response(null,{status:404});
+   return new Response(Buffer.from(match[2],"base64"),{headers:{"Content-Type":match[1],"Cache-Control":"public, max-age=3600, stale-while-revalidate=86400","X-Content-Type-Options":"nosniff"}});
+  }
   if(section==="participants")return Response.json(await participants((url.searchParams.get("q")||"").slice(0,50),pageNumber(url.searchParams.get("page")),url.searchParams.get("sort")||"medals",db),{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
   if(section==="archive"){
    const search=(url.searchParams.get("q")||"").slice(0,50),page=pageNumber(url.searchParams.get("page"));
