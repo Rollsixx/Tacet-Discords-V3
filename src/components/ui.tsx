@@ -5,6 +5,7 @@ const links = [
   { href: "/import", label: "Import" },
   { href: "/profiles", label: "Profiles" },
   { href: "/leaderboards", label: "Leaderboards" },
+  { href: "/hall-of-fame", label: "Hall of Fame" },
 ];
 
 export function Navigation({ pathname = "/" }: { pathname?: string }) {

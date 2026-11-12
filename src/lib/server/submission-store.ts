@@ -22,6 +22,9 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     portrait:await sharp(input.sourceImage).extract({left:22+index*374,top:650,width:192,height:182}).png().toBuffer(),
     sonata:await sharp(input.sourceImage).extract({left:264+index*374,top:660,width:56,height:56}).png().toBuffer(),
   }))) : input.slots;
+  const weaponCrop = input.sourceImage && assessment.sourceUid === input.uid
+    ? await sharp(input.sourceImage).extract({left:1450,top:444,width:145,height:140}).resize(96,96,{fit:"contain",background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
+    : null;
   let data = {
     assessment,
     character: input.character,
@@ -61,6 +64,7 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
         args: assetRows.flat(),
       });
     }
+    if(weaponCrop)await tx.execute({sql:"INSERT INTO submission_profile_assets(id,submission_id,kind,png) VALUES (?,?,?,?)",args:[`${id}-weapon`,id,"weapon",weaponCrop]});
     await tx.commit();
     let status:"pending"|"approved"="pending";
     if(requireSourceUid){

@@ -165,4 +165,59 @@ export const migrations = [
     "DROP TRIGGER IF EXISTS leaderboard_rank_submission_insert",
     `CREATE TRIGGER leaderboard_rank_submission_insert AFTER INSERT ON submissions WHEN NEW.status='approved' AND NEW.identity_verified=1 AND NEW.replaced_by IS NULL BEGIN INSERT INTO leaderboard_rank_clock(character,revision,dirty) VALUES(NEW.character,1,1) ON CONFLICT(character) DO UPDATE SET revision=revision+1,dirty=1; END`,
   ]},
+  {version:17,statements:[
+    `CREATE TABLE submission_profile_assets (
+      id TEXT PRIMARY KEY,
+      submission_id TEXT NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind='weapon'),
+      png BLOB NOT NULL CHECK(length(png) BETWEEN 50 AND 153600),
+      UNIQUE(submission_id,kind)
+    )`,
+  ]},
+  {version:18,statements:[
+    `CREATE TABLE submission_profile_overrides (
+      submission_id TEXT PRIMARY KEY REFERENCES submissions(id) ON DELETE CASCADE,
+      details TEXT NOT NULL,
+      reviewer TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+  ]},
+
+  {version:19,statements:[
+    `CREATE TABLE hof_tournaments (slug TEXT PRIMARY KEY,title TEXT NOT NULL,boss TEXT NOT NULL,format TEXT NOT NULL CHECK(format IN ('single_elimination','double_elimination')),status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','announced','registration_open','registration_closed','bracket_prepared','bracket_revealed','in_progress','results_pending','finalized','archived','suspended','cancelled')),capacity_min INTEGER NOT NULL DEFAULT 2 CHECK(capacity_min>=2),capacity_max INTEGER NOT NULL CHECK(capacity_max>=2),registration_deadline TEXT,timezone TEXT NOT NULL DEFAULT 'UTC',rules TEXT NOT NULL DEFAULT '',public_notice TEXT NOT NULL DEFAULT '',event_date TEXT,version INTEGER NOT NULL DEFAULT 1,roster_published INTEGER NOT NULL DEFAULT 0 CHECK(roster_published IN (0,1)),bracket_published INTEGER NOT NULL DEFAULT 0 CHECK(bracket_published IN (0,1)),medals_published INTEGER NOT NULL DEFAULT 0 CHECK(medals_published IN (0,1)),created_at TEXT NOT NULL,updated_at TEXT NOT NULL)`,
+    `CREATE INDEX hof_tournament_public ON hof_tournaments(status,updated_at DESC)`,
+    `CREATE TABLE hof_participants (id TEXT PRIMARY KEY,display_name TEXT NOT NULL CHECK(length(display_name) BETWEEN 1 AND 40),resonator_icon TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)`,
+    `CREATE INDEX hof_participant_name ON hof_participants(display_name COLLATE NOCASE,id)`,
+    `CREATE TABLE hof_registrations (id TEXT PRIMARY KEY,tournament_slug TEXT NOT NULL REFERENCES hof_tournaments(slug),participant_id TEXT NOT NULL REFERENCES hof_participants(id),reaction_message_ref TEXT NOT NULL,reaction_at TEXT NOT NULL,verified_by TEXT NOT NULL,verified_at TEXT NOT NULL,eligibility_note TEXT NOT NULL DEFAULT '',state TEXT NOT NULL CHECK(state IN ('confirmed','withdrawn','ineligible')),UNIQUE(tournament_slug,participant_id))`,
+    `CREATE TABLE hof_roster (tournament_slug TEXT NOT NULL REFERENCES hof_tournaments(slug),participant_id TEXT NOT NULL REFERENCES hof_participants(id),state TEXT NOT NULL CHECK(state IN ('confirmed','reserve','withdrawn')),seed_position INTEGER,reserve_order INTEGER,reserve_reason TEXT NOT NULL DEFAULT '',published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),updated_at TEXT NOT NULL,PRIMARY KEY(tournament_slug,participant_id))`,
+    `CREATE INDEX hof_roster_public ON hof_roster(tournament_slug,published,state)`,
+    `CREATE TABLE hof_matches (id TEXT PRIMARY KEY,tournament_slug TEXT NOT NULL REFERENCES hof_tournaments(slug),round_number INTEGER NOT NULL,round_label TEXT NOT NULL,match_order INTEGER NOT NULL,bracket_side TEXT NOT NULL DEFAULT 'main' CHECK(bracket_side IN ('main','upper','lower','grand_final','third_place')),participant_a TEXT REFERENCES hof_participants(id),participant_b TEXT REFERENCES hof_participants(id),state TEXT NOT NULL DEFAULT 'awaiting_competitors' CHECK(state IN ('awaiting_competitors','ready','scheduled','in_progress','result_recorded','pending_publication','published','disputed','suspended','forfeited','no_result','cancelled')),winner_id TEXT REFERENCES hof_participants(id),outcome TEXT NOT NULL DEFAULT '',scheduled_at TEXT,outcome_published INTEGER NOT NULL DEFAULT 0 CHECK(outcome_published IN (0,1)),version INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,UNIQUE(tournament_slug,round_number,match_order,bracket_side))`,
+    `CREATE INDEX hof_matches_event ON hof_matches(tournament_slug,round_number,match_order)`,
+    `CREATE TABLE hof_match_dependencies (match_id TEXT NOT NULL REFERENCES hof_matches(id),depends_on_match_id TEXT NOT NULL REFERENCES hof_matches(id),dependency_type TEXT NOT NULL CHECK(dependency_type IN ('winner','loser')),PRIMARY KEY(match_id,depends_on_match_id))`,
+    `CREATE TABLE hof_match_evidence (id TEXT PRIMARY KEY,match_id TEXT NOT NULL REFERENCES hof_matches(id),submitted_by TEXT NOT NULL,evidence_url TEXT NOT NULL DEFAULT '',note TEXT NOT NULL DEFAULT '',public_approved INTEGER NOT NULL DEFAULT 0 CHECK(public_approved IN (0,1)),created_at TEXT NOT NULL)`,
+    `CREATE TABLE hof_staff (id TEXT PRIMARY KEY,label TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('hall_of_fame_admin','organizer','referee')),token_hash TEXT NOT NULL UNIQUE,created_by TEXT NOT NULL,created_at TEXT NOT NULL,revoked_at TEXT,revoked_by TEXT)`,
+    `CREATE TABLE hof_staff_assignments (staff_id TEXT NOT NULL REFERENCES hof_staff(id),tournament_slug TEXT NOT NULL REFERENCES hof_tournaments(slug),match_id TEXT REFERENCES hof_matches(id),created_by TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(staff_id,tournament_slug,match_id))`,
+    `CREATE TABLE hof_match_claims (match_id TEXT PRIMARY KEY REFERENCES hof_matches(id),staff_id TEXT NOT NULL REFERENCES hof_staff(id),claimed_at TEXT NOT NULL,handoff_to TEXT REFERENCES hof_staff(id),handoff_requested_at TEXT)`,
+    `CREATE TABLE hof_disputes (id TEXT PRIMARY KEY,match_id TEXT NOT NULL REFERENCES hof_matches(id),opened_by TEXT NOT NULL,reason TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'open' CHECK(state IN ('open','resolved','dismissed')),resolution TEXT NOT NULL DEFAULT '',resolved_by TEXT,created_at TEXT NOT NULL,resolved_at TEXT)`,
+    `CREATE TABLE hof_medals (tournament_slug TEXT NOT NULL REFERENCES hof_tournaments(slug),medal TEXT NOT NULL CHECK(medal IN ('gold','silver','bronze')),participant_id TEXT NOT NULL REFERENCES hof_participants(id),published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),published_by TEXT,published_at TEXT,correction_of TEXT,PRIMARY KEY(tournament_slug,medal),UNIQUE(tournament_slug,participant_id))`,
+    `CREATE TABLE hof_announcements (id TEXT PRIMARY KEY,tournament_slug TEXT NOT NULL REFERENCES hof_tournaments(slug),category TEXT NOT NULL CHECK(category IN ('general','pinned','critical')),title TEXT NOT NULL,body TEXT NOT NULL,published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),published_by TEXT,published_at TEXT,updated_at TEXT NOT NULL,retracted_at TEXT)`,
+    `CREATE TABLE hof_audit_events (id TEXT PRIMARY KEY,tournament_slug TEXT,match_id TEXT,actor_id TEXT NOT NULL,actor_role TEXT NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',before_state TEXT NOT NULL DEFAULT '{}',after_state TEXT NOT NULL DEFAULT '{}',outcome TEXT NOT NULL,created_at TEXT NOT NULL)`,
+    `CREATE INDEX hof_audit_recent ON hof_audit_events(created_at DESC,id DESC)`
+  ]},
+  {version:20,statements:[
+    "ALTER TABLE hof_staff ADD COLUMN title TEXT NOT NULL DEFAULT 'bloom_bearer'",
+    "UPDATE hof_staff SET title='chief_steward' WHERE role='hall_of_fame_admin'",
+    "UPDATE hof_staff SET title='bloom_bearer' WHERE role='organizer'",
+    "UPDATE hof_staff SET title='consultant' WHERE role='referee'",
+  ]},
+  {version:21,statements:[
+    "ALTER TABLE hof_tournaments ADD COLUMN artwork_data_url TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE hof_tournaments ADD COLUMN tournament_kind TEXT NOT NULL DEFAULT 'hologram'",
+    "ALTER TABLE hof_tournaments ADD COLUMN bracket_mode TEXT NOT NULL DEFAULT 'single_elimination'"
+  ]},
+  {version:22,statements:["ALTER TABLE hof_match_dependencies ADD COLUMN target_slot TEXT NOT NULL DEFAULT ''"]},
+  {version:23,statements:[
+    "ALTER TABLE hof_roster ADD COLUMN display_name_snapshot TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE hof_roster ADD COLUMN resonator_icon_snapshot TEXT NOT NULL DEFAULT ''"
+  ]},
 ];

@@ -7,11 +7,11 @@ import {orderProfileBuildsByRank} from '../leaderboards/profile-rank-order.mjs';
 import {buildDataConsistencyReport} from '../leaderboards/consistency-report.mjs';
 import {database} from './database.ts';
 import {HttpError} from './validation.ts';
-import {featuredResonators,latestResonators} from '../resonators.ts';
+import {featuredResonators} from '../resonators.ts';
 import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 import {scoringReadiness} from './scoring-info.ts';
 import {rotationPolicyReady} from '../game-data/scoring-policies.mjs';
-import {resolveHomeFeatured} from './home-featured.mjs';
+import {HOME_FEATURED_ROTATION_MS,resolveHomeRotation} from './home-featured.mjs';
 type RankHistoryEntry={rank:number;previousRank:number|null;movement:number|null;rankSince:string|null;trackingSince?:string;bestRank?:number;bestTop1Days?:number;buildId?:string;score?:number;ign?:string;active?:boolean};
 export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean; patchMajor?: string } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
@@ -23,10 +23,10 @@ export async function listBuilds(options: { search?: string; character?: string;
   const patchSql = patchMajor ? ` AND s.character IN (${patchCharacters.map(() => "?").join(",")})` : "";
   const rankedProfile = Boolean(options.uid&&!options.includePending&&!options.pending&&!options.id);
   const result = await db.execute({
-    sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,(SELECT avatar_character FROM players p WHERE p.uid=s.uid) AS avatar_character,
+    sql: `SELECT s.id,uid,ign,character,status,created_at,reviewed_at,identity_verified,data,mpo.details AS manual_profile_details,(SELECT avatar_character FROM players p WHERE p.uid=s.uid) AS avatar_character,
       CASE WHEN s.status='approved' AND identity_verified=1 AND c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.score ELSE NULL END AS verified_score
        ,CASE WHEN c.engine_version='${ENGINE_VERSION}' AND c.data_version='${DATA_VERSION}' AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),'${POLICY_VERSION}') THEN c.details END AS current_calculation
-      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id WHERE replaced_by IS NULL AND (status=? OR (?=1 AND status IN ('pending','approved'))) AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
+      FROM submissions s LEFT JOIN calculation_results c ON c.submission_id=s.id LEFT JOIN submission_profile_overrides mpo ON mpo.submission_id=s.id WHERE replaced_by IS NULL AND (status=? OR (?=1 AND status IN ('pending','approved'))) AND (?='' OR instr(lower(ign),lower(?))>0 OR instr(uid,?)>0 OR instr(lower(s.id),lower(?))>0)
       AND (?='' OR character=?) AND (?='' OR s.id=?) AND (?='' OR uid=?)${patchSql}
       ORDER BY created_at DESC,s.id DESC ${rankedProfile?"":"LIMIT 21 OFFSET ?"}`,
     args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", ...patchCharacters, ...(rankedProfile?[]:[(page - 1) * 20])],
@@ -36,15 +36,17 @@ export async function listBuilds(options: { search?: string; character?: string;
   if(!options.includePending&&!options.pending&&(options.uid||options.id)&&builds.length){
     // This client may be an in-memory SQLite database with a single connection;
     // rank-history writes must not race one another inside Promise.all.
-    const histories=[] as Array<readonly [string, typeof builds]>;
-    for(const resonator of [...new Set(builds.map(build=>build.character))]){
-      const board=await listLeaderboard({character:resonator,search:options.uid||builds.find(build=>build.character===resonator)!.uid},db);
-      histories.push([resonator,board.builds]);
+    const resonators=[...new Set(builds.map(build=>build.character))];
+    const snapshots=await ensureFreshRankHistories(resonators,db);
+    const histories=new Map<string,RankHistoryEntry>();
+    for(const resonator of resonators){
+      const uid=options.uid||builds.find(build=>build.character===resonator)!.uid;
+      const history=snapshots.get(resonator)?.[uid];
+      if(history)histories.set(resonator,history);
     }
-    const byCharacter=new Map(histories);
     builds=builds.map(build=>{
-      const ranked=byCharacter.get(build.character)?.find(candidate=>candidate.uid===build.uid);
-      return {...build,rank:ranked?.rank??null,rankMovement:ranked?.rankMovement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.rankTrackingSince??null,rankDays:ranked?.rankDays??null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.rankHasHistory??false};
+      const ranked=histories.get(build.character);
+      return {...build,rank:ranked?.rank??null,rankMovement:ranked?.movement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.trackingSince??null,rankDays:ranked?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(ranked.rankSince))/86400000)):null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.previousRank!==null&&ranked?.previousRank!==undefined};
     });
   }
   let hasMore=rankedProfile?builds.length>page*20:result.rows.length>20;
@@ -54,7 +56,7 @@ export async function listBuilds(options: { search?: string; character?: string;
   }
   let medalStanding=null;
   if(options.uid&&!options.includePending&&!options.pending){
-    const overall=(await medalStandings(db)).players.find(player=>player.uid===options.uid);
+    const overall=(await medalStandings(db,{refresh:false})).players.find(player=>player.uid===options.uid);
     if(overall)medalStanding=overall;
   }
   const medals={top1:medalStanding?.gold||0,top2:medalStanding?.silver||0,top3:medalStanding?.bronze||0,total:medalStanding?.total||0};
@@ -63,12 +65,13 @@ export async function listBuilds(options: { search?: string; character?: string;
 }
 function publicBuild(row: Row) {
  const data=JSON.parse(String(row.data));
+ if(row.manual_profile_details){data.manualProfileDetails=JSON.parse(String(row.manual_profile_details));}
  if(row.current_calculation){data.assessment={...data.assessment,calculation:JSON.parse(String(row.current_calculation))};}
  return {
       id: String(row.id), rank: row.global_rank == null ? null : Number(row.global_rank), rankMovement:null as number|null, rankSince:null as string|null, rankTrackingSince:null as string|null, rankDays:null as number|null, bestRank:null as number|null, bestTop1Days:null as number|null, rankHasHistory:false as boolean, uid: String(row.uid), ign: String(row.ign), character: String(row.character), avatarCharacter: row.avatar_character == null ? null : String(row.avatar_character),
       status: String(row.status), createdAt: String(row.created_at), reviewedAt: row.reviewed_at,
       identityVerified: Boolean(row.identity_verified), score: row.verified_score === null ? null : Number(row.verified_score),
-      data: data as { assessment?: {eligible: boolean; awaitingRotation?:boolean; reason: string; statsVerified?:boolean; profileDetails?:{weapon?:string;talents?:number[];resonanceChain?:number}; failure?:{code?:string;message?:string;slot?:number;field?:string}; maxMainStatsVerified?:boolean; rollsVerified?:boolean; sourceSlots?:{slot:number;substats:{raw?:string;value:string}[]}[]; originalSourceSlots?:{slot:number;substats:{raw?:string;value:string}[]}[]; visualReport?:import("../scanner/scoring-readiness.ts").VisualReportSlot[]; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: Record<string,number>; displayStats?: Record<string,number>; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
+      data: data as { manualProfileDetails?:{weapon?:string;weaponKey?:string;weaponType?:string;talents?:(number|null)[];resonanceChain?:number}; assessment?: {eligible: boolean; awaitingRotation?:boolean; reason: string; statsVerified?:boolean; profileDetails?:{weapon?:string;weaponIcon?:boolean;talents?:(number|null)[];resonanceChain?:number}; failure?:{code?:string;message?:string;slot?:number;field?:string}; maxMainStatsVerified?:boolean; rollsVerified?:boolean; sourceSlots?:{slot:number;substats:{raw?:string;value:string}[]}[]; originalSourceSlots?:{slot:number;substats:{raw?:string;value:string}[]}[]; visualReport?:import("../scanner/scoring-readiness.ts").VisualReportSlot[]; calculation?: { score: number; metric: string; policyId: string; engineVersion: string; dataVersion: string; finalStats?: Record<string,number>; displayStats?: Record<string,number>; startState?: string; rotationOrigin?: string; rotation: string; weapon: string; conditions: string; identities: {echo: string; set: string; echoMatch?: {equivalentVariants?: string[]}}[] }}; slots: { slot: number; cost: { raw: string; value: string }; mainStat: { raw: string; value: string }; substats: { raw: string; value: string }[] }[] },
     }; }
 
 function parseRankState(raw:unknown):Record<string,RankHistoryEntry>{
@@ -144,6 +147,25 @@ async function ensureFreshRankHistory(character:string,db:Client,force=false):Pr
  throw new HttpError(503,"Rank history is updating. Try again shortly.");
 }
 
+async function ensureFreshRankHistories(characters:string[],db:Client):Promise<Map<string,Record<string,RankHistoryEntry>>>{
+ const unique=[...new Set(characters)];
+ if(!unique.length)return new Map();
+ await db.execute({sql:`INSERT INTO leaderboard_rank_clock(character,revision,dirty) VALUES ${unique.map(()=>"(?,1,1)").join(",")} ON CONFLICT(character) DO NOTHING`,args:unique});
+ const marks=unique.map(()=>"?").join(",");
+ const rows=await db.execute({sql:`SELECT c.character,c.revision,c.dirty,h.state,h.source_revision FROM leaderboard_rank_clock c LEFT JOIN leaderboard_rank_history h ON h.character=c.character WHERE c.character IN (${marks})`,args:unique});
+ const states=new Map<string,Record<string,RankHistoryEntry>>(),stale:string[]=[];
+ for(const row of rows.rows){
+  const character=String(row.character),revision=Number(row.revision);
+  if(Number(row.dirty)!==0||Number(row.source_revision)!==revision)stale.push(character);
+  else states.set(character,parseRankState(row.state));
+ }
+ for(const character of stale){
+  const {state}=await ensureFreshRankHistory(character,db);
+  states.set(character,state);
+ }
+ return states;
+}
+
 export async function refreshLeaderboardRankHistory(db:Client=database(),options:{force?:boolean;characters?:string[]}={}){
  const requested=options.characters?.filter(character=>SUPPORTED.includes(character))||[];
  let characters:string[];
@@ -183,8 +205,8 @@ async function loadRankedBuilds(entries:Array<{character:string;uid:string;histo
  return entries.flatMap(entry=>{const row=byId.get(String(entry.history.buildId));return row?[rankedBuild(row,entry.history)]:[];});
 }
 
-export async function medalStandings(db:Client=database()){
- await refreshLeaderboardRankHistory(db);
+export async function medalStandings(db:Client=database(),options:{refresh?:boolean}={}){
+ if(options.refresh!==false)await refreshLeaderboardRankHistory(db);
  const marks=SUPPORTED.map(()=>"?").join(",");
  const snapshots=await db.execute({sql:`SELECT character,state FROM leaderboard_rank_history WHERE character IN (${marks})`,args:SUPPORTED});
  const candidates:Array<{id:string;uid:string;ign:string;character:string;rank:number;score:number}>=[];
@@ -200,9 +222,18 @@ export async function medalStandings(db:Client=database()){
  }
  const standings=aggregateMedalStandings(candidates.map(row=>({...row,avatarCharacter:avatars.get(row.uid)||null})));
  const historyRows=standings.map(player=>({uid:player.uid,ign:player.ign,global_rank:player.rank,id:player.buildId,score:player.points,verified_score:player.points} as unknown as Row));
- const history=await synchronizeRankHistory("__medal_standings__",historyRows,db,false),now=Date.now();
- const timestamp=await db.execute({sql:"SELECT updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
- return {updatedAt:String(timestamp.rows[0]?.updated_at||new Date(now).toISOString()),players:standings.map(player=>{const saved=history?.[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
+ const now=Date.now();
+ let history:Record<string,RankHistoryEntry>|null,updatedAt:string;
+ if(options.refresh===false){
+  const saved=await db.execute({sql:"SELECT state,updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
+  history=parseRankState(saved.rows[0]?.state);
+  updatedAt=String(saved.rows[0]?.updated_at||new Date(now).toISOString());
+ }else{
+  history=await synchronizeRankHistory("__medal_standings__",historyRows,db,false);
+  const saved=await db.execute({sql:"SELECT updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
+  updatedAt=String(saved.rows[0]?.updated_at||new Date(now).toISOString());
+ }
+ return {updatedAt,players:standings.map(player=>{const saved=history?.[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
 }
 
 export async function listLeaderboard(options:{character?:string;search?:string;page?:number;rotationPolicyId?:string|null}={},db:Client=database()){
@@ -315,18 +346,41 @@ export async function homeRankings(db: Client = database()) {
  const byBuild=new Map(ranked.map(build=>[build.id,build]));
  const boards=names.map(character=>({character,players:entries.filter(entry=>entry.character===character).flatMap(entry=>{const build=byBuild.get(entry.history.buildId||"");return build?[{id:build.id,uid:build.uid,ign:build.ign,rank:build.rank!,score:build.score!}]:[]})}));
  const standings=await medalStandings(db);
- return {boards,featured:configuration.featured,topPlayers:standings.players,topPlayersUpdatedAt:standings.updatedAt};
+ return {boards,featured:configuration.featured,topPlayers:standings.players,topPlayersUpdatedAt:standings.updatedAt,nextShuffleAt:configuration.nextShuffleAt,rotationCycle:configuration.cycle,featuredThisCycle:configuration.featuredThisCycle,rotationPoolSize:configuration.poolSize};
 }
 
 export async function homeFeaturedSettings(db:Client=database()) {
  const supported=featuredResonators.map(character=>character.name);
- const fallback=latestResonators.map(character=>character.name);
- const result=await db.execute({sql:"SELECT value FROM app_settings WHERE key='home_latest_resonators'",args:[]});
- let saved:unknown;
- try{saved=JSON.parse(String(result.rows[0]?.value||'null'));}catch{saved=null;}
- const names=resolveHomeFeatured(saved,supported,fallback);
  const byName=new Map(featuredResonators.map(character=>[character.name,character]));
- return {selected:names,featured:names.map(name=>byName.get(name)!).filter(Boolean),options:featuredResonators.map(character=>({name:character.name,label:character.displayName||character.name,element:character.element}))};
+ const readSaved=async(client:Client):Promise<unknown>=>{
+  const result=await client.execute({sql:"SELECT value FROM app_settings WHERE key='home_featured_rotation_v1'",args:[]});
+  try{return JSON.parse(String(result.rows[0]?.value||'null'));}catch{return null;}
+ };
+ let saved=await readSaved(db);
+ let resolved=resolveHomeRotation(saved,supported,Date.now());
+ if(resolved.changed&&resolved.state){
+  const tx=await db.transaction("write");
+  try{
+   saved=await readSaved(tx as unknown as Client);
+   resolved=resolveHomeRotation(saved,supported,Date.now());
+   if(resolved.changed&&resolved.state){
+    await tx.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('home_featured_rotation_v1',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[JSON.stringify(resolved.state),new Date().toISOString()]});
+   }
+   await tx.commit();
+  }finally{tx.close();}
+ }
+ const state=resolved.state;
+ const names=state?.featured||[];
+ return {
+  selected:names,
+  featured:names.map(name=>byName.get(name)!).filter(Boolean),
+  options:featuredResonators.map(character=>({name:character.name,label:character.displayName||character.name,element:character.element})),
+  nextShuffleAt:state?new Date(state.nextShuffleAt).toISOString():null,
+  cycle:state?.cycle||1,
+  featuredThisCycle:state?.played.length||0,
+  poolSize:state?.pool.length||supported.length,
+  rotationIntervalMs:HOME_FEATURED_ROTATION_MS,
+ };
 }
 
 export async function listAdminPlayers(options:{search?:string;character?:string;page?:number}={},db:Client=database()){

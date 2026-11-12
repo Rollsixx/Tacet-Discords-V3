@@ -1,42 +1,42 @@
 "use client";
-import {useEffect,useState,type FormEvent} from 'react';
+import {useEffect,useState} from 'react';
 
-type Option={name:string;label:string;element:string};
-type Settings={selected:string[];options:Option[]};
+type Featured={name:string;displayName?:string;element:string};
+type Settings={featured:Featured[];cycle:number;featuredThisCycle:number;poolSize:number;nextShuffleAt:string|null;joinContestUrl?:string|null};
 
 export function HomeFeaturedSettings({token}:{token:string}){
  const [settings,setSettings]=useState<Settings|null>(null);
- const [selected,setSelected]=useState<string[]>([]);
- const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
- const [message,setMessage]=useState('');
+ const [invite,setInvite]=useState('');
+ const [inviteStatus,setInviteStatus]=useState('');
+ const [savingInvite,setSavingInvite]=useState(false);
 
  useEffect(()=>{
   const controller=new AbortController();
   void fetch('/api/admin/home-featured',{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:controller.signal})
-   .then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load Home settings.');return data as Settings;})
-   .then(data=>{if(!controller.signal.aborted){setSettings(data);setSelected(data.selected);}})
-   .catch(cause=>{if(cause.name!=='AbortError')setError(cause instanceof Error?cause.message:'Could not load Home settings.');});
+   .then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load rotation status.');return data as Settings;})
+   .then(data=>{if(!controller.signal.aborted){setSettings(data);setInvite(data.joinContestUrl||'');}})
+   .catch(cause=>{if(cause.name!=='AbortError')setError(cause instanceof Error?cause.message:'Could not load rotation status.');});
   return()=>controller.abort();
  },[token]);
 
- async function save(event:FormEvent){
-  event.preventDefault();setBusy(true);setError('');setMessage('');
-  try{
-   const response=await fetch('/api/admin/home-featured',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({names:selected})});
-   const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not save Home settings.');
-   setSettings(data);setSelected(data.selected);setMessage('The Home page now shows these three Resonators.');
-  }catch(cause){setError(cause instanceof Error?cause.message:'Could not save Home settings.');}
-  finally{setBusy(false);}
- }
-
  return <section className="bs-panel" aria-labelledby="home-featured-heading">
-  <div className="bs-panel-heading"><div><h2 id="home-featured-heading">Three Latest Resonators</h2><p>Choose which supported Resonators appear on the public Home page. Changes take effect without a code edit.</p></div></div>
-  {error&&<p className="field-error" role="alert">{error}</p>}{message&&<p className="bs-success" role="status">✓ {message}</p>}
-  {!settings?<p role="status">Loading Resonators…</p>:<form onSubmit={save}>
-   <div className="bs-review-fields">{[0,1,2].map(index=><label className="field" key={index}><span>Home position {index+1}</span><select aria-label={`Home Resonator ${index+1}`} value={selected[index]||''} disabled={busy} required onChange={event=>setSelected(current=>current.map((name,position)=>position===index?event.target.value:name))}><option value="" disabled>Choose a Resonator</option>{settings.options.map(option=><option key={option.name} value={option.name} disabled={selected.some((name,position)=>position!==index&&name===option.name)}>{option.label} · {option.element}</option>)}</select></label>)}</div>
-   <p className="bs-action-help">Future Resonators can be selected here after they are added to the supported roster and have a portrait.</p>
-   <button className="action" disabled={busy||selected.length!==3||new Set(selected).size!==3}>{busy?'Saving…':'Save Home Resonators'}</button>
-  </form>}
+  <style jsx global>{`.bs-home-invite{margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}.bs-home-invite h3{margin:0 0 7px;font-size:15px}.bs-home-invite>p{margin:0 0 14px;color:var(--muted);font-size:12px}.bs-home-invite-form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px}.bs-home-invite-form .field{margin:0}.bs-home-invite-form input{width:100%;height:43px;border:1px solid var(--border);border-radius:8px;background:#0c1420;color:var(--text);padding:10px 12px;font:inherit;font-size:12px}.bs-home-invite-form .action{min-height:43px;padding:0 16px;border:1px solid #385777;border-radius:8px;background:#1b3047;color:#e4f2ff;font:inherit;font-size:12px;font-weight:700;cursor:pointer}.bs-home-invite-form .action:disabled{opacity:.6;cursor:wait}@media(max-width:650px){.bs-home-invite-form{grid-template-columns:1fr}.bs-home-invite-form .action{justify-self:start}}`}</style>
+  <div className="bs-panel-heading"><div><h2 id="home-featured-heading">Featured Resonator Rotation</h2><p>The Home page rotates three supported Resonators every three days. Each Resonator appears once per cycle before the next shuffle begins.</p></div></div>
+  {error&&<p className="field-error" role="alert">{error}</p>}
+  {!settings?<p role="status">Loading rotation status…</p>:<>
+   <div className="bs-review-fields">{settings.featured.map((character,index)=><div className="field" key={character.name}><span>Featured {index+1}</span><strong>{character.displayName||character.name} · {character.element}</strong></div>)}</div>
+   <p className="bs-action-help">Cycle {settings.cycle} · {settings.featuredThisCycle} of {settings.poolSize} Resonators featured.</p>
+   {settings.nextShuffleAt&&<p className="bs-action-help">Next shuffle: <time dateTime={settings.nextShuffleAt}>{new Date(settings.nextShuffleAt).toLocaleString()}</time></p>}
+   <div className="bs-home-invite">
+    <h3>Hall of Fame · Join Contest link</h3>
+    <p>Set the current Discord invite here. You can replace it any time the invite expires.</p>
+    <form className="bs-home-invite-form" onSubmit={async event=>{event.preventDefault();setSavingInvite(true);setInviteStatus('');try{const response=await fetch('/api/admin/home-featured',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({joinContestUrl:invite.trim()})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the contest invite.');setInvite(result.joinContestUrl||'');setInviteStatus('Contest invite saved.');}catch(cause){setInviteStatus(cause instanceof Error?cause.message:'Could not save the contest invite.');}finally{setSavingInvite(false);}}}>
+     <label className="field"><span>Discord invite URL</span><input type="url" value={invite} onChange={event=>setInvite(event.target.value)} placeholder="https://discord.gg/your-invite" maxLength={500} /></label>
+     <button className="action" type="submit" disabled={savingInvite}>{savingInvite?'Saving…':'Save invite URL'}</button>
+    </form>
+    {inviteStatus&&<p className="bs-action-help" role="status">{inviteStatus}</p>}
+   </div>
+  </>}
  </section>;
 }

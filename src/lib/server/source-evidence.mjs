@@ -148,22 +148,55 @@ async function readProfileDetails(worker,readResult,decoded){
    {left:1184,top:588,width:105,height:30},
   ];
   await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'LV0123456789/'});
-  const reads=[];for(const region of nodes)reads.push(await readResult(region,{scale:4,linear:true}));
-  const talents=reads.map(({data})=>{const match=data.text.replace(/\s+/g,'').toUpperCase().match(/LV(\d{1,2})\/10/);return match?Number(match[1]):null;});
-  await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 &-.'});
-  const weaponRead=await readResult({left:1590,top:455,width:230,height:46},{scale:4,linear:true});
-  const weapon=weaponRead.data.text.replace(/[^\p{L}\p{N} '&-]/gu,'').replace(/\s+/g,' ').trim();
-  const safeWeapon=weapon.length>=3&&weapon.length<=40&&!/^(LV|Level|Ascension|Attack)/i.test(weapon)?weapon:undefined;
-  const crop=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).extract({left:102,top:548,width:556,height:82}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
-  let resonanceChain=0,chainPixels=0;
-  for(let node=0;node<6;node++){
-   const left=Math.round(node*crop.info.width/6),right=Math.round((node+1)*crop.info.width/6);let gold=0;
-   for(let y=0;y<crop.info.height;y++)for(let x=left;x<right;x++){
-    const i=(y*crop.info.width+x)*4,r=crop.data[i],g=crop.data[i+1],b=crop.data[i+2];
-    if(r>150&&g>105&&r>g*1.08&&b<165)gold++;
+  const parseTalent=text=>{
+   const match=text.replace(/\s+/g,'').toUpperCase().match(/L[VY]?(\d{1,2})\/?10/);
+   if(!match)return null;
+   const level=Number(match[1]);
+   return level>=1&&level<=10?level:null;
+  };
+  const talents=[];
+  for(const region of nodes){
+   const reading=await readResult(region,{scale:4,linear:true});
+   let level=parseTalent(reading.text);
+   if(level===null){
+    const alternatives=[
+     await readResult(region,{scale:5,linear:true}),
+     await readResult(region,{scale:4,linear:true,padded:true}),
+    ];
+    const recovered=alternatives.map(candidate=>({level:parseTalent(candidate.text),confidence:candidate.confidence||0})).filter(candidate=>candidate.level!==null).sort((a,b)=>b.confidence-a.confidence)[0];
+    level=recovered?.level??null;
    }
-   chainPixels+=gold;if(gold>75)resonanceChain++;
+   talents.push(level);
   }
-  return {...(safeWeapon?{weapon:safeWeapon}:{}),...(talents.every(level=>level!==null&&level>=1&&level<=10)?{talents}:{}),...(chainPixels>150?{resonanceChain}:{})};
+  await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 &-.'});
+  const parseWeapon=text=>{
+   const value=text.replace(/[^\p{L}\p{N} '&-]/gu,'').replace(/\s+/g,' ').trim();
+   return value.length>=3&&value.length<=40&&!/^(LV|Level|Ascension|Attack)/i.test(value)?value:undefined;
+  };
+  const weaponRegion={left:1590,top:455,width:230,height:46};
+  const weaponRead=await readResult(weaponRegion,{scale:4,linear:true});
+  let weapon=parseWeapon(weaponRead.text);
+  if(!weapon||(weaponRead.confidence||0)<45){
+   const alternatives=[
+    await readResult(weaponRegion,{scale:5,linear:true}),
+    await readResult(weaponRegion,{scale:4,linear:true,padded:true}),
+   ];
+   const recovered=alternatives.map(candidate=>({weapon:parseWeapon(candidate.text),confidence:candidate.confidence||0})).filter(candidate=>candidate.weapon).sort((a,b)=>b.confidence-a.confidence)[0];
+   if(recovered&&(!weapon||recovered.confidence>(weaponRead.confidence||0)))weapon=recovered.weapon;
+  }
+  // Count the illuminated glyph at each emblem's center. The gold border is
+  // present on empty nodes too, so border pixels cannot indicate a sequence.
+  const chainImage=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  let resonanceChain=0;
+  const chainCenters=[190,270,350,430,510,590];
+  for(const centerX of chainCenters){
+   let glow=0;
+   for(let y=557;y<580;y++)for(let x=centerX-11;x<=centerX+11;x++){
+    const i=(y*chainImage.info.width+x)*4,r=chainImage.data[i],g=chainImage.data[i+1],b=chainImage.data[i+2];
+    if(r>=168&&g>=168&&b>=168&&Math.max(r,g,b)-Math.min(r,g,b)<48)glow++;
+   }
+   if(glow>=12)resonanceChain++;else break;
+  }
+  return {...(weapon?{weapon}:{}),...(talents.some(level=>level!==null)?{talents}:{}),resonanceChain};
  }catch{return undefined;}
 }

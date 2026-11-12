@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { BuildComparison } from "./build-comparison";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -10,6 +11,7 @@ import { ResonatorPortrait } from "./resonator-portrait";
 import { defaultLeaderboardColumns, formatLeaderboardMetric } from "@/lib/leaderboards/metrics.mjs";
 import type { listBuilds } from "@/lib/server/queries";
 import { compactNumber, echoCritValue, mainStatAmount, readableName, shortStat } from "@/lib/leaderboards/display";
+import { weaponImageUrl } from "@/lib/weapons/catalog";
 const resonatorSplashArt: Record<string,string> = {
   Aemeath: "/resonator-splash/Aemeath_Splash_Art.webp",
   Augusta: "/resonator-splash/Augusta_Splash_Art.webp",
@@ -95,6 +97,7 @@ const resonatorSpriteArt: Record<string,string> = {
 type Build=Awaited<ReturnType<typeof listBuilds>>['builds'][number];
 export function PublicImage({src,alt,className}:{src:string;alt:string;className:string}){
  const [failed,setFailed]=useState(false);
+ useEffect(()=>{setFailed(false);},[src]);
  return failed?<span className={`${className} lb-image-missing`} role="img" aria-label={alt+' unavailable'}>—</span>:
  // eslint-disable-next-line @next/next/no-img-element
  <img className={className} src={src} alt={alt} loading="lazy" onError={()=>setFailed(true)} />;
@@ -112,10 +115,18 @@ function ProfileActionIcon({kind,src}:{kind:string;src?:string}){
  };
  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{glyphs[kind]||glyphs.Chain}</svg>;
 }
+function ProfileWeaponIcon({buildId,alt,weaponKey}:{buildId:string;alt:string;weaponKey?:string}){
+ const [failed,setFailed]=useState(false);
+ const src=weaponKey?weaponImageUrl(weaponKey):`/api/assets/${buildId}-weapon`;
+ useEffect(()=>{setFailed(false);},[src]);
+ return failed?<span className="profile-build-weapon-icon" role="img" aria-label={alt+" unavailable"}>⚔</span>:
+ // eslint-disable-next-line @next/next/no-img-element
+ <img className="profile-build-weapon-icon profile-build-weapon-image" src={src} alt={alt} loading="lazy" onError={()=>setFailed(true)}/>;
+}
 export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?:boolean;detailId?:string}){
  const calculation=build.data.assessment?.calculation;
  const stats=calculation?.displayStats||calculation?.finalStats;
- const profileDetails=build.data.assessment?.profileDetails;
+ const profileDetails={...build.data.assessment?.profileDetails,...build.data.manualProfileDetails};
  const resonator=featuredResonators.find(item=>item.name===build.character)||featuredResonators[0];
  const splashArt=resonatorSplashArt[build.character];
  const metrics=defaultLeaderboardColumns(resonator);
@@ -134,22 +145,23 @@ export function EchoDetails({build,profile=false,detailId}:{build:Build;profile?
   })}</div>
  </>;
  return <section className={`lb-expanded${profile?' profile-build-card':''}`} id={'echo-details-'+(detailId||build.id)} aria-label={`${build.ign} Echo build`} style={profile&&splashArt?{backgroundImage:`linear-gradient(110deg,rgba(8,14,20,.34),rgba(8,14,20,.18) 58%,rgba(8,14,20,.28)),url("${splashArt}")`}:undefined}>
-  {profile?<header className="profile-build-header"><div className="profile-build-heading-copy"><span className="profile-build-kicker">WUTHERING WAVES · RESONATOR BUILD</span><div className="profile-build-title-line profile-build-hero-copy"><h2>{build.character}</h2><div className="profile-build-rank-pills"><span><small>Current rank</small><strong>{build.rank===null?"Unranked":"#"+build.rank}</strong></span><span><small>Best rank</small><strong>{build.bestRank===null||build.bestRank===undefined?"—":"#"+build.bestRank}</strong></span>{build.bestRank===1&&<span className="profile-build-tenure"><small>Top-one tenure</small><strong>{build.bestTop1Days?`Held #1 for ${build.bestTop1Days} days`:build.rank===1?`Currently #1 for ${build.rankDays??0} days`:"Tracking started"}</strong></span>}</div></div><p>{build.ign} <span>·</span> UID {build.uid} <span>·</span> Submitted {new Date(build.createdAt).toLocaleDateString()}</p></div></header>:<header className="lb-expanded-heading"><div><span className="eyebrow">{build.character} · {build.ign}</span><div className="lb-resonator-achievements"><ResonatorPortrait name={build.character} className="lb-achievement-portrait"/><span>Current rank <strong>{build.rank===null?"Unranked":"#"+build.rank}</strong></span><span>Best rank <strong>{build.bestRank===null||build.bestRank===undefined?"—":"#"+build.bestRank}</strong></span>{build.bestRank===1&&<small>{build.bestTop1Days?`Longest #1 run ${build.bestTop1Days} days`:build.rank===1?`Currently #1 for ${build.rankDays??0} days`:"Top-one tenure tracking started"}</small>}</div><h2>Equipped Echoes</h2><p>UID {build.uid} · Submitted {new Date(build.createdAt).toLocaleDateString()}</p></div><Link className="outline-button" href={`/profiles?uid=${build.uid}&build=${build.id}`}>View profile ↗</Link></header>}
+  {profile?<header className="profile-build-header"><div className="profile-build-heading-copy"><span className="profile-build-kicker">WUTHERING WAVES · RESONATOR BUILD</span><div className="profile-build-title-line profile-build-hero-copy"><h2>{build.character}</h2><div className="profile-build-rank-pills"><span><small>Current rank</small><strong>{build.rank===null?"Unranked":"#"+build.rank}</strong></span><span><small>Best rank</small><strong>{build.bestRank===null||build.bestRank===undefined?"—":"#"+build.bestRank}</strong></span>{build.bestRank===1&&<span className="profile-build-tenure"><small>Top-one tenure</small><strong>{build.bestTop1Days?`Held #1 for ${build.bestTop1Days} days`:build.rank===1?`Currently #1 for ${build.rankDays??0} days`:"Tracking started"}</strong></span>}</div></div><p>{build.ign} <span>·</span> UID {build.uid} <span>·</span> Submitted {new Date(build.createdAt).toLocaleDateString()}</p></div></header>:<header className="lb-expanded-heading"><div><span className="eyebrow">{build.character} · {build.ign}</span><div className="lb-resonator-achievements"><ResonatorPortrait name={build.character} className="lb-achievement-portrait"/><span>Current rank <strong>{build.rank===null?"Unranked":"#"+build.rank}</strong></span><span>Best rank <strong>{build.bestRank===null||build.bestRank===undefined?"—":"#"+build.bestRank}</strong></span>{build.bestRank===1&&<small>{build.bestTop1Days?`Longest #1 run ${build.bestTop1Days} days`:build.rank===1?`Currently #1 for ${build.rankDays??0} days`:"Top-one tenure tracking started"}</small>}</div><h2>Equipped Echoes</h2><p>UID {build.uid} · Submitted {new Date(build.createdAt).toLocaleDateString()}</p></div><div className="lb-expanded-actions"><BuildComparison own={build} compact ownLabel="Selected build"/><Link className="outline-button" href={`/profiles?uid=${build.uid}&build=${build.id}`}>View profile ↗</Link></div></header>}
   {profile&&<div className="profile-build-layout">
    <aside className="profile-build-left">
     <section className="profile-build-sprite-card" aria-label={`${build.character} Resonator sprite`}>
      <div className="profile-build-sprite-art">{resonatorSpriteArt[build.character]?<img src={resonatorSpriteArt[build.character]} alt={`${build.character} full character sprite`} />:<ResonatorPortrait name={build.character} className="profile-build-artwork"/>}</div>
      <div className="profile-build-sprite-name"><span>{resonator?.element||"Resonator"}</span><h3>{build.character}</h3><p>{build.ign} · UID {build.uid}</p></div>
     </section>
-    <section className="profile-build-weapon-card"><span className="profile-build-card-label">Equipped weapon</span><span className="profile-build-weapon-icon" aria-hidden="true">⚔</span><strong>{profileDetails?.weapon||"Not recorded"}</strong><small>{profileDetails?.weapon?"Read from submitted build":"Weapon details weren’t readable in this scan."}</small></section>
+    <section className="profile-build-weapon-card"><span className="profile-build-card-label">Equipped weapon</span><ProfileWeaponIcon buildId={build.id} weaponKey={profileDetails?.weaponKey} alt={`${profileDetails?.weapon||"Equipped weapon"} icon`}/><strong>{profileDetails?.weapon||"Not recorded"}</strong><small>{profileDetails?.weapon?"Read from submitted build":"Weapon details weren’t readable in this scan."}</small></section>
     <section className="profile-build-cv-card"><span className="profile-build-card-label">Overall Echo CV</span><strong>{cv.toFixed(1)}</strong><small>Combined Echo crit value</small></section>
+    <BuildComparison own={build}/>
    </aside>
    <main className="profile-build-main">
     <div className="profile-build-top-panels">
      <section className="profile-build-info-card profile-build-substats-card"><h3>Substats</h3><dl>{chip("Crit. Rate","/stat-icons/critrate.png",compactNumber(stats?.totalCritRate,true))}{chip("Crit. DMG","/stat-icons/critdamage.png",compactNumber(stats?.totalCritDMG,true))}{chip("HP","/stat-icons/hp.png",compactNumber(stats?.totalHp))}{chip("ATK","/stat-icons/atk.png",compactNumber(stats?.totalAtk))}{chip("DEF","/stat-icons/def.png",compactNumber(stats?.totalDef))}{chip(metrics.attribute.label,metrics.attribute.icon,formatLeaderboardMetric(stats?.[metrics.attribute.field],metrics.attribute.percent,metrics.attribute.field))}{chip("Energy Regen","/stat-icons/energyregen.png",compactNumber(stats?.energyRegen,true))}{chip(metrics.damage.label,metrics.damage.icon,formatLeaderboardMetric(stats?.[metrics.damage.field],metrics.damage.percent,metrics.damage.field))}</dl></section>
      <div className="profile-build-side-panels">
       <section className="profile-build-info-card profile-build-chain-card"><h3><ResonatorPortrait name={build.character} className="profile-build-chain-portrait"/>Resonance Chain</h3><div className="profile-build-sequence">{Array.from({length:6},(_,i)=><span key={i} className={profileDetails?.resonanceChain!==undefined&&i<profileDetails.resonanceChain?"is-active":""}><i><ProfileActionIcon kind="Chain" src={profileResonatorActionIcons[build.character]?.chain[i]||undefined}/></i><b>{`S${i+1}`}</b></span>)}</div><small>{profileDetails?.resonanceChain===undefined?"Sequence level not recorded":`Sequence ${profileDetails.resonanceChain}`}</small></section>
-      <section className="profile-build-info-card profile-build-skills-card"><h3>Skills</h3><div className="profile-build-skills">{["Normal","Skill","Forte","Liberation","Intro"].map((name,index)=><div key={name}><span><ProfileActionIcon kind={name} src={profileResonatorActionIcons[build.character]?.skills[name as ProfileActionName]}/></span><strong>{profileDetails?.talents?.length===5?`${profileDetails.talents[index]}/10`:"—"}</strong><small>{name}</small></div>)}</div></section>
+      <section className="profile-build-info-card profile-build-skills-card"><h3>Skills</h3><div className="profile-build-skills">{[{name:"Normal",index:0},{name:"Skill",index:1},{name:"Forte",index:2},{name:"Liberation",index:4},{name:"Intro",index:3}].map(({name,index})=><div key={name}><span><ProfileActionIcon kind={name} src={profileResonatorActionIcons[build.character]?.skills[name as ProfileActionName]}/></span><strong>{profileDetails?.talents?.[index]!==undefined&&profileDetails.talents[index]!==null?`${profileDetails.talents[index]}/10`:"—"}</strong><small>{name}</small></div>)}</div></section>
      </div>
     </div>
     <h3 className="profile-build-section-title profile-build-echo-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3>
