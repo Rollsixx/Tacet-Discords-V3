@@ -1,5 +1,5 @@
 "use client";
-import {useState} from 'react';
+import {useState,type KeyboardEvent} from 'react';
 import {ActionEffects,type Effect,type Modifier,type EchoOption,type SonataOption} from './rotation-effects';
 import {attackId,matchMoveLines,movesWithinLimits,expandMove,type Move,type Attack} from '@/lib/rotations/moves';
 type Props={actions:Move[];catalog:Attack[];reviewed:boolean;defaults?:Effect[];modifiers:Modifier[];references:Modifier[];echoes:EchoOption[];sonatas:SonataOption[];onChange:(actions:Move[])=>void};
@@ -9,7 +9,7 @@ export function RotationMoves({actions,catalog,reviewed,defaults,modifiers,refer
  const filtered=catalog.filter(a=>(a.label+' '+a.type+' '+a.key).toLowerCase().includes(query.trim().toLowerCase()));
  const chosen=catalog.find(a=>attackId(a)===selected);
  function chooseAttack(a:Attack){setSelected(attackId(a));setQuery(a.label);setPickerOpen(false);setActiveIndex(0);}
- function handlePickerKey(event:React.KeyboardEvent<HTMLInputElement>){
+ function handlePickerKey(event:KeyboardEvent<HTMLInputElement>){
   if(event.key==='ArrowDown'){event.preventDefault();setPickerOpen(true);setActiveIndex(index=>Math.min(index+1,Math.max(0,filtered.length-1)));}
   else if(event.key==='ArrowUp'){event.preventDefault();setPickerOpen(true);setActiveIndex(index=>Math.max(0,index-1));}
   else if(event.key==='Enter'){event.preventDefault();if(pickerOpen&&filtered[activeIndex])chooseAttack(filtered[activeIndex]);else add();}
