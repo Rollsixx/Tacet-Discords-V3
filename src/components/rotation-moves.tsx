@@ -1,22 +1,39 @@
 "use client";
-import {useState} from 'react';
+import {useState,type KeyboardEvent} from 'react';
 import {ActionEffects,type Effect,type Modifier,type EchoOption,type SonataOption} from './rotation-effects';
 import {attackId,matchMoveLines,movesWithinLimits,expandMove,type Move,type Attack} from '@/lib/rotations/moves';
 type Props={actions:Move[];catalog:Attack[];reviewed:boolean;defaults?:Effect[];modifiers:Modifier[];references:Modifier[];echoes:EchoOption[];sonatas:SonataOption[];onChange:(actions:Move[])=>void};
 export function RotationMoves({actions,catalog,reviewed,defaults,modifiers,references,echoes,sonatas,onChange}:Props){
- const [query,setQuery]=useState(''),[selected,setSelected]=useState(''),[repeat,setRepeat]=useState(1),[paste,setPaste]=useState(''),[picks,setPicks]=useState<Record<number,string>>({}),[error,setError]=useState('');
+ const [query,setQuery]=useState(''),[selected,setSelected]=useState(''),[repeat,setRepeat]=useState(1),[pickerOpen,setPickerOpen]=useState(false),[activeIndex,setActiveIndex]=useState(0),[paste,setPaste]=useState(''),[picks,setPicks]=useState<Record<number,string>>({}),[error,setError]=useState('');
  const [source,setSource]=useState(1),[start,setStart]=useState(1),[end,setEnd]=useState(1);
- const filtered=catalog.filter(a=>(a.label+' '+a.type+' '+a.key).toLowerCase().includes(query.toLowerCase()));
- const visibleCatalog=filtered.slice(0,12);
+ const filtered=catalog.filter(a=>(a.label+' '+a.type+' '+a.key).toLowerCase().includes(query.trim().toLowerCase()));
+ const chosen=catalog.find(a=>attackId(a)===selected);
+ function chooseAttack(a:Attack){setSelected(attackId(a));setQuery(a.label);setPickerOpen(false);setActiveIndex(0);}
+ function handlePickerKey(event:KeyboardEvent<HTMLInputElement>){
+  if(event.key==='ArrowDown'){event.preventDefault();setPickerOpen(true);setActiveIndex(index=>Math.min(index+1,Math.max(0,filtered.length-1)));}
+  else if(event.key==='ArrowUp'){event.preventDefault();setPickerOpen(true);setActiveIndex(index=>Math.max(0,index-1));}
+  else if(event.key==='Enter'){event.preventDefault();if(pickerOpen&&filtered[activeIndex])chooseAttack(filtered[activeIndex]);else add();}
+  else if(event.key==='Escape'){setPickerOpen(false);}
+ }
  const lines=matchMoveLines(paste,catalog),resolved=lines.map((l,i)=>l.candidates.find(a=>attackId(a)===(picks[i]||(l.candidates.length===1?attackId(l.candidates[0]):''))));
  const pasted=lines.every(l=>l.valid)&&resolved.every(Boolean)?resolved.flatMap((a,i)=>expandMove(a!,lines[i].count)):[];
  function commit(next:Move[]){if(!movesWithinLimits(next)){setError('Use at most 100 move rows and 200 total repeats.');return;}setError('');onChange(next);}
- function add(){const a=catalog.find(a=>attackId(a)===selected)||(filtered.length===1?filtered[0]:undefined);if(a&&Number.isInteger(repeat)&&repeat>=1&&repeat<=20){commit([...actions,...expandMove(a,repeat)]);}}
+ function add(){const a=catalog.find(a=>attackId(a)===selected);if(a&&Number.isInteger(repeat)&&repeat>=1&&repeat<=20){commit([...actions,...expandMove(a,repeat)]);setSelected('');setQuery('');setPickerOpen(false);}}
  const validRange=[source,start,end].every(n=>Number.isInteger(n)&&n>=1&&n<=actions.length)&&start<=end;
  function range(reset:boolean){if(!validRange)return;const effects=actions[source-1].effects||[];const next=actions.map((a,i)=>i+1<start||i+1>end?a:{...a,effects:reset?[]:[...new Map([...(a.effects||[]),...effects].map(e=>[e.id,{...e}])).values()]});if(next.some(a=>(a.effects?.length||0)>60)){setError('The copied overrides would exceed 60 effects on a move.');return;}commit(next);}
  return <section className="rotation-moves" aria-label="Moveset editor"><h3>Moveset</h3><p className="muted">{defaults!==undefined?'Add the moves; each follows rotation defaults unless you set an advanced override.':'Legacy move effects remain unchanged.'} Repeats share one configuration.</p>
-  <label className="field"><span>Search moves</span><input type="search" aria-label="Search moves" placeholder="Attack name or category…" value={query} onChange={e=>{setQuery(e.target.value);setSelected('');}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add();}}}/></label><p className="muted">{query?`${filtered.length} matches · showing up to 12`:`Search ${catalog.length} verified moves · showing the first 12`}</p>
-  <div className="rotation-add"><label className="field"><span>Add verified attack data</span><select aria-label="Add verified attack data" value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Choose an attack…</option>{visibleCatalog.map(a=><option key={attackId(a)} value={attackId(a)}>{a.type} · {a.label}</option>)}</select></label><label className="field"><span>Repeats</span><input aria-label="Repeats for new move" type="number" min={1} max={20} value={repeat} onChange={e=>setRepeat(Number(e.target.value))}/></label><button type="button" className="outline-button" disabled={(!selected&&filtered.length!==1)||!Number.isInteger(repeat)||repeat<1||repeat>20||actions.length>=100} onClick={add}>Add attack</button></div>
+  <div className="rotation-add">
+   <div className="field rotation-attack-picker">
+    <label htmlFor="rotation-attack-search">Add verified attack data</label>
+    <input id="rotation-attack-search" type="search" role="combobox" aria-label="Search verified attacks" aria-autocomplete="list" aria-expanded={pickerOpen} aria-controls="rotation-attack-options" placeholder="Search or choose an attack…" value={pickerOpen?query:(chosen?chosen.type+' · '+chosen.label:query)} onFocus={()=>{if(!selected){setQuery('');setActiveIndex(0);}setPickerOpen(true);}} onChange={e=>{setQuery(e.target.value);setSelected('');setActiveIndex(0);setPickerOpen(true);}} onKeyDown={handlePickerKey}/>
+    <small className="rotation-picker-hint">{catalog.length} verified attacks · {filtered.length} shown{filtered.length>8?' · scroll list to browse':''}</small>
+    {pickerOpen&&<div id="rotation-attack-options" className="rotation-attack-options" role="listbox" aria-label="Verified attacks">
+     {filtered.length?filtered.map((a,index)=><button type="button" role="option" aria-selected={selected===attackId(a)||activeIndex===index} className={'rotation-attack-option'+(selected===attackId(a)?' is-selected':'')} key={attackId(a)} onMouseDown={event=>event.preventDefault()} onClick={()=>chooseAttack(a)}><span className="rotation-attack-type">{a.type}</span><span className="rotation-attack-name">{a.label}</span><span className="rotation-attack-coefficient">{a.coefficient||'—'}</span></button>):<p className="rotation-attack-empty">No verified attacks match that search.</p>}
+    </div>}
+   </div>
+   <label className="field rotation-repeat-field"><span>Repeats</span><input aria-label="Repeats for new move" type="number" min={1} max={20} value={repeat} onChange={e=>setRepeat(Number(e.target.value))}/></label>
+   <button type="button" className="outline-button rotation-add-button" disabled={!selected||!Number.isInteger(repeat)||repeat<1||repeat>20||actions.length>=100} onClick={add}>Add attack</button>
+  </div>
   <details className="rotation-paste"><summary>Paste a moveset</summary><p className="muted">One verified attack name per line. Append x3 for repeats; use a category prefix such as skill: when needed. Resolve every line before adding.</p><textarea aria-label="Paste moveset" rows={5} value={paste} onChange={e=>{setPaste(e.target.value);setPicks({});setError('');}} placeholder="Exact attack name x3"/>
   {lines.map((l,i)=><div className="rotation-paste-line" key={i}><strong>{l.raw}</strong>{!l.valid?<span className="field-error">Repeat count must be 1–200.</span>:l.candidates.length===1?<span>{l.candidates[0].type} · {l.candidates[0].label} ×{l.count}</span>:<label className="field"><span>{l.candidates.length?'Choose the intended attack':'No match — edit this line'}</span><select aria-label={'Resolve pasted move '+(i+1)} value={picks[i]||''} onChange={e=>setPicks({...picks,[i]:e.target.value})}><option value="">Select a verified attack…</option>{l.candidates.map(a=><option key={attackId(a)} value={attackId(a)}>{a.type} · {a.label}</option>)}</select></label>}</div>)}
   <button type="button" className="outline-button" disabled={!lines.length||!pasted.length||!movesWithinLimits([...actions,...pasted])} onClick={()=>{commit([...actions,...pasted]);setPaste('');setPicks({});}}>Add pasted moves</button></details>
