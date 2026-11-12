@@ -1,0 +1,254 @@
+/* Black Shores workspace. Scope every rule to the admin route. */
+.blackshores-root .bs-console {
+  --background:#0c1015; --surface:#13191f; --surface-raised:#1a232b;
+  --text:#edf3f5; --muted:#a1b0bb; --border:#2a363f; --line:#2a363f; --accent:#80dfd2;
+  color:var(--text); background:var(--background); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:14px; line-height:1.6; letter-spacing:0;
+}
+.blackshores-root .bs-console *, .blackshores-root .bs-console *::before, .blackshores-root .bs-console *::after { box-sizing:border-box; }
+.blackshores-root .bs-console :is(button,input,select,textarea) { font:inherit; }
+.blackshores-root .bs-console :is(button,a,input,select,textarea,summary):focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+.blackshores-root .bs-console :is(button,input,select,textarea):disabled { opacity:.45; cursor:not-allowed; }
+.blackshores-root .bs-console :is(h1,h2,h3,p) { overflow-wrap:break-word; }
+.blackshores-root .bs-console h2 { font-size:17px; line-height:1.45; letter-spacing:-.025em; margin:0 0 8px; }
+.blackshores-root .bs-console h3 { font-size:15px; line-height:1.5; margin:0 0 8px; }
+.blackshores-root .bs-console p { line-height:1.65; }
+.blackshores-root .bs-console small { line-height:1.5; }
+.blackshores-root .bs-console .eyebrow { font-size:10px; letter-spacing:.16em; font-weight:650; color:var(--muted); }
+.blackshores-root .bs-console .bs-shell { display:grid; grid-template-columns:248px minmax(0,1fr); align-items:start; }
+.blackshores-root .bs-console .bs-sidebar { position:sticky; top:0; height:100dvh; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:32px; padding:30px 16px 20px; background:#10161c; border-right:1px solid #25313a; border-bottom:0; scrollbar-width:thin; }
+.blackshores-root .bs-console .bs-sidebar-brand { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 10px; }
+.blackshores-root .bs-console .bs-brand { margin:0; gap:12px; text-decoration:none; }
+.blackshores-root .bs-console .bs-brand>span { width:36px; height:40px; border:1px solid #41655f; background:#182d2d; color:#9aefe0; border-radius:11px; font-size:25px; }
+.blackshores-root .bs-console .bs-brand strong { color:#f1f5f5; font-size:11px; letter-spacing:.13em; }
+.blackshores-root .bs-console .bs-brand small { color:#8398a5; font-size:9px; letter-spacing:.17em; margin-top:3px; }
+.blackshores-root .bs-console .bs-sidebar nav { display:grid; grid-template-columns:1fr; gap:26px; overflow:visible; }
+.blackshores-root .bs-console .bs-nav-group { display:grid; gap:5px; min-width:0; }
+.blackshores-root .bs-console .bs-nav-label { padding:0 12px 7px; color:#8498a4; font-size:10px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; }
+.blackshores-root .bs-console .bs-sidebar nav button { display:flex; align-items:center; gap:11px; width:100%; min-height:43px; padding:10px 12px; border:1px solid transparent; border-radius:7px; text-align:left; white-space:normal; color:#b0bec8; background:transparent; font-size:12px; font-weight:500; line-height:1.5; transition:background .15s,color .15s; }
+.blackshores-root .bs-console .bs-sidebar nav button:hover { color:#f0f6f6; background:#1a242d; }
+.blackshores-root .bs-console .bs-sidebar nav button.active { color:#a0f1e3; background:#1b3334; border-color:#31534f; box-shadow:inset 3px 0 #80dfd2; }
+.blackshores-root .bs-console .bs-sidebar nav button>span { display:grid; place-items:center; width:18px; height:18px; color:inherit; flex:0 0 18px; }
+.blackshores-root .bs-console .bs-sidebar nav svg { width:17px; height:17px; }
+.blackshores-root .bs-console .bs-sidebar nav small { margin-left:auto; padding:1px 7px; color:#b7e5df; background:#29413f; font-size:10px; border-radius:5px; }
+.blackshores-root .bs-console .bs-sidebar-footer { display:grid; gap:13px; margin-top:auto; padding:20px 8px 0; border-top:1px solid var(--border); }
+.blackshores-root .bs-console .bs-identity { display:flex; align-items:center; gap:10px; }
+.blackshores-root .bs-console .bs-identity-mark { display:grid; place-items:center; width:35px; height:35px; flex:0 0 35px; border-radius:50%; border:1px solid #45594f; background:#283a32; color:#c2d6c7; font-size:12px; font-weight:650; }
+.blackshores-root .bs-console .bs-identity strong { font-size:12px; display:block; }
+.blackshores-root .bs-console .bs-identity div>span { color:var(--muted); font-size:10px; text-transform:capitalize; }
+.blackshores-root .bs-console .bs-public-link { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); text-decoration:none; }
+.blackshores-root .bs-console .bs-main { min-width:0; }
+.blackshores-root .bs-console .bs-top { position:sticky; top:0; z-index:15; min-height:69px; display:flex; align-items:center; gap:20px; padding:12px 36px; border-bottom:1px solid #25313a; background:#0e141bf2; backdrop-filter:blur(14px); }
+.blackshores-root .bs-console .bs-breadcrumb { display:flex; flex:1; align-items:center; gap:12px; color:#8498a4; font-size:11px; min-width:0; }
+.blackshores-root .bs-console .bs-breadcrumb strong { color:#cdd9df; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.blackshores-root .bs-console .bs-connection { font-size:10px; color:#a0b5b3; white-space:nowrap; }
+.blackshores-root .bs-console .status-dot { width:6px; height:6px; border-radius:50%; background:#80dfb5; box-shadow:0 0 0 3px #80dfb512; }
+.blackshores-root .bs-console .bs-content { max-width:1640px; margin:0 auto; padding:36px 36px 64px; }
+.blackshores-root .bs-console .bs-heading { display:flex; align-items:center; justify-content:space-between; flex-direction:row; gap:24px; padding:0 0 27px; margin-bottom:28px; border-bottom:1px solid #25313a; }
+.blackshores-root .bs-console .bs-heading h1 { font-size:clamp(26px,2.1vw,34px); font-weight:650; letter-spacing:-.045em; line-height:1.25; margin:10px 0 9px; }
+.blackshores-root .bs-console .bs-heading p { font-size:13px; color:var(--muted); max-width:75ch; margin:0; }
+.blackshores-root .bs-console .bs-pill { font-size:10px; font-weight:500; line-height:1.5; padding:5px 9px; border:1px solid #384750; background:#1a242c; color:#c2d0d8; border-radius:6px; }
+.blackshores-root .bs-console .bs-role-pill { text-transform:capitalize; color:#9de1d6; background:#172e2d; border-color:#2c4d49; }
+.blackshores-root .bs-console :is(.bs-panel,.rotation-manager .bs-panel) { padding:24px; background:#131b22; border:1px solid #2a363f; border-radius:12px; box-shadow:0 3px 12px #0000000c; min-width:0; }
+.blackshores-root .bs-console .bs-panel-heading { gap:14px; align-items:center; margin-bottom:20px; }
+.blackshores-root .bs-console .bs-panel-heading p { margin:7px 0 0; font-size:12px; color:var(--muted); max-width:90ch; }
+.blackshores-root .bs-console :is(.action,.outline-button,.manual-profile-save) { display:inline-flex; justify-content:center; align-items:center; gap:8px; min-height:40px; padding:9px 15px; margin:0; border:1px solid #3b4b55; border-radius:7px; background:#202e38; color:#e4edf0; font-size:12px; font-weight:600; line-height:1.5; text-decoration:none; cursor:pointer; white-space:normal; }
+.blackshores-root .bs-console :is(.action,.manual-profile-save) { background:#8be1d4; color:#102a27; border-color:#8be1d4; }
+.blackshores-root .bs-console :is(.action,.manual-profile-save):hover:not(:disabled) { background:#aeefe4; border-color:#aeefe4; }
+.blackshores-root .bs-console .outline-button:hover:not(:disabled) { background:#2b3c47; border-color:#637782; }
+.blackshores-root .bs-console .text-link { color:#a3e4d9; font-size:12px; padding:8px 0; background:transparent; cursor:pointer; }
+.blackshores-root .bs-console .admin-danger { color:#ffb1b1; background:#341f27; border-color:#65414c; }
+.blackshores-root .bs-console .admin-danger:hover:not(:disabled) { color:#ffcdcd; background:#492b34; border-color:#a36a78; }
+.blackshores-root .bs-console :is(.field,.bs-controls label,.bs-rank-filters label,.hof-admin label) { display:grid; gap:7px; min-width:0; font-size:12px; color:#b6c4cc; }
+.blackshores-root .bs-console .field>span { margin:0; font-size:12px; color:#b6c4cc; }
+.blackshores-root .bs-console :is(input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea) { width:100%; min-width:0; min-height:43px; border:1px solid #3b4b57; border-radius:7px; background:#0e161d; color:#edf3f5; padding:10px 12px; font-size:13px; line-height:1.5; box-shadow:none; }
+.blackshores-root .bs-console input::placeholder,.blackshores-root .bs-console textarea::placeholder { color:#8195a3; opacity:1; }
+.blackshores-root .bs-console textarea { min-height:100px; resize:vertical; }
+.blackshores-root .bs-console :is(input[type=checkbox],input[type=radio]) { width:16px; height:16px; min-height:16px; accent-color:#80dfd2; }
+.blackshores-root .bs-console input[type=file] { max-width:100%; font-size:12px; padding:8px; border:1px dashed #455865; border-radius:7px; background:#0e161d; }
+.blackshores-root .bs-console input::file-selector-button { padding:7px 10px; margin-right:10px; border:0; border-radius:5px; background:#2b3c47; color:#e4edf0; }
+.blackshores-root .bs-console :is(select option,select optgroup) { background:#141e26; color:#edf3f5; }
+.blackshores-root .bs-console .bs-controls { padding:18px 20px; margin-bottom:22px; }
+.blackshores-root .bs-console .bs-controls form { display:grid; grid-template-columns:minmax(190px,2fr) minmax(160px,1fr) minmax(140px,1fr) auto; gap:16px; align-items:end; }
+.blackshores-root .bs-console .bs-player-controls form { grid-template-columns:minmax(190px,2fr) minmax(140px,1fr) auto; }
+.blackshores-root .bs-console .bs-controls .action { width:auto; min-height:43px; }
+.blackshores-root .bs-console .bs-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-bottom:24px; }
+.blackshores-root .bs-console .bs-metrics>button { position:relative; padding:20px; background:#151f27; border:1px solid #2e3e48; border-radius:10px; text-align:left; cursor:pointer; min-width:0; color:var(--text); }
+.blackshores-root .bs-console .bs-metrics>button:hover { background:#1b2a32; border-color:#63857e; }
+.blackshores-root .bs-console .bs-metrics>button>span { color:#b2c3cc; font-size:11px; }
+.blackshores-root .bs-console .bs-metrics>button>strong { display:block; font-size:32px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.04em; margin:10px 0; }
+.blackshores-root .bs-console .bs-metrics>button>small { display:block; font-size:10px; color:#99acb8; }
+.blackshores-root .bs-console .bs-metrics>button:first-child { border-top:2px solid #80dfd2; }
+.blackshores-root .bs-console .bs-oldest-pending { grid-column:1/-1; margin:0; font-size:11px; color:#c6b48c; }
+.blackshores-root .bs-console .bs-workspace { display:grid; grid-template-columns:minmax(290px,.8fr) minmax(0,1.8fr); gap:22px; align-items:start; }
+.blackshores-root .bs-console .bs-queue { position:sticky; top:91px; max-height:calc(100dvh - 115px); overflow:auto; padding:18px 12px; scrollbar-width:thin; }
+.blackshores-root .bs-console .bs-queue>.bs-panel-heading { padding:0 6px; }
+.blackshores-root .bs-console .bs-rows { display:grid; grid-template-columns:1fr; gap:8px; }
+.blackshores-root .bs-console .bs-row { display:grid; grid-template-columns:36px minmax(0,1fr); gap:10px; align-items:start; padding:13px 12px; background:#101820; border:1px solid #26343f; border-radius:8px; }
+.blackshores-root .bs-console .bs-row.selected { border-color:#527f79; background:#1b302f; box-shadow:inset 3px 0 #80dfd2; }
+.blackshores-root .bs-console .bs-row .scan-chip { grid-column:2; justify-self:start; font-size:10px; margin-top:0; }
+.blackshores-root .bs-console .bs-row strong { font-size:12px; }
+.blackshores-root .bs-console .bs-row small,.blackshores-root .bs-console .bs-row>span>span { font-size:10px; margin-top:3px; }
+.blackshores-root .bs-console .bs-avatar { width:34px; height:36px; background:#283b45; color:#c6dedf; border:1px solid #3b5561; border-radius:7px; font-size:10px; }
+.blackshores-root .bs-console .bs-sort-label { display:flex; align-items:center; gap:7px; font-size:11px; }
+.blackshores-root .bs-console .bs-sort-label select { width:auto; min-height:34px; padding:6px; font-size:11px; }
+.blackshores-root .bs-console .bs-empty { display:grid; align-content:center; min-height:150px; padding:28px 18px; text-align:center; color:var(--muted); font-size:13px; }
+.blackshores-root .bs-console .bs-empty h2 { color:#dbe7eb; }
+.blackshores-root .bs-console .bs-review-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.blackshores-root .bs-console .bs-selected-build>#moderation-decision { padding:15px; border:1px solid #3b4b55; border-radius:10px; background:#18242ef5; backdrop-filter:blur(10px); }
+.blackshores-root .bs-console .bs-review-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.blackshores-root .bs-console .bs-player-builds { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.blackshores-root .bs-console :is(.bs-success,.bs-error,.rotation-warning,.role-guide,.bs-inherited) { border-radius:9px; padding:16px 18px; font-size:12px; line-height:1.65; }
+.blackshores-root .bs-console .bs-success { background:#162d28; border-color:#355d50; color:#b3ecd3; }
+.blackshores-root .bs-console .bs-error { background:#321f27; border-color:#704450; color:#ffb9bf; }
+.blackshores-root .bs-console .rotation-warning { color:#e0c99c; border:1px solid #51462f; background:#27241c; }
+.blackshores-root .bs-console .bs-audit-search,.blackshores-root .bs-console .bs-rank-filters { display:grid; grid-template-columns:minmax(160px,2fr) repeat(2,minmax(140px,1fr)) auto; align-items:end; gap:14px; margin-bottom:24px; }
+.blackshores-root .bs-console .bs-rank-filters { grid-template-columns:repeat(4,minmax(100px,1fr)) auto auto; }
+.blackshores-root .bs-console .bs-audit-search .field { margin:0; }
+.blackshores-root .bs-console .bs-activity>div { padding:18px 8px; gap:16px; }
+.blackshores-root .bs-console .bs-activity strong { font-size:13px; font-weight:600; }
+.blackshores-root .bs-console .bs-activity p { font-size:11px; margin:5px 0; }
+.blackshores-root .bs-console .bs-audit-links { display:flex; flex-wrap:wrap; gap:15px; font-size:11px; }
+.blackshores-root .bs-console :is(.bs-table-scroll,.rotation-table-scroll) { overflow:auto; max-width:100%; border:1px solid #2a3b47; border-radius:9px; scrollbar-width:thin; }
+.blackshores-root .bs-console table { width:100%; border-collapse:collapse; font-size:12px; text-align:left; font-variant-numeric:tabular-nums; }
+.blackshores-root .bs-console th { position:sticky; top:0; background:#20313b; font-size:10px; font-weight:600; letter-spacing:.03em; color:#b7cbd6; }
+.blackshores-root .bs-console :is(th,td) { padding:15px 16px; border-bottom:1px solid #2a3b47; }
+.blackshores-root .bs-console tbody tr:hover { background:#1b2a33; }
+.blackshores-root .bs-console td small { display:block; margin-top:3px; font-size:10px; color:var(--muted); }
+.blackshores-root .bs-console .pagination { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:12px; margin-top:22px; font-size:11px; }
+.blackshores-root .bs-console .pagination button { min-height:36px; padding:7px 12px; font-size:11px; }
+.blackshores-root .bs-console .bs-system>div { display:grid; grid-template-columns:200px minmax(0,1fr); gap:24px; padding:20px 0; font-size:13px; }
+.blackshores-root .bs-console .bs-system dd { overflow-wrap:anywhere; }
+.blackshores-root .bs-console .rotation-manager { gap:22px; }
+.blackshores-root .bs-console .rotation-selector { width:100%; max-width:320px; margin:0; padding:0; background:none; border:0; }
+.blackshores-root .bs-console .rotation-summary { display:flex; flex-direction:row; justify-content:space-between; align-items:center; gap:24px; border-left:3px solid #80dfd2; }
+.blackshores-root .bs-console .rotation-summary p { margin:0; font-size:12px; color:var(--muted); }
+.blackshores-root .bs-console .rotation-columns { display:grid; grid-template-columns:minmax(0,1fr) 292px; gap:22px; align-items:start; }
+.blackshores-root .bs-console .rotation-columns>aside { position:sticky; top:91px; max-height:calc(100dvh - 115px); overflow:auto; font-size:12px; }
+.blackshores-root .bs-console .rotation-actions li { display:grid; grid-template-columns:minmax(0,1fr) 74px; gap:12px; align-items:start; background:#101b23; border:1px solid #344651; padding:18px; border-radius:9px; }
+.blackshores-root .bs-console .rotation-actions li>div:first-child { min-width:0; flex-basis:auto; }
+.blackshores-root .bs-console .rotation-actions li>div:first-child strong { font-size:14px; line-height:1.6; overflow-wrap:normal; }
+.blackshores-root .bs-console .rotation-actions input { width:74px; }
+.blackshores-root .bs-console .rotation-action-buttons { grid-column:1/-1; display:flex; gap:7px; flex-wrap:wrap; width:auto; }
+.blackshores-root .bs-console .rotation-action-buttons button { min-width:38px; min-height:36px; padding:6px 11px; }
+.blackshores-root .bs-console .rotation-effects { grid-column:1/-1; flex-basis:auto; border-top:1px solid #2c404a; padding-top:12px; margin-top:0; }
+.blackshores-root .bs-console .rotation-effects summary { color:#a4c6c7; font-size:11px; line-height:1.7; }
+.blackshores-root .bs-console .rotation-add { display:grid; grid-template-columns:minmax(0,1fr) 80px; align-items:start; gap:12px; }
+.blackshores-root .bs-console .rotation-add>.field { margin:0; }
+.blackshores-root .bs-console .rotation-add-button { grid-column:1/-1; justify-self:start; }
+.blackshores-root .bs-console .rotation-attack-options { max-height:320px; overflow:auto; overscroll-behavior:contain; background:#0e1921; }
+.blackshores-root .bs-console .rotation-attack-option { grid-template-columns:76px minmax(0,1fr); gap:7px 10px; padding:10px; }
+.blackshores-root .bs-console .rotation-attack-coefficient { grid-column:2; font-size:11px; }
+.blackshores-root .bs-console .rotation-attack-type { font-size:10px; }
+.blackshores-root .bs-console .rotation-attack-name { font-size:12px; }
+.blackshores-root .bs-console .rotation-automatic-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.blackshores-root .bs-console .rotation-history li { align-items:center; padding:18px 0; }
+.blackshores-root .bs-console :is(.rotation-history small,.rotation-history strong) { overflow-wrap:anywhere; }
+.blackshores-root .bs-console .hof-admin { color:var(--text); }
+.blackshores-root .bs-console .hof-admin section { background:#131b22; border:1px solid #2a363f; border-radius:12px; padding:24px; margin:20px 0; }
+.blackshores-root .bs-console .hof-admin p { font-size:12px; color:var(--muted); margin:8px 0 16px; }
+.blackshores-root .bs-console .hof-admin .role-guide { padding:16px 20px; background:#142725; border:1px solid #31544e; border-left:3px solid #80dfd2; }
+.blackshores-root .bs-console .hof-admin .role-guide p { margin:5px 0 0; }
+.blackshores-root .bs-console .hof-admin .role-guide strong { color:#a8e6da; font-size:12px; }
+.blackshores-root .bs-console .hof-admin form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:end; }
+.blackshores-root .bs-console .hof-admin form>:is(fieldset,.preview) { grid-column:1/-1; min-width:0; }
+.blackshores-root .bs-console .hof-admin form>label:has(textarea) { grid-column:1/-1; }
+.blackshores-root .bs-console .hof-admin fieldset { border:1px solid #344651; padding:18px; border-radius:9px; }
+.blackshores-root .bs-console .hof-admin legend { padding:0 8px; font-size:12px; color:#c4d3db; }
+.blackshores-root .bs-console .hof-admin button { min-height:40px; padding:9px 14px; border-radius:7px; font-size:12px; font-weight:600; background:#21343d; border:1px solid #42606a; color:#dbeef0; }
+.blackshores-root .bs-console .hof-admin button:hover:not(:disabled) { background:#2e4851; border-color:#6c9a9a; }
+.blackshores-root .bs-console .hof-admin form>button:not([type=button]) { background:#8be1d4; color:#102a27; border-color:#8be1d4; justify-self:start; }
+.blackshores-root .bs-console .hof-admin .nav { display:flex; flex-wrap:wrap; gap:8px; padding:7px; background:#111b22; border:1px solid #2b3c47; border-radius:9px; }
+.blackshores-root .bs-console .hof-admin .nav button { border-color:transparent; background:transparent; }
+.blackshores-root .bs-console .hof-admin .nav button[aria-current=true] { background:#25413f; color:#b7f4e6; border-color:#3d615b; }
+.blackshores-root .bs-console .hof-admin .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); gap:16px; }
+.blackshores-root .bs-console .hof-admin .event { padding:20px; border:1px solid #344651; background:#101a22; border-radius:10px; }
+.blackshores-root .bs-console .hof-admin .event>strong { display:block; font-size:15px; line-height:1.6; }
+.blackshores-root .bs-console .hof-admin .toolbar { display:flex; align-items:end; flex-wrap:wrap; gap:12px; margin:16px 0; }
+.blackshores-root .bs-console .hof-admin .toolbar>:is(input,select,label) { flex:1 1 180px; min-width:0; }
+.blackshores-root .bs-console .hof-admin .actions { display:flex; flex-wrap:wrap; gap:10px; margin:16px 0; }
+.blackshores-root .bs-console .hof-admin .staff-item { padding:20px; background:#101a22; border:1px solid #344651; border-radius:9px; gap:18px; }
+.blackshores-root .bs-console .hof-admin .staff-item p { margin:4px 0; }
+.blackshores-root .bs-console .hof-admin .staff-item small { color:var(--muted); font-size:11px; }
+.blackshores-root .bs-console .hof-admin .staff-item>button { color:#ffc0bd; border-color:#6c4248; background:#34252a; }
+.blackshores-root .bs-console .hof-admin .archive-grid.archive-editing { grid-template-columns:1fr; }
+.blackshores-root .bs-console .hof-admin .person-edit-form { grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:15px; }
+.blackshores-root .bs-console .hof-admin .person-card { min-width:0; padding:18px; }
+.blackshores-root .bs-console .hof-admin .hof-admin-match { padding:20px; margin-top:12px; background:#101a22; border:1px solid #344651; border-radius:9px; }
+.blackshores-root .bs-console .hof-admin .bracket-fullscreen:fullscreen { background:#0c1015; padding:28px; overflow:auto; }
+.blackshores-root .bs-console .bs-home-invite { margin-top:28px; padding-top:24px; }
+.blackshores-root .bs-console .bs-panel[aria-labelledby=home-featured-heading]>.bs-review-fields { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.blackshores-root .bs-console .bs-panel[aria-labelledby=home-featured-heading]>.bs-review-fields>.field { background:#19272e; border:1px solid #344a53; border-radius:9px; padding:20px; margin:0; gap:12px; }
+.blackshores-root .bs-console .bs-panel[aria-labelledby=home-featured-heading]>.bs-review-fields strong { font-size:14px; }
+.blackshores-root .bs-console dialog { background:#16212a; color:var(--text); border:1px solid #527078; box-shadow:0 30px 100px #0009; border-radius:14px; padding:28px; max-width:calc(100vw - 32px); }
+.blackshores-root .bs-console dialog::backdrop { background:#050a10c9; backdrop-filter:blur(5px); }
+.blackshores-root .bs-console .bs-menu-toggle { display:none; }
+.blackshores-root .bs-console.bs-locked { min-height:100dvh; display:grid; place-content:center; background:radial-gradient(ellipse at 25% 5%,#25403f88,transparent 55%),#0c1015; padding:40px 20px; }
+.blackshores-root .bs-console .bs-login { width:min(100%,520px); padding:40px; background:#121c24; border:1px solid #344852; border-radius:16px; box-shadow:0 30px 100px #0004; }
+.blackshores-root .bs-console .bs-login .bs-brand { margin-bottom:44px; }
+.blackshores-root .bs-console .bs-login h1 { font-size:32px; font-weight:600; letter-spacing:-.04em; margin:12px 0; }
+.blackshores-root .bs-console .bs-login p { font-size:13px; }
+.blackshores-root .bs-console .bs-login small { font-size:11px; }
+.blackshores-root .bs-console .bs-login .action { width:100%; margin-top:16px; }
+@media(min-width:1700px) {
+ .blackshores-root .bs-console .rotation-columns { grid-template-columns:minmax(0,1fr) 340px; }
+ .blackshores-root .bs-console .rotation-actions li { grid-template-columns:minmax(0,1fr) 74px auto; align-items:center; }
+ .blackshores-root .bs-console .rotation-action-buttons { grid-column:auto; }
+}
+@media(max-width:1280px) {
+ .blackshores-root .bs-console .bs-shell { grid-template-columns:222px minmax(0,1fr); }
+ .blackshores-root .bs-console .bs-content { padding:28px 24px 50px; }
+ .blackshores-root .bs-console .bs-top { padding:12px 24px; }
+ .blackshores-root .bs-console .bs-workspace,.blackshores-root .bs-console .rotation-columns { grid-template-columns:1fr; }
+ .blackshores-root .bs-console .bs-queue,.blackshores-root .bs-console .rotation-columns>aside { position:static; max-height:none; }
+ .blackshores-root .bs-console .bs-rows { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .blackshores-root .bs-console .bs-controls form,.blackshores-root .bs-console .bs-rank-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .blackshores-root .bs-console .bs-audit-search { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .blackshores-root .bs-console .bs-metrics { gap:10px; }
+ .blackshores-root .bs-console .bs-metrics>button { padding:16px; }
+}
+@media(max-width:800px) {
+ .blackshores-root .bs-console .bs-shell { grid-template-columns:minmax(0,1fr); }
+ .blackshores-root .bs-console .bs-sidebar { position:relative; height:auto; min-height:0; overflow:visible; padding:16px; gap:18px; border-right:0; border-bottom:1px solid #2a363f; }
+ .blackshores-root .bs-console .bs-sidebar-brand { padding:0; }
+ .blackshores-root .bs-console .bs-menu-toggle { display:inline-flex; min-height:40px; }
+ .blackshores-root .bs-console .bs-sidebar nav,.blackshores-root .bs-console .bs-sidebar-footer { display:none; }
+ .blackshores-root .bs-console .bs-sidebar.is-open nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+ .blackshores-root .bs-console .bs-sidebar.is-open .bs-sidebar-footer { display:grid; }
+ .blackshores-root .bs-console .bs-sidebar nav button { min-height:44px; }
+ .blackshores-root .bs-console .bs-top { position:static; min-height:59px; padding:10px 20px; gap:12px; }
+ .blackshores-root .bs-console .bs-connection { display:none; }
+ .blackshores-root .bs-console .bs-content { padding:26px 20px 40px; }
+ .blackshores-root .bs-console .bs-heading { align-items:flex-start; gap:14px; }
+ .blackshores-root .bs-console .bs-heading h1 { font-size:28px; }
+ .blackshores-root .bs-console .bs-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .blackshores-root .bs-console .bs-selected-build>#moderation-decision { position:static; }
+ .blackshores-root .bs-console .rotation-summary { flex-direction:column; align-items:flex-start; gap:14px; }
+ .blackshores-root .bs-console .bs-panel[aria-labelledby=home-featured-heading]>.bs-review-fields { grid-template-columns:1fr; }
+}
+@media(max-width:540px) {
+ .blackshores-root .bs-console .bs-content { padding:24px 14px 36px; }
+ .blackshores-root .bs-console .bs-top { padding:10px 14px; }
+ .blackshores-root .bs-console .bs-breadcrumb>span { display:none; }
+ .blackshores-root .bs-console .bs-heading { flex-direction:column; padding-bottom:20px; margin-bottom:20px; }
+ .blackshores-root .bs-console :is(.bs-panel,.rotation-manager .bs-panel,.hof-admin section) { padding:18px; }
+ .blackshores-root .bs-console :is(.bs-controls form,.bs-player-controls form,.bs-audit-search,.bs-rank-filters,.bs-rows,.bs-review-fields,.bs-player-builds,.hof-admin form,.hof-admin .person-edit-form) { grid-template-columns:1fr; }
+ .blackshores-root .bs-console .bs-controls .action { width:100%; }
+ .blackshores-root .bs-console .bs-system>div { grid-template-columns:1fr; gap:6px; }
+ .blackshores-root .bs-console .rotation-add { grid-template-columns:minmax(0,1fr); }
+ .blackshores-root .bs-console .rotation-add-button { grid-column:auto; }
+ .blackshores-root .bs-console .rotation-actions li { padding:14px; }
+ .blackshores-root .bs-console .bs-login { padding:28px 23px; }
+ .blackshores-root .bs-console .bs-login h1 { font-size:28px; }
+ .blackshores-root .bs-console .manual-profile-fields,.blackshores-root .bs-console .manual-profile-skills { grid-template-columns:1fr; }
+}
+@media(prefers-reduced-motion:reduce) { .blackshores-root .bs-console * { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+
+.blackshores-root .bs-console .rotation-equipment-reference { background:#172824; border:1px solid #34564c; border-radius:9px; padding:18px; margin:20px 0; }
+.blackshores-root .bs-console .rotation-equipment-reference p { font-size:12px; color:#afc3bd; }
+.blackshores-root .bs-console .rotation-equipment-reference dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:16px 0; }
+.blackshores-root .bs-console .rotation-equipment-reference dl>div { padding:12px; border:1px solid #34564c; background:#11221f; border-radius:7px; }
+.blackshores-root .bs-console .rotation-equipment-reference dt { font-size:11px; color:#cbddd5; }
+.blackshores-root .bs-console .rotation-equipment-reference dd { margin:5px 0 0; font-size:10px; color:#a4bbb0; }
+.blackshores-root .bs-console .rotation-manager .field>small { color:var(--muted); font-size:11px; }
+@media(max-width:540px){.blackshores-root .bs-console .rotation-equipment-reference dl{grid-template-columns:1fr}}

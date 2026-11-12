@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "../admin.css";
+import "../blackshores-workspace.css";
 import { ModerationPanel } from "@/components/moderation-panel";
 
 export const metadata: Metadata = {
@@ -10,3 +11,4 @@ export const metadata: Metadata = {
 export default function BlackShoresPage() {
   return <div className="blackshores-root"><ModerationPanel /></div>;
 }
+
