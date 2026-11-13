@@ -1,206 +1,253 @@
 "use client";
 
-import {useEffect,useState} from "react";
-import type {ReactNode} from "react";
+import {useEffect, useId, useRef, useState} from "react";
+import type {PointerEvent, ReactNode} from "react";
 import {createPortal} from "react-dom";
 
-type Dependency={dependsOnMatchId?:string;depends_on_match_id?:string;dependencyType?:string;dependency_type?:string;targetSlot?:string;target_slot?:string};
-type MatchInput=any;
-type NormalizedMatch={
- id:string;round:number;roundLabel:string;order:number;bracketPosition:number|null;side:string;state:string;
- aId:string|null;aName:string;bId:string|null;bName:string;winnerId:string|null;
- outcome:string;dependencies:Dependency[];raw:MatchInput
-};
-type Props={matches:MatchInput[];renderControls?:(match:MatchInput)=>ReactNode};
-function normalize(match:MatchInput):NormalizedMatch{
- const a=match.participantA,b=match.participantB;
- return {
-  id:String(match.id),round:Number(match.round??match.round_number??1),
-  roundLabel:String(match.roundLabel??match.round_label??("Round "+(match.round??match.round_number??1))),
-  order:Number(match.order??match.match_order??1),bracketPosition:Number.isFinite(Number(match.bracketPosition??match.bracket_position))&&Number(match.bracketPosition??match.bracket_position)>=0?Number(match.bracketPosition??match.bracket_position):null,side:String(match.side??match.bracket_side??"main"),
-  state:String(match.state||"awaiting_competitors"),
-  aId:a?.id??match.participant_a??null,aName:a?.name??match.name_a??"",
-  bId:b?.id??match.participant_b??null,bName:b?.name??match.name_b??"",
-  winnerId:match.winner?.id??match.winner_id??null,
-  outcome:String(match.outcome||""),dependencies:Array.isArray(match.dependencies)?match.dependencies:[],raw:match
+type Dependency = {dependsOnMatchId?: string; depends_on_match_id?: string; dependencyType?: string; dependency_type?: string; targetSlot?: string; target_slot?: string};
+type MatchInput = any;
+type Match = {id: string; round: number; roundLabel: string; order: number; position: number; side: string; state: string; aId: string | null; aName: string; bId: string | null; bName: string; winnerId: string | null; outcome: string; dependencies: Dependency[]; raw: MatchInput};
+type Props = {matches: MatchInput[]; renderControls?: (match: MatchInput) => ReactNode};
+const CARD_WIDTH = 248, CARD_HEIGHT = 80, COLUMN_GAP = 56, HEADING_HEIGHT = 44;
+const isFinished = (match: Match) => ["published", "completed"].includes(match.state);
+const canReport = (match: Match) => ["ready", "scheduled", "in_progress"].includes(match.state) && Boolean(match.aId && match.bId);
+function normalize(match: MatchInput): Match {
+ const position = match.bracketPosition ?? match.bracket_position;
+ return {id: String(match.id), round: Number(match.round ?? match.round_number ?? 1), roundLabel: String(match.roundLabel ?? match.round_label ?? ""), order: Number(match.order ?? match.match_order ?? 1), position: position != null && Number.isFinite(Number(position)) && Number(position) >= 0 ? Number(position) : Number(match.order ?? match.match_order ?? 1) - 1, side: String(match.side ?? match.bracket_side ?? "main"), state: String(match.state || "awaiting_competitors"), aId: match.participantA?.id ?? match.participant_a ?? null, aName: match.participantA?.name ?? match.name_a ?? "", bId: match.participantB?.id ?? match.participant_b ?? null, bName: match.participantB?.name ?? match.name_b ?? "", winnerId: match.winner?.id ?? match.winner_id ?? null, outcome: String(match.outcome || ""), dependencies: Array.isArray(match.dependencies) ? match.dependencies : [], raw: match};
+}
+function status(match: Match) {
+ if (isFinished(match)) return "Complete";
+ if (match.state === "pending_publication") return "To verify";
+ if (match.state === "in_progress") return "Live";
+ if (canReport(match)) return "Ready";
+ return "Upcoming";
+}
+function Icon({name}: {name: "edit" | "close" | "left" | "right" | "minus" | "plus" | "trophy" | "check" | "info"}) {
+ const paths: Record<string, ReactNode> = {
+  edit: <><path d="m14 5 5 5M4 20l4-1L20 7a2.1 2.1 0 0 0-3-3L5 16l-1 4Z"/></>,
+  close: <path d="m6 6 12 12M18 6 6 18"/>, left: <path d="m14 6-6 6 6 6"/>, right: <path d="m10 6 6 6-6 6"/>,
+  minus: <path d="M5 12h14"/>, plus: <path d="M5 12h14M12 5v14"/>, check: <path d="m5 12 4 4L19 6"/>,
+  trophy: <><path d="M8 3h8v6a4 4 0 0 1-8 0V3ZM8 5H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 13v5m-4 3h8m-6-3h4v3"/></>,
+  info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></>
  };
+ return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
-function laneTitle(side:string){
- if(side==="main")return "Main bracket";
- if(side==="third_place")return "Third place";
- return side.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())+" bracket";
-}
-function startBracketDrag(event:any){
- const target=event.target as HTMLElement;
- if(event.button!==0||event.isPrimary===false||target.closest("button,summary,input,select,a,[role=dialog]"))return;
- const element=event.currentTarget as HTMLDivElement;
- element.dataset.dragging="true";
- element.dataset.dragPointerId=String(event.pointerId);
- element.dataset.dragStartX=String(event.clientX);
- element.dataset.dragStartScroll=String(element.scrollLeft);
- try{element.setPointerCapture(event.pointerId)}catch{}
- event.preventDefault();
-}
-function moveBracketDrag(event:any){
- const element=event.currentTarget as HTMLDivElement;
- if(element.dataset.dragging!=="true"||element.dataset.dragPointerId!==String(event.pointerId))return;
- element.scrollLeft=Number(element.dataset.dragStartScroll||0)-(event.clientX-Number(element.dataset.dragStartX||0));
- event.preventDefault();
-}
-function endBracketDrag(event:any){
- const element=event.currentTarget as HTMLDivElement;
- if(element.dataset.dragPointerId!==String(event.pointerId))return;
- delete element.dataset.dragging;delete element.dataset.dragPointerId;
- try{if(element.hasPointerCapture(event.pointerId))element.releasePointerCapture(event.pointerId)}catch{}
-}
-function statusLabel(state:string){return state.replaceAll("_"," ");}
 
-function MatchManagementControl({match,renderControls}:{match:NormalizedMatch;renderControls:Props["renderControls"]}){
- const [open,setOpen]=useState(false),[mounted,setMounted]=useState(false);
- const label=match.state==="pending_publication"?"Verify winner":["ready","scheduled","in_progress"].includes(match.state)?"Report winner":"Match options";
- const icon=match.state==="pending_publication"?"✓":["ready","scheduled","in_progress"].includes(match.state)?"✎":"⋯";
- useEffect(()=>{setMounted(true);const close=(event:Event)=>{if((event as CustomEvent).detail===match.id)setOpen(false)};const key=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false)};window.addEventListener("close-bracket-match-dialog",close);window.addEventListener("keydown",key);return()=>{window.removeEventListener("close-bracket-match-dialog",close);window.removeEventListener("keydown",key)}},[match.id]);
+function MatchControl({match, renderControls}: {match: Match; renderControls: NonNullable<Props["renderControls"]>}) {
+ const [open, setOpen] = useState(false);
+ const trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), headingId = useId();
+ const label = canReport(match) ? "Report winner" : match.state === "pending_publication" ? "Verify winner" : "Match details";
+ useEffect(() => {
+  if (!open) return;
+  const previous = document.activeElement as HTMLElement | null;
+  panel.current?.focus();
+  const close = (event: Event) => {if (String((event as CustomEvent).detail) === match.id) setOpen(false);};
+  const key = (event: KeyboardEvent) => {
+   if (event.key === "Escape") {event.preventDefault(); event.stopImmediatePropagation(); setOpen(false);}
+   if (event.key !== "Tab") return;
+   const controls = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? [])].filter(el => el.getClientRects().length);
+   const first = controls[0], last = controls[controls.length - 1];
+   if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) {event.preventDefault(); last?.focus();}
+   else if (!event.shiftKey && document.activeElement === last) {event.preventDefault(); first?.focus();}
+  };
+  window.addEventListener("close-bracket-match-dialog", close);
+  window.addEventListener("keydown", key, true);
+  return () => {window.removeEventListener("close-bracket-match-dialog", close); window.removeEventListener("keydown", key, true); previous?.focus();};
+ }, [open, match.id]);
  return <>
-  <div className="tb-manage" style={{position:"absolute",right:"8px",top:"50%",left:"auto",transform:"translateY(-50%)",width:28,height:28,zIndex:6}}><button type="button" className="tb-manage-trigger" aria-label={label} title={label} onClick={()=>setOpen(true)}><span aria-hidden="true">{icon}</span></button></div>
-  {open&&mounted&&createPortal(<div className="tb-manage-host" data-match-dialog={match.id} onMouseDown={event=>{if(event.target===event.currentTarget)setOpen(false)}}>
-   <div className="tb-manage-backdrop" aria-hidden="true"/>
-   <section className="tb-manage-panel" role="dialog" aria-modal="true" aria-label={`Manage ${match.roundLabel}, match ${match.order}`}>
-    <div className="tb-manage-panel-head"><strong>Match {match.order}</strong><button type="button" onClick={()=>setOpen(false)}>Close</button></div>
-    {renderControls?.(match.raw)}
-   </section>
-  </div>,document.body)}
- </>
-}
-
-function BracketLane({title,matches,renderControls}:{title:string;matches:NormalizedMatch[];renderControls?:Props["renderControls"]}){
- const [viewportHeight,setViewportHeight]=useState(0);
- useEffect(()=>{const update=()=>setViewportHeight(window.innerHeight);update();window.addEventListener("resize",update);return()=>window.removeEventListener("resize",update)},[]);
- if(!matches.length)return null;
- const bracketMatches=matches.filter(m=>m.side!=="third_place"),thirdMatches=matches.filter(m=>m.side==="third_place");
- const rounds=[...new Set(bracketMatches.map(m=>m.round))].sort((a,b)=>a-b),minRound=rounds[0],maxRound=rounds[rounds.length-1],depth=maxRound-minRound+1;
- const adminControls=Boolean(renderControls),leafCount=Math.pow(2,Math.max(0,depth-1)),leafSpacing=adminControls?82:56,maxHeight=adminControls?Math.max(400,(viewportHeight||900)-280):Math.max(320,(viewportHeight||900)-416),height=Math.max(adminControls?400:320,Math.min(leafCount*leafSpacing,maxHeight)),cardHeight=adminControls?80:60,columnWidth=adminControls?310:222,cardWidth=adminControls?270:204,headerSpace=38;
- const width=rounds.length*columnWidth;
- const xFor=(m:NormalizedMatch)=>m.side==="third_place"?Math.max(0,(rounds.length-1)*columnWidth):(m.round-minRound)*columnWidth;
- const yFor=(m:NormalizedMatch)=>{
-  if(m.side==="third_place")return headerSpace+height-cardHeight/2-8;
-  const offset=Math.max(0,m.round-minRound);
-  const group=m.bracketPosition??(m.order-1);
-  const center=(group*Math.pow(2,offset)+Math.pow(2,offset-1))/leafCount*height;
-  return headerSpace+center;
- };
- const byId=new Map(matches.map(m=>[m.id,m]));
- const slotName=(match:NormalizedMatch,slot:"participant_a"|"participant_b")=>{const edge=match.dependencies.find(d=>String(d.targetSlot??d.target_slot??"")===slot);if(!edge)return "TBD";const source=byId.get(String(edge.dependsOnMatchId??edge.depends_on_match_id??""));if(!source)return "TBD";return ((edge.dependencyType??edge.dependency_type)==="loser"?"Loser of ":"Winner of ")+source.roundLabel+" Match "+source.order;};
- const edges:{source:NormalizedMatch;target:NormalizedMatch;kind:string}[]=[];
- for(const target of matches){
-  const explicit=target.dependencies.map(d=>({source:byId.get(String(d.dependsOnMatchId??d.depends_on_match_id??"")),kind:String(d.dependencyType??d.dependency_type??"winner")})).filter((x):x is {source:NormalizedMatch;kind:string}=>Boolean(x.source));
-  if(explicit.length){for(const edge of explicit)if(edge.source.side===target.side||(target.side==="third_place"&&edge.kind==="loser"))edges.push({source:edge.source,target,kind:edge.kind});continue}
-  if(target.side==="third_place")continue;
-  const fallback=bracketMatches.find(m=>m.round===target.round-1&&m.order===Math.ceil(target.order*2-1))||null;
-  const fallback2=bracketMatches.find(m=>m.round===target.round-1&&m.order===Math.ceil(target.order*2))||null;
-  if(fallback)edges.push({source:fallback,target,kind:"winner"});
-  if(fallback2)edges.push({source:fallback2,target,kind:"winner"});
- }
- return <section className="tb-lane" aria-label={title}>
-  <div className="tb-lane-head"><h3>{title}</h3><span>{matches.length} {matches.length===1?"match":"matches"}</span><span className="tb-scroll-hint">Follow rounds →</span></div>
-  <div className="tb-scroll" tabIndex={0} role="region" aria-label={title+" bracket. Scroll horizontally or drag to follow later rounds."} onPointerDown={startBracketDrag} onPointerMove={moveBracketDrag} onPointerUp={endBracketDrag} onPointerCancel={endBracketDrag}>
-   <div className="tb-board" style={{width:width+"px",height:(height+headerSpace)+"px"}}>
-    <svg className="tb-lines" width={width} height={height+headerSpace} viewBox={`0 0 ${width} ${height+headerSpace}`} aria-hidden="true">
-     {edges.map(({source,target,kind})=>{const x1=xFor(source)+cardWidth,x2=xFor(target),y1=yFor(source),y2=yFor(target),mid=x1+(x2-x1)/2;return <path key={source.id+"-"+target.id+"-"+kind} className={kind==="loser"?"loser":"winner"} d={`M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`}/>})}
-    </svg>
-    {rounds.map((round,index)=><div className="tb-round-label" key={round} style={{left:(index*columnWidth)+"px",width:cardWidth+"px"}}>{bracketMatches.find(m=>m.round===round)?.roundLabel||("Round "+round)}</div>)}
-    {thirdMatches.map(m=><div className="tb-round-label tb-third-round-label" key={"third-label-"+m.id} style={{left:xFor(m)+"px",top:(headerSpace+height-28)+"px",width:cardWidth+"px"}}>Third-place playoff</div>)}
-    {matches.map(m=><article className={"tb-match-card"+(m.side==="third_place"?" tb-third-match":"")} key={m.id} style={{left:xFor(m)+"px",top:(yFor(m)-cardHeight/2)+"px",width:cardWidth+"px"}} aria-label={(m.side==="third_place"?"Third-place playoff":m.roundLabel)+", match "+m.order}>
-     <div className="tb-match-head"><span>Match {m.order}</span><span className={"tb-state "+m.state}>{statusLabel(m.state)}</span></div>
-     <div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.aId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.aId?"✓":"A"}</span><span className="tb-player-name">{m.aName||slotName(m,"participant_a")}</span></div>
-     <div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.bId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.bId?"✓":"B"}</span><span className="tb-player-name">{m.bName||slotName(m,"participant_b")}</span></div>
-     {m.outcome&&<div className="tb-outcome">{m.outcome}</div>}
-     {renderControls&&<MatchManagementControl match={m} renderControls={renderControls}/>}
-    </article>)}
+  <button ref={trigger} type="button" className="tb-match-action" aria-label={`${label}: ${match.roundLabel || "round " + match.round}, match ${match.order}`} title={label} onClick={() => setOpen(true)}><Icon name={canReport(match) ? "edit" : match.state === "pending_publication" ? "check" : "info"}/></button>
+  {open && createPortal(<div className="tb-dialog-overlay" onPointerDown={e => {if (e.target === e.currentTarget) setOpen(false);}}>
+   <div ref={panel} className="tb-manage-panel" role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1}>
+    <div className="tb-dialog-heading"><div><span className="tb-dialog-eyebrow">{match.side === "third_place" ? "Third-place playoff" : `${match.roundLabel || "Round " + match.round} · Match ${match.order}`}</span><h2 id={headingId}>{label}</h2></div><button type="button" className="tb-dialog-close" aria-label="Close match details" onClick={() => setOpen(false)}><Icon name="close"/></button></div>
+    {canReport(match) && <p className="tb-dialog-help">Select the winning player, then submit to confirm the result.</p>}
+    {!canReport(match) && match.state !== "pending_publication" && <p className="tb-dialog-help">{isFinished(match) ? `${match.winnerId === match.aId ? match.aName : match.bName || "The winner"} won this match.` : "This match will be ready when both players have advanced."}</p>}
+    {renderControls(match.raw)}
    </div>
+  </div>, document.fullscreenElement || document.body)}
+ </>;
+}
+
+function BracketLane({title, matches, renderControls}: {title: string; matches: Match[]; renderControls?: Props["renderControls"]}) {
+ const scroll = useRef<HTMLDivElement>(null), drag = useRef<{id: number; x: number; left: number} | null>(null);
+ const [size, setSize] = useState({width: 1000, height: 560}), [zoom, setZoom] = useState<number | null>(null), [scrollState, setScrollState] = useState({left: false, right: false});
+ const main = matches.filter(m => m.side !== "third_place"), bronze = matches.filter(m => m.side === "third_place");
+ const rounds = [...new Set(main.map(m => m.round))].sort((a, b) => a - b);
+ const firstRound = rounds[0] ?? 1, lastRound = rounds[rounds.length - 1] ?? firstRound;
+ const leafCount = Math.pow(2, Math.max(0, lastRound - firstRound));
+ // A bye consumes less vertical space, but every pair keeps enough room for its next-round card.
+ const occupied = new Set(main.filter(m => m.round === firstRound).map(m => m.position));
+ const slotHeights = Array.from({length: leafCount}, (_, i) => occupied.has(i) ? CARD_HEIGHT + 24 : 24);
+ for (let i = 0; i + 1 < leafCount; i += 2) {const extra = Math.max(0, CARD_HEIGHT + 24 - slotHeights[i] - slotHeights[i + 1]); slotHeights[i] += extra / 2; slotHeights[i + 1] += extra / 2;}
+ const offsets = [0]; slotHeights.forEach(height => offsets.push(offsets[offsets.length - 1] + height));
+ const mainHeight = offsets[offsets.length - 1];
+ const yForMain = (m: Match) => {const span = Math.pow(2, m.round - firstRound), start = Math.min(leafCount - 1, Math.max(0, m.position * span)), end = Math.min(leafCount, start + span); return HEADING_HEIGHT + (offsets[start] + offsets[end]) / 2;};
+ const finalY = main.find(m => m.round === lastRound) ? yForMain(main.find(m => m.round === lastRound)!) : HEADING_HEIGHT + CARD_HEIGHT / 2;
+ const bronzeStart = Math.max(HEADING_HEIGHT + mainHeight - CARD_HEIGHT / 2, finalY + CARD_HEIGHT + 64);
+ const yFor = (m: Match) => m.side === "third_place" ? bronzeStart + bronze.indexOf(m) * (CARD_HEIGHT + 48) : yForMain(m);
+ const column = CARD_WIDTH + COLUMN_GAP;
+ const xFor = (m: Match) => (m.side === "third_place" ? Math.max(0, rounds.length - 1) : m.round - firstRound) * column;
+ const width = Math.max(1, rounds.length) * column - COLUMN_GAP;
+ const height = Math.max(HEADING_HEIGHT + mainHeight + 16, bronze.length ? bronzeStart + (bronze.length - 1) * (CARD_HEIGHT + 48) + CARD_HEIGHT / 2 + 20 : 0);
+ const fitScale = Math.min(1, Math.max(0.15, (size.height - 36) / height));
+ const scale = zoom ?? fitScale;
+ const byId = new Map(matches.map(m => [m.id, m]));
+ const roundName = (round: number) => {
+  if (main[0]?.side === "main") {if (round === lastRound) return "Final"; if (round === lastRound - 1) return "Semifinals"; if (round === lastRound - 2 && rounds.length > 2) return "Quarterfinals";}
+  return main.find(m => m.round === round)?.roundLabel || `Round ${round}`;
+ };
+ const slotName = (m: Match, slot: string) => {const dep = m.dependencies.find(d => (d.targetSlot ?? d.target_slot) === slot); const source = dep && byId.get(String(dep.dependsOnMatchId ?? dep.depends_on_match_id)); return source ? `${(dep!.dependencyType ?? dep!.dependency_type) === "loser" ? "Loser" : "Winner"} of R${source.round} · M${source.order}` : "To be decided";};
+ const edges: {source: Match; target: Match}[] = [];
+ for (const target of main) {
+  const dependencies = target.dependencies.filter(d => (d.dependencyType ?? d.dependency_type ?? "winner") === "winner");
+  const sources = dependencies.length ? dependencies.map(d => byId.get(String(d.dependsOnMatchId ?? d.depends_on_match_id))).filter((m): m is Match => Boolean(m)) : main.filter(m => m.round === target.round - 1 && Math.floor(m.position / 2) === target.position);
+  sources.filter(m => m.side === target.side).forEach(source => edges.push({source, target}));
+ }
+ const updateScroll = () => {const el = scroll.current; if (el) setScrollState({left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2});};
+ useEffect(() => {const el = scroll.current; if (!el) return; const observer = new ResizeObserver(() => setSize({width: el.clientWidth, height: el.clientHeight})); observer.observe(el); return () => observer.disconnect();}, []);
+ useEffect(updateScroll, [size.width, scale, width]);
+ const startDrag = (e: PointerEvent<HTMLDivElement>) => {
+  const target = e.target as Element, interactive = target.closest("button,a,input,select,textarea,label");
+  // The enclosing tournament modal is intentionally not an exclusion: its bracket must pan too.
+  if (e.button !== 0 || !e.isPrimary || (interactive && e.currentTarget.contains(interactive))) return;
+  drag.current = {id: e.pointerId, x: e.clientX, left: e.currentTarget.scrollLeft};
+  e.currentTarget.dataset.dragging = "true"; e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault();
+ };
+ const moveDrag = (e: PointerEvent<HTMLDivElement>) => {const d = drag.current; if (!d || d.id !== e.pointerId) return; e.currentTarget.scrollLeft = d.left - e.clientX + d.x; e.preventDefault();};
+ const endDrag = (e: PointerEvent<HTMLDivElement>) => {if (drag.current?.id !== e.pointerId) return; drag.current = null; delete e.currentTarget.dataset.dragging; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);};
+ const pan = (direction: number) => scroll.current?.scrollBy({left: direction * column * scale, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+ const focusFinal = () => scroll.current?.scrollTo({left: scroll.current.scrollWidth, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+ const finished = matches.filter(isFinished).length;
+ return <div className="tb-lane" role="group" aria-label={title}>
+  <div className="tb-toolbar"><div className="tb-title"><Icon name="trophy"/><div><h3>{title}</h3><span>{finished} of {matches.length} matches complete</span></div></div><div className="tb-tools">
+   {bronze.length > 0 && <button type="button" className="tb-final-jump" onClick={focusFinal}>Final &amp; 3rd place<Icon name="right"/></button>}
+   <div className="tb-zoom"><button type="button" aria-label="Zoom out" disabled={scale <= .2} onClick={() => setZoom(Math.max(.2, scale - .1))}><Icon name="minus"/></button><button type="button" className="tb-fit" title="Fit the entire bracket height" onClick={() => {setZoom(null); if (scroll.current) scroll.current.scrollTop = 0;}}>Fit <span>{Math.round(scale * 100)}%</span></button><button type="button" aria-label="Zoom in" disabled={scale >= 1.5} onClick={() => setZoom(Math.min(1.5, scale + .1))}><Icon name="plus"/></button></div>
+   <div className="tb-pan-buttons"><button type="button" aria-label="Previous rounds" disabled={!scrollState.left} onClick={() => pan(-1)}><Icon name="left"/></button><button type="button" aria-label="Next rounds" disabled={!scrollState.right} onClick={() => pan(1)}><Icon name="right"/></button></div>
+  </div></div>
+  <div ref={scroll} className="tb-scroll" tabIndex={0} role="region" aria-label={`${title}. Drag left or right to explore. Use Fit to show every match.`} onScroll={updateScroll} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag} onDragStart={e => e.preventDefault()}>
+   <div className="tb-stage" style={{width: width * scale, height: height * scale}}><div className="tb-board" style={{width, height, transform: `scale(${scale})`}}>
+    <svg className="tb-lines" width={width} height={height} aria-hidden="true">{edges.map(({source, target}) => {const x1 = xFor(source) + CARD_WIDTH, x2 = xFor(target), mid = x1 + (x2 - x1) / 2; return <path key={`${source.id}-${target.id}`} className={isFinished(source) ? "is-advanced" : ""} d={`M ${x1} ${yFor(source)} H ${mid} V ${yFor(target)} H ${x2}`}/>;})}</svg>
+    {rounds.map(round => <div className="tb-round-label" key={round} style={{left: (round - firstRound) * column, width: CARD_WIDTH}}><span>{roundName(round)}</span><span>{main.filter(m => m.round === round).length} {main.filter(m => m.round === round).length === 1 ? "match" : "matches"}</span></div>)}
+    {matches.map(m => <article key={m.id} className={`tb-match-card${renderControls ? " has-controls" : ""}${m.side === "third_place" ? " is-bronze" : m.round === lastRound ? " is-final" : ""}${isFinished(m) ? " is-complete" : ""}`} style={{left: xFor(m), top: yFor(m) - CARD_HEIGHT / 2, width: CARD_WIDTH, height: CARD_HEIGHT}} aria-label={`${m.side === "third_place" ? "Third-place playoff" : roundName(m.round)}, match ${m.order}`}>
+     <div className="tb-match-head"><span>{m.side === "third_place" ? "3rd place" : `Match ${m.order}`}</span><span className={`tb-state state-${m.state}`} title={m.state.replaceAll("_", " ")}>{status(m)}</span></div>
+     {(["a", "b"] as const).map(slot => {const id = slot === "a" ? m.aId : m.bId, name = (slot === "a" ? m.aName : m.bName) || slotName(m, `participant_${slot}`), winner = Boolean(m.winnerId && m.winnerId === id); return <div key={slot} className={`tb-entrant${winner ? " is-winner" : ""}${!id ? " is-pending" : ""}`} title={name}><span className="tb-slot-mark">{winner ? <Icon name="check"/> : slot.toUpperCase()}</span><span className="tb-player-name">{name}</span></div>;})}
+     {renderControls && <MatchControl match={m} renderControls={renderControls}/>}
+    </article>)}
+   </div></div>
   </div>
- </section>
+  <div className="tb-footer"><span className="tb-pan-hint">Drag to explore <span aria-hidden="true">↔</span></span><div><span className="tb-legend-win">Winner advances</span>{bronze.length > 0 && <span className="tb-legend-bronze">Third place · semifinal losers</span>}</div></div>
+ </div>;
 }
 
-export default function TournamentBracketView({matches,renderControls}:Props){
- const all=matches.map(normalize).filter(m=>Number.isFinite(m.round)&&Number.isFinite(m.order));
- if(!all.length)return <div className="tb-empty">No bracket matches are available yet.</div>;
- const main=all.filter(m=>m.side==="main"),third=all.filter(m=>m.side==="third_place");
- const otherSides=[...new Set(all.filter(m=>!["main","third_place"].includes(m.side)).map(m=>m.side))];
+export default function TournamentBracketView({matches, renderControls}: Props) {
+ const all = matches.map(normalize).filter(m => Number.isFinite(m.round) && Number.isFinite(m.order));
+ const main = all.filter(m => m.side === "main" || m.side === "third_place");
+ const sides = [...new Set(all.filter(m => !["main", "third_place"].includes(m.side)).map(m => m.side))];
  return <div className="tournament-bracket-view">
-  <style jsx global>{`
-   .tournament-bracket-view{--tb-surface:rgba(10,17,24,.9);--tb-line:#2b414e;--tb-muted:#9eb1bd;--tb-text:#e7f0f4;--tb-accent:#74ded2;min-width:0;color:var(--tb-text)}
-   .tb-lane{margin:14px 0 22px;border:1px solid var(--tb-line);border-radius:13px;background:rgba(12,20,28,.72);overflow:hidden}
-   .tb-lane-head{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--tb-line);background:rgba(19,31,41,.86)}
-   .tb-lane-head h3{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:#c5d9e1}
-   .tb-lane-head span{color:var(--tb-muted);font-size:12px}.tb-lane-head .tb-scroll-hint{margin-left:auto;font-size:11px}
-   .tb-scroll{max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;padding:14px 18px 14px;scrollbar-color:#45616f #111a22;scrollbar-width:thin;touch-action:none;cursor:grab}
-   .tb-scroll:focus-visible{outline:2px solid var(--tb-accent);outline-offset:-3px}.tb-scroll:active{cursor:grabbing}
-   .tb-board{position:relative;min-width:100%;isolation:isolate}
-   .tb-lines{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:0}
-   .tb-lines path{fill:none;stroke:#6d8794;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.78}
-   .tb-lines path.loser{stroke:#c9a977;stroke-dasharray:5 4}
-   .tb-round-label{position:absolute;top:0;width:204px;height:27px;color:#8fa6b4;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .tb-match-card{position:absolute!important;z-index:1;width:204px;min-height:78px;padding:7px 42px 7px 9px;border:1px solid #36505e;border-radius:9px;background:linear-gradient(180deg,rgba(35,51,62,.98),rgba(19,30,39,.98));box-shadow:0 7px 18px #0004}
-   .tb-match-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 4px;padding-right:0;color:#8fa5b1;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
-   .tb-state{max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b8c6cd;font-size:9px}
-   .tb-state.ready,.tb-state.published,.tb-state.completed{color:#80dfc2}
-   .tb-state.pending_publication,.tb-state.scheduled{color:#efd082}
-   .tb-entrant{display:flex;align-items:center;gap:8px;min-width:0;height:25px;padding:2px 5px;border-radius:5px;color:#cbd8dd;font-size:12px}
-   .tb-entrant+.tb-entrant{border-top:1px solid #30444f}
-   .tb-entrant.winner{background:rgba(85,178,147,.14);color:#bff5dd;font-weight:700}
-   .tb-slot-mark{display:grid;place-items:center;flex:none;width:17px;height:17px;border:1px solid #425b68;border-radius:4px;color:#a7bbc5;font-size:9px;font-weight:700}
-   .tb-entrant.winner .tb-slot-mark{border-color:#5da58d;color:#a1efd0}
-   .tb-player-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-   .tb-outcome{margin:4px 3px 0;color:#a9c1cb;font-size:10px}
-   .tb-match-card:has(.tb-manage-trigger:focus-visible){z-index:30}\n   .tb-match-card.tb-third-match{border-color:#8a744b}\n   .tb-match-card>.tb-manage{position:absolute!important;right:8px!important;top:50%!important;left:auto!important;bottom:auto!important;transform:translateY(-50%)!important;width:28px!important;height:28px!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;padding:0!important;z-index:6!important;display:block!important}\n   .tb-manage{position:absolute;right:8px;top:50%;left:auto;bottom:auto;transform:translateY(-50%);width:28px;height:28px;margin:0!important;border:0!important;border-radius:0;background:transparent;padding:0!important;z-index:6}
-   .tb-manage-trigger{display:grid;place-items:center;width:28px!important;height:28px!important;min-height:28px!important;margin:0!important;padding:0!important;border:1px solid #496574!important;border-radius:8px!important;background:#12212b!important;color:var(--tb-accent)!important;font-size:16px!important;font-weight:800;line-height:1;cursor:pointer}
-   .tb-manage-trigger:hover{background:#1b3440!important;border-color:#74ded2!important}
-   .tb-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-   .tb-manage-host{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:18px}
-   .tb-manage-backdrop{position:absolute;inset:0;background:rgba(3,8,12,.76);backdrop-filter:blur(4px)}
-   .tb-manage-panel{position:relative;z-index:1;width:min(500px,calc(100vw - 36px));max-height:min(84dvh,700px);overflow:auto;padding:22px;border:1px solid #3c5866;border-radius:16px;background:#101a23;box-shadow:0 24px 70px #000b;overscroll-behavior:contain}
-   .tb-manage-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;color:#e5eff3;font-size:18px}
-   .tb-manage-panel-head button{min-height:36px;padding:7px 12px;border:1px solid #3c5866;border-radius:8px;background:#1b2a34;color:#e5eff3;cursor:pointer}
-   .tb-manage-panel form{display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px}
-   .tb-manage-panel form>label{grid-column:1/-1;min-width:0}
-   .tb-manage-panel form button{display:inline-flex;align-items:center;justify-content:center;justify-self:start;min-height:42px;padding:9px 16px;border:1px solid #4caeaa;border-radius:9px;background:#69d5ca;color:#071b20;font-size:14px;font-weight:750;line-height:1.2;cursor:pointer;box-shadow:0 5px 16px rgba(50,180,171,.18)}\n   .tb-manage-panel form button:hover:not(:disabled){background:#8ce5dc;border-color:#83e5dc}\n   .tb-manage-panel form button:disabled{opacity:.55;cursor:not-allowed}
-   .tb-manage-panel .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-   .tb-manage-panel .actions button{min-height:40px;padding:8px 14px}
-   .tb-manage-panel .tb-winner-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 16px;border:0;padding:0}
-   .tb-manage-panel .tb-winner-choice legend{grid-column:1/-1;margin-bottom:4px;color:#a9bbc5;font-size:14px;font-weight:700}
-   .tb-manage-panel .tb-winner-choice label{position:relative;display:block;min-width:0;cursor:pointer;user-select:none}
-   .tb-manage-panel .tb-winner-choice input{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none}
-   .tb-manage-panel .tb-winner-choice label>span{display:grid;gap:8px;min-height:94px;padding:16px;border:1px solid #304653;border-radius:12px;background:#0d171f;color:#dce8ec;transition:background .15s,border-color .15s,box-shadow .15s}
-   .tb-manage-panel .tb-winner-choice label:hover>span{border-color:#678391;background:#14232d}
-   .tb-manage-panel .tb-winner-choice input:checked+span{border-color:#74ded2;background:rgba(44,112,110,.25);box-shadow:0 0 0 2px #74ded2}
-   .tb-manage-panel .tb-winner-choice small{color:#87a0ac;font-size:11px;letter-spacing:.08em}
-   .tb-manage-panel .tb-winner-choice strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px}
-   .tb-scroll{user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
-   .tb-scroll [data-dragging="true"]{cursor:grabbing}
-   .hof-event-detail.is-bracket{display:flex;flex-direction:column;height:100%;min-height:0}
-   .hof-modal-card.is-event-modal{width:min(98vw,1480px);height:min(98dvh,1100px);max-height:98dvh}
-   .hof-modal-content:has(.hof-event-detail.is-bracket){overflow:hidden}
-   .hof-event-detail.is-bracket>.tournament-bracket-view{display:flex;flex:1;flex-direction:column;min-height:0}
-   .hof-event-detail.is-bracket .tb-lane:not(.tb-third){display:flex;flex:1;flex-direction:column;min-height:0;margin:0;border:0;border-radius:0;background:transparent}
-   .hof-event-detail.is-bracket .tb-lane-head{flex:none;padding:11px 16px}
-   .hof-event-detail.is-bracket .tb-scroll{flex:1;min-height:0;padding:12px 16px 14px;overflow-x:auto!important;overflow-y:hidden!important;touch-action:none;cursor:grab}
-   .hof-event-detail.is-bracket .tb-match-card{min-height:72px;padding:7px 9px}
-   .hof-event-detail.is-bracket .tb-match-head{margin-bottom:4px;font-size:10px}
-   .hof-event-detail.is-bracket .tb-entrant{height:23px;padding:2px 5px;font-size:12px}
-   .hof-event-detail.is-bracket .tb-slot-mark{width:17px;height:17px;font-size:9px}
-   .hof-event-detail.is-bracket .tb-third{flex:none;margin:0 12px 8px}
-   .hof-event-detail.is-bracket .tb-third .tb-scroll{height:116px;flex:none}
-   .hof-admin .tournament-bracket-view{display:flex;flex-direction:column}
-   .hof-admin .tb-lane:not(.tb-third){flex:none}
-   .hof-admin .bracket-fullscreen:fullscreen{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding:16px}
-   .hof-admin .bracket-fullscreen:fullscreen>.tournament-bracket-view{flex:1;min-height:0}
-   .hof-admin .bracket-fullscreen:fullscreen .tb-scroll{overflow-x:auto;overflow-y:hidden}
-   .tb-third-place-note{margin:0;padding:0 16px 14px;color:var(--tb-muted);font-size:12px}
-   .tb-empty{margin:10px 0;padding:22px;border:1px dashed var(--tb-line);border-radius:12px;color:var(--tb-muted);text-align:center;background:rgba(10,17,24,.62)}
-   @media(max-width:650px){.tb-lane-head{padding:11px 13px}.tb-scroll{padding:17px 12px 14px}.tb-match-card{width:198px}.tb-round-label{width:198px}}
-  `}</style>
-  {main.length?<BracketLane title="Main bracket" matches={[...main,...third]} renderControls={renderControls}/>:null}
-  {otherSides.map(side=><BracketLane key={side} title={laneTitle(side)} matches={all.filter(m=>m.side===side)} renderControls={renderControls}/>)}
-
- </div>
+  <style>{STYLES}</style>
+  {!all.length && <div className="tb-empty">The bracket will appear here once matches are prepared.</div>}
+  {main.length > 0 && <BracketLane title="Tournament bracket" matches={main} renderControls={renderControls}/>}
+  {sides.map(side => <BracketLane key={side} title={`${side.replaceAll("_", " ")} bracket`} matches={all.filter(m => m.side === side)} renderControls={renderControls}/>)}
+ </div>;
 }
+
+const STYLES = `
+.tournament-bracket-view{--tb-accent:#85dfcf;--tb-muted:#93aab7;--tb-border:#2b404c;min-width:0;width:100%;color:#e3edf0;font-family:inherit}
+.tournament-bracket-view *{box-sizing:border-box}
+.tournament-bracket-view .tb-lane{margin:16px 0;border:1px solid var(--tb-border);border-radius:12px;background:#0d171e;overflow:hidden}
+.tournament-bracket-view .tb-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:72px;padding:14px 20px;border-bottom:1px solid #263944;background:#111e27}
+.tournament-bracket-view .tb-title{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.tournament-bracket-view .tb-title>svg{color:#9bded2;width:22px;height:22px}
+.tournament-bracket-view .tb-title h3{margin:0;font-size:15px;font-weight:650;line-height:1.4;letter-spacing:-.015em;color:#e6eff2;text-transform:none}
+.tournament-bracket-view .tb-title span{display:block;margin-top:3px;color:var(--tb-muted);font-size:12px;line-height:1.3}
+.tournament-bracket-view .tb-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.tournament-bracket-view .tb-tools button{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:34px;min-height:34px;margin:0;padding:0 9px;border:1px solid #324854;border-radius:6px;background:#14242e;color:#c8dce3;font:inherit;font-size:12px;line-height:1;cursor:pointer;white-space:nowrap;box-shadow:none}
+.tournament-bracket-view .tb-tools button:hover:not(:disabled){background:#203842;border-color:#577985}
+.tournament-bracket-view .tb-tools button:disabled{opacity:.35;cursor:default}
+.tournament-bracket-view .tb-tools button:focus-visible,.tournament-bracket-view .tb-match-action:focus-visible{outline:2px solid #9aeee0;outline-offset:3px}
+.tournament-bracket-view .tb-tools .tb-final-jump{border-color:transparent;background:transparent;color:#b9cec9;padding:0 4px}
+.tournament-bracket-view .tb-zoom,.tournament-bracket-view .tb-pan-buttons{display:flex;gap:4px}
+.tournament-bracket-view .tb-tools .tb-fit{min-width:92px;gap:9px}
+.tournament-bracket-view .tb-fit span{color:#8fa8b5;font-size:11px;font-variant-numeric:tabular-nums}
+.tournament-bracket-view .tb-scroll{height:clamp(360px,calc(100dvh - 260px),660px);width:100%;overflow:auto;padding:18px 20px;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#45606e #0d171e;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;background-color:#0d171e;background-image:radial-gradient(#39505a45 .65px,transparent .65px);background-size:16px 16px}
+.tournament-bracket-view .tb-scroll[data-dragging=true]{cursor:grabbing}
+.tournament-bracket-view .tb-scroll:focus-visible{outline:2px solid #78d9cc;outline-offset:-3px}
+.tournament-bracket-view .tb-stage{position:relative;flex:none;margin:0 auto}
+.tournament-bracket-view .tb-board{position:relative;transform-origin:top left;isolation:isolate}
+.tournament-bracket-view .tb-lines{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:visible}
+.tournament-bracket-view .tb-lines path{fill:none;stroke:#425c6a;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.tournament-bracket-view .tb-lines path.is-advanced{stroke:#69bbaa}
+.tournament-bracket-view .tb-round-label{position:absolute;top:0;display:flex;align-items:center;justify-content:space-between;gap:12px;height:28px;border-bottom:1px solid #2b3d48;color:#b5c9d2;font-size:12px;font-weight:600;letter-spacing:.01em}
+.tournament-bracket-view .tb-round-label>span:last-child{font-size:10px;color:#748e9e;font-weight:400}
+.tournament-bracket-view .tb-match-card{position:absolute;z-index:1;box-sizing:border-box;min-height:0;margin:0;padding:6px 8px;border:1px solid #35505e;border-radius:7px;background:#172832;box-shadow:0 3px 10px #00000026;overflow:hidden}
+.tournament-bracket-view .tb-match-card.has-controls{padding-right:46px}
+.tournament-bracket-view .tb-match-card.is-final{border-color:#658677;background:#192e32}
+.tournament-bracket-view .tb-match-card.is-bronze{border-color:#8e7650;background:#292920}
+.tournament-bracket-view .tb-match-card.is-complete{border-color:#3c7067}
+.tournament-bracket-view .tb-match-head{display:flex;align-items:center;justify-content:space-between;gap:6px;height:18px;margin:0 0 2px;padding:0 3px;color:#9eb6c3;font-size:10px;font-weight:600;line-height:1;white-space:nowrap}
+.tournament-bracket-view .is-bronze .tb-match-head>span:first-child{color:#e0c28e;font-weight:700}
+.tournament-bracket-view .tb-state{display:inline-flex;align-items:center;gap:4px;color:#91a6b2;font-size:9px;font-weight:500}
+.tournament-bracket-view .tb-state:before{content:'';width:4px;height:4px;border-radius:50%;background:currentColor;flex:none}
+.tournament-bracket-view .state-ready,.tournament-bracket-view .state-published,.tournament-bracket-view .state-completed{color:#8edbc8}
+.tournament-bracket-view .state-pending_publication{color:#e9ca88}
+.tournament-bracket-view .state-in_progress{color:#e7b38d}
+.tournament-bracket-view .tb-entrant{display:flex;align-items:center;gap:7px;height:23px;min-width:0;margin:0;padding:2px 4px;border-radius:4px;color:#e0e9ee;font-size:12px;line-height:19px}
+.tournament-bracket-view .tb-entrant+.tb-entrant{border-top:1px solid #2c414d}
+.tournament-bracket-view .tb-entrant.is-pending{color:#a2b6c2}
+.tournament-bracket-view .tb-entrant.is-winner{background:#285047;color:#c9f5e8;font-weight:650}
+.tournament-bracket-view .tb-slot-mark{display:grid;place-items:center;flex:0 0 17px;height:17px;border-radius:3px;color:#8ba7b5;background:#223944;font-size:9px;line-height:1}
+.tournament-bracket-view .is-winner .tb-slot-mark{color:#b4eedb;background:#356959}
+.tournament-bracket-view .tb-slot-mark svg{width:13px;height:13px}
+.tournament-bracket-view .tb-player-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tournament-bracket-view .tb-match-action{position:absolute;right:7px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:32px;height:32px;min-height:32px;margin:0;padding:0;border:1px solid #486773;border-radius:6px;background:#1c343f;color:#8fe6d7;cursor:pointer;box-shadow:none}
+.tournament-bracket-view .tb-match-action:hover{background:#2c5056;border-color:#88d8cc}
+.tournament-bracket-view .tb-match-action:active{transform:translateY(-50%)}
+.tournament-bracket-view .tb-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 20px;border-top:1px solid #263944;color:#92a9b6;font-size:11px;line-height:1.4;background:#101c24}
+.tournament-bracket-view .tb-footer>div{display:flex;gap:18px;flex-wrap:wrap}
+.tournament-bracket-view .tb-pan-hint{white-space:nowrap}.tournament-bracket-view .tb-pan-hint>span{margin-left:6px;font-size:15px}
+.tournament-bracket-view .tb-legend-win:before,.tournament-bracket-view .tb-legend-bronze:before{content:'';display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:7px;background:#76c7b3}
+.tournament-bracket-view .tb-legend-bronze:before{background:#c6a56c}
+.tournament-bracket-view .tb-empty{padding:28px;border:1px dashed #3b5361;border-radius:10px;text-align:center;color:#a4bbc7}
+.hof-event-detail.is-bracket{display:flex;flex-direction:column;height:100%;min-height:0;background:#0d171e}
+.hof-event-detail.is-bracket .hof-event-backdrop{display:none}
+.hof-modal-card.is-event-modal:has(.is-bracket){width:min(calc(100vw - 32px),1480px);height:calc(100dvh - 32px);max-height:calc(100dvh - 32px)}
+.hof-modal-content:has(.hof-event-detail.is-bracket){overflow:hidden;scrollbar-gutter:auto}
+.hof-event-detail.is-bracket>.hof-event-tabs{position:relative;flex:none;margin:0;padding:0 20px;height:52px;min-height:52px;align-items:stretch;background:#101c24;border-color:#263944}
+.hof-event-detail.is-bracket>.tournament-bracket-view{display:flex;flex:1;flex-direction:column;min-height:0;padding:0}
+.hof-event-detail.is-bracket .tournament-bracket-view>.tb-lane{display:flex;flex:1;flex-direction:column;min-height:0;margin:0;border:0;border-radius:0}
+.hof-event-detail.is-bracket .tb-toolbar,.hof-event-detail.is-bracket .tb-footer{flex:none}
+.hof-event-detail.is-bracket .tb-scroll{height:auto;flex:1;min-height:0}
+.hof-admin .bracket-fullscreen:fullscreen{display:flex;flex-direction:column;height:100dvh;padding:16px;background:#0b141a;overflow:auto}
+.hof-admin .bracket-fullscreen:fullscreen>.tournament-bracket-view{flex:1;min-height:0;display:flex;flex-direction:column}
+.hof-admin .bracket-fullscreen:fullscreen .tb-lane{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
+.hof-admin .bracket-fullscreen:fullscreen .tb-scroll{flex:1;height:auto;min-height:0}
+.tb-dialog-overlay{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:#030a10c9;backdrop-filter:blur(5px)}
+.tb-manage-panel{box-sizing:border-box;position:relative;z-index:1;width:min(500px,100%);max-height:calc(100dvh - 40px);overflow:auto;padding:24px;border:1px solid #3a5665;border-radius:14px;background:#12212b;color:#e6eff2;box-shadow:0 24px 80px #0009;font-family:inherit;outline:none}
+.tb-manage-panel *{box-sizing:border-box}
+.tb-manage-panel .tb-dialog-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}
+.tb-manage-panel .tb-dialog-eyebrow{display:block;color:#92b0be;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.tb-manage-panel .tb-dialog-heading h2{margin:7px 0 0;color:#edf5f7;font-size:23px;font-weight:650;letter-spacing:-.025em;line-height:1.3}
+.tb-manage-panel .tb-dialog-close{display:grid;place-items:center;flex:none;width:36px;height:36px;min-height:36px;margin:0;padding:0;border:1px solid #3b5462;border-radius:7px;background:#1b303c;color:#c4d7e1;cursor:pointer}
+.tb-manage-panel .tb-dialog-help{font-size:13px;line-height:1.6;color:#a5bbc7;margin:0 0 18px}
+.tb-manage-panel form{display:grid;grid-template-columns:1fr;gap:14px;margin:18px 0 0}
+.tb-manage-panel form:has(+.tb-report-winner-form){padding-bottom:20px;border-bottom:1px solid #344a57}
+.tb-manage-panel form>label{display:grid;gap:7px;color:#bfd0da;font-size:12px}
+.tb-manage-panel select{width:100%;min-height:42px;padding:9px 10px;border:1px solid #3a5564;border-radius:7px;background:#0c1a23;color:#d9e8ef;font:inherit}
+.tb-manage-panel form button,.tb-manage-panel .actions button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:11px 18px;border:1px solid #84decc;border-radius:8px;background:#84decc;color:#092620;font:inherit;font-size:14px;font-weight:700;line-height:1.3;cursor:pointer;box-shadow:none}
+.tb-manage-panel form button:hover:not(:disabled),.tb-manage-panel .actions button:hover:not(:disabled){background:#a0ecdd}
+.tb-manage-panel button:disabled{opacity:.5;cursor:wait}
+.tb-manage-panel .tb-winner-choice{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:0;margin:0;padding:0;border:0}
+.tb-manage-panel .tb-winner-choice legend{padding:0;margin-bottom:12px;color:#d5e4e9;font-size:13px;font-weight:600}
+.tb-manage-panel .tb-winner-choice label{position:relative;display:block;min-width:0;cursor:pointer}
+.tb-manage-panel .tb-winner-choice input{position:absolute;width:1px;height:1px;opacity:0}
+.tb-manage-panel .tb-winner-choice label>span{position:relative;display:grid;gap:9px;min-height:92px;padding:16px 32px 16px 14px;border:1px solid #3d5765;border-radius:8px;background:#101e27;color:#e2eff3}
+.tb-manage-panel .tb-winner-choice label>span:after{content:'';position:absolute;right:12px;top:16px;width:13px;height:13px;border:1px solid #64808e;border-radius:50%}
+.tb-manage-panel .tb-winner-choice input:checked+span{border-color:#8ce1d0;background:#1e403e;box-shadow:inset 0 0 0 1px #8ce1d0}
+.tb-manage-panel .tb-winner-choice input:checked+span:after{border:4px solid #85dfcf;background:#14352e}
+.tb-manage-panel .tb-winner-choice input:focus-visible+span{outline:2px solid #b6fff0;outline-offset:3px}
+.tb-manage-panel .tb-winner-choice small{color:#8faebc;font-size:10px;letter-spacing:.07em}
+.tb-manage-panel .tb-winner-choice strong{overflow-wrap:anywhere;font-size:15px;line-height:1.4}
+.tb-manage-panel .actions{display:grid;gap:16px;color:#b9d0da;font-size:14px}
+.tb-manage-panel button:focus-visible,.tb-manage-panel select:focus-visible{outline:2px solid #aeefdf;outline-offset:3px}
+@media(max-width:760px){.tournament-bracket-view .tb-toolbar{padding:12px;flex-wrap:wrap;gap:12px}.tournament-bracket-view .tb-tools{gap:8px;width:100%;justify-content:space-between}.tournament-bracket-view .tb-tools .tb-final-jump{font-size:11px}.tournament-bracket-view .tb-scroll{padding:18px 12px;height:clamp(320px,calc(100dvh - 300px),580px)}.tournament-bracket-view .tb-footer{padding:10px 12px;align-items:flex-start;font-size:10px}.tournament-bracket-view .tb-footer>div{gap:5px;flex-direction:column;align-items:flex-end}.hof-modal-card.is-event-modal:has(.is-bracket){width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:calc(100dvh - 16px)}.hof-event-detail.is-bracket .tb-scroll{height:auto}.tb-manage-panel{padding:20px}.tb-manage-panel .tb-winner-choice{gap:8px}}
+@media(prefers-reduced-motion:reduce){.tournament-bracket-view *,.tb-manage-panel *{scroll-behavior:auto!important;transition:none!important}}
+`;
