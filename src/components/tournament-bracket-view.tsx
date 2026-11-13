@@ -33,7 +33,7 @@ function statusLabel(state:string){return state.replaceAll("_"," ");}
 function BracketLane({title,matches,renderControls}:{title:string;matches:NormalizedMatch[];renderControls?:Props["renderControls"]}){
  if(!matches.length)return null;
  const rounds=[...new Set(matches.map(m=>m.round))].sort((a,b)=>a-b),minRound=rounds[0],maxRound=rounds[rounds.length-1],depth=maxRound-minRound+1;
- const leafCount=Math.pow(2,Math.max(0,depth-1)),height=Math.max(410,leafCount*104),columnWidth=222,cardWidth=204,headerSpace=38;
+ const adminControls=Boolean(renderControls),leafCount=Math.pow(2,Math.max(0,depth-1)),leafSpacing=adminControls?148:104,height=Math.max(adminControls?460:410,leafCount*leafSpacing),columnWidth=adminControls?310:222,cardWidth=adminControls?270:204,headerSpace=38;
  const width=rounds.length*columnWidth;
  const xFor=(m:NormalizedMatch)=>(m.round-minRound)*columnWidth;
  const yFor=(m:NormalizedMatch)=>{
@@ -58,13 +58,13 @@ function BracketLane({title,matches,renderControls}:{title:string;matches:Normal
     <svg className="tb-lines" width={width} height={height+headerSpace} viewBox={`0 0 ${width} ${height+headerSpace}`} aria-hidden="true">
      {edges.map(({source,target,kind})=>{const x1=xFor(source)+cardWidth,x2=xFor(target),y1=yFor(source),y2=yFor(target),mid=x1+(x2-x1)/2;return <path key={source.id+"-"+target.id+"-"+kind} className={kind==="loser"?"loser":"winner"} d={`M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`}/>})}
     </svg>
-    {rounds.map((round,index)=><div className="tb-round-label" key={round} style={{left:(index*columnWidth)+"px"}}>{matches.find(m=>m.round===round)?.roundLabel||("Round "+round)}</div>)}
-    {matches.map(m=><article className="tb-match-card" key={m.id} style={{left:xFor(m)+"px",top:(yFor(m)-39)+"px"}} aria-label={m.roundLabel+", match "+m.order}>
+    {rounds.map((round,index)=><div className="tb-round-label" key={round} style={{left:(index*columnWidth)+"px",width:cardWidth+"px"}}>{matches.find(m=>m.round===round)?.roundLabel||("Round "+round)}</div>)}
+    {matches.map(m=><article className="tb-match-card" key={m.id} style={{left:xFor(m)+"px",top:(yFor(m)-39)+"px",width:cardWidth+"px"}} aria-label={m.roundLabel+", match "+m.order}>
      <div className="tb-match-head"><span>Match {m.order}</span><span className={"tb-state "+m.state}>{statusLabel(m.state)}</span></div>
      <div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.aId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.aId?"✓":"A"}</span><span className="tb-player-name">{m.aName}</span></div>
      <div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.bId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.bId?"✓":"B"}</span><span className="tb-player-name">{m.bName}</span></div>
      {m.outcome&&<div className="tb-outcome">{m.outcome}</div>}
-     {renderControls&&<details className="tb-manage"><summary>Manage match</summary>{renderControls(m.raw)}</details>}
+     {renderControls&&<details className="tb-manage"><summary>Manage match</summary><div className="tb-manage-backdrop" onClick={event=>event.currentTarget.parentElement?.removeAttribute("open")} aria-hidden="true"/><div className="tb-manage-panel" role="dialog" aria-label={`Manage ${m.roundLabel}, match ${m.order}`}><div className="tb-manage-panel-head"><strong>Match {m.order}</strong><button type="button" onClick={event=>event.currentTarget.closest("details")?.removeAttribute("open")}>Close</button></div>{renderControls(m.raw)}</div></details>}
     </article>)}
    </div>
   </div>
@@ -90,7 +90,7 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-lines path{fill:none;stroke:#6d8794;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.78}
    .tb-lines path.loser{stroke:#c9a977;stroke-dasharray:5 4}
    .tb-round-label{position:absolute;top:0;width:204px;height:27px;color:#8fa6b4;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-   .tb-match-card{position:absolute;z-index:1;width:204px;min-height:78px;padding:7px 9px;border:1px solid #36505e;border-radius:9px;background:linear-gradient(180deg,rgba(35,51,62,.98),rgba(19,30,39,.98));box-shadow:0 7px 18px #0004}
+    .tb-match-card{position:absolute;z-index:1;width:204px;min-height:78px;padding:7px 9px;border:1px solid #36505e;border-radius:9px;background:linear-gradient(180deg,rgba(35,51,62,.98),rgba(19,30,39,.98));box-shadow:0 7px 18px #0004}
    .tb-match-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 5px;color:#8fa5b1;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
    .tb-state{max-width:124px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b8c6cd;font-size:9px}
    .tb-state.ready,.tb-state.published,.tb-state.completed{color:#80dfc2}
@@ -102,7 +102,7 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-entrant.winner .tb-slot-mark{border-color:#5da58d;color:#a1efd0}
    .tb-player-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
    .tb-outcome{margin:4px 3px 0;color:#a9c1cb;font-size:10px}
-   .tb-manage{margin:8px 0 0;border-top:1px solid #334a55;padding-top:5px}
+   .tb-match-card:has(.tb-manage[open]){z-index:30}\n   .tb-manage{margin:8px 0 0;border-top:1px solid #334a55;padding-top:5px}\n   .tb-manage[open]>.tb-manage-backdrop{position:fixed;inset:0;z-index:0;background:rgba(3,8,12,.68);backdrop-filter:blur(3px)}\n   .tb-manage[open]>.tb-manage-panel{position:fixed;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));max-height:min(84vh,620px);overflow:auto;padding:18px;border:1px solid #3c5866;border-radius:14px;background:#101a23;box-shadow:0 24px 70px #000b}\n   .tb-manage-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;color:#e5eff3}\n   .tb-manage-panel-head button{min-height:32px;padding:5px 10px;border:1px solid #3c5866;border-radius:7px;background:#1b2a34;color:#e5eff3;cursor:pointer}
    .tb-manage summary{color:var(--tb-accent);font-size:11px;font-weight:700;cursor:pointer}
    .tb-manage form{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
    .tb-manage form>label{grid-column:1/-1;min-width:0}
@@ -115,6 +115,6 @@ export default function TournamentBracketView({matches,renderControls}:Props){
   `}</style>
   {main.length?<BracketLane title="Main bracket" matches={main} renderControls={renderControls}/>:null}
   {otherSides.map(side=><BracketLane key={side} title={laneTitle(side)} matches={all.filter(m=>m.side===side)} renderControls={renderControls}/>)}
-  {third.length?<section className="tb-lane tb-third"><div className="tb-lane-head"><h3>Third-place playoff</h3><span>Bronze medal match</span></div><p className="tb-third-place-note">The semifinal losers meet here for third place.</p><div className="tb-scroll" tabIndex={0} role="region" aria-label="Third-place playoff"><div className="tb-board" style={{width:240+"px",height:"110px"}}>{third.map(m=><article className="tb-match-card" key={m.id} style={{left:0,top:"0px"}}><div className="tb-match-head"><span>{m.roundLabel}</span><span className={"tb-state "+m.state}>{statusLabel(m.state)}</span></div><div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.aId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.aId?"✓":"A"}</span><span className="tb-player-name">{m.aName}</span></div><div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.bId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.bId?"✓":"B"}</span><span className="tb-player-name">{m.bName}</span></div>{renderControls&&<details className="tb-manage"><summary>Manage match</summary>{renderControls(m.raw)}</details>}</article>)}</div></div></section>:null}
+  {third.length?<section className="tb-lane tb-third"><div className="tb-lane-head"><h3>Third-place playoff</h3><span>Bronze medal match</span></div><p className="tb-third-place-note">The semifinal losers meet here for third place.</p><div className="tb-scroll" tabIndex={0} role="region" aria-label="Third-place playoff"><div className="tb-board" style={{width:240+"px",height:"110px"}}>{third.map(m=><article className="tb-match-card" key={m.id} style={{left:0,top:"0px"}}><div className="tb-match-head"><span>{m.roundLabel}</span><span className={"tb-state "+m.state}>{statusLabel(m.state)}</span></div><div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.aId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.aId?"✓":"A"}</span><span className="tb-player-name">{m.aName}</span></div><div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.bId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.bId?"✓":"B"}</span><span className="tb-player-name">{m.bName}</span></div>{renderControls&&<details className="tb-manage"><summary>Manage match</summary><div className="tb-manage-backdrop" onClick={event=>event.currentTarget.parentElement?.removeAttribute("open")} aria-hidden="true"/><div className="tb-manage-panel" role="dialog" aria-label={`Manage ${m.roundLabel}, match ${m.order}`}><div className="tb-manage-panel-head"><strong>Match {m.order}</strong><button type="button" onClick={event=>event.currentTarget.closest("details")?.removeAttribute("open")}>Close</button></div>{renderControls(m.raw)}</div></details>}</article>)}</div></div></section>:null}
  </div>
 }
