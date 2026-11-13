@@ -177,8 +177,9 @@ const slug=url.searchParams.get("slug");
    for(const row of rows.rows){const id=String(row.id);if(!grouped.has(id))grouped.set(id,{id,label:String(row.label),role:String(row.role),title:String(row.title),created_at:String(row.created_at),revoked_at:row.revoked_at?String(row.revoked_at):null,assignments:[]});if(row.tournament_slug)grouped.get(id).assignments.push({tournament_slug:String(row.tournament_slug),match_id:row.match_id?String(row.match_id):null,event_title:row.event_title?String(row.event_title):String(row.tournament_slug),round_label:row.round_label?String(row.round_label):null,match_order:row.match_order==null?null:Number(row.match_order)});}
    staff=[...grouped.values()];
   }
-  let reserves:any[]=[];if(slug){const r=await db.execute({sql:"SELECT p.id,p.display_name,p.resonator_icon FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? AND r.state='reserve' ORDER BY r.reserve_order,p.display_name COLLATE NOCASE",args:[slug]});reserves=r.rows;}
-  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,staff});
+  let roster:any[]=[];if(slug&&await can(actor,"manage_event",slug,null,db)){const r=await db.execute({sql:"SELECT p.id,p.display_name,p.resonator_icon,r.state,r.published,r.seed_position,r.reserve_order FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? ORDER BY CASE r.state WHEN 'confirmed' THEN 0 WHEN 'reserve' THEN 1 ELSE 2 END,COALESCE(r.seed_position,r.reserve_order,9999),p.display_name COLLATE NOCASE",args:[slug]});roster=r.rows;}
+  const reserves=roster.filter((row:any)=>row.state==="reserve");
+  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff});
  }catch(e){return failure(e);}
 }
 export async function POST(request:Request){
@@ -412,16 +413,17 @@ export async function POST(request:Request){
   if(action==="add_roster"){
    if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"manage_event",slug,null,db);
    const participantId=text(body.participantId,"Participant",80),event=await db.execute({sql:"SELECT status,capacity_max FROM hof_tournaments WHERE slug=?",args:[slug]});if(!event.rows.length)throw new HttpError(404,"Tournament not found.");
-   if(!["registration_open","registration_closed","draft"].includes(String(event.rows[0].status)))throw new HttpError(409,"Roster edits are closed for this event state.");
-   const count=await db.execute({sql:"SELECT COUNT(*) total FROM hof_roster WHERE tournament_slug=? AND state='confirmed'",args:[slug]});if(Number(count.rows[0]?.total||0)>=Number(event.rows[0].capacity_max))throw new HttpError(409,"Tournament capacity has been reached.");
+   if(!["announced","registration_open","registration_closed","draft"].includes(String(event.rows[0].status)))throw new HttpError(409,"Roster edits are closed for this event state.");
+   const count=await db.execute({sql:"SELECT COUNT(*) total FROM hof_roster WHERE tournament_slug=? AND state='confirmed'",args:[slug]});if(!body.reserve&&Number(count.rows[0]?.total||0)>=Number(event.rows[0].capacity_max))throw new HttpError(409,"Tournament capacity has been reached.");
    const participant=await db.execute({sql:"SELECT id FROM hof_participants WHERE id=?",args:[participantId]});if(!participant.rows.length)throw new HttpError(404,"Participant not found.");
    await db.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,?,0,?) ON CONFLICT(tournament_slug,participant_id) DO UPDATE SET state=excluded.state,published=0,updated_at=excluded.updated_at",args:[slug,participantId,body.reserve?"reserve":"confirmed",now]});
-   await db.execute({sql:"INSERT INTO hof_registrations(id,tournament_slug,participant_id,reaction_message_ref,reaction_at,verified_by,verified_at,state) VALUES(?,?,?,?,?,?,?,'confirmed') ON CONFLICT(tournament_slug,participant_id) DO UPDATE SET state='confirmed',verified_by=excluded.verified_by,verified_at=excluded.verified_at",args:[randomUUID(),slug,participantId,String(body.reactionRef||"manual-admin").slice(0,120),now,actor.id,now]});
-   await audit(db,actor,action,slug,{}, {participantId,state:body.reserve?"reserve":"confirmed"});return json({ok:true});
+   if(!body.reserve)await db.execute({sql:"INSERT INTO hof_registrations(id,tournament_slug,participant_id,reaction_message_ref,reaction_at,verified_by,verified_at,state) VALUES(?,?,?,?,?,?,?,'confirmed') ON CONFLICT(tournament_slug,participant_id) DO UPDATE SET state='confirmed',verified_by=excluded.verified_by,verified_at=excluded.verified_at",args:[randomUUID(),slug,participantId,String(body.reactionRef||"manual-admin").slice(0,120),now,actor.id,now]});
+   await db.execute({sql:"UPDATE hof_tournaments SET roster_published=0,bracket_published=0,updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});await audit(db,actor,action,slug,{}, {participantId,state:body.reserve?"reserve":"confirmed"});return json({ok:true});
   }
   if(action==="publish_roster"){
    if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"manage_event",slug,null,db);
-   const result=await db.execute({sql:"UPDATE hof_roster SET published=1,updated_at=? WHERE tournament_slug=? AND state='confirmed'",args:[now,slug]});if(!result.rowsAffected)throw new HttpError(409,"No confirmed participants to publish.");
+   const event=await db.execute({sql:"SELECT status FROM hof_tournaments WHERE slug=?",args:[slug]});if(!event.rows.length)throw new HttpError(404,"Tournament not found.");if(String(event.rows[0].status)!=="registration_closed")throw new HttpError(409,"Close registration before publishing the confirmed roster.");
+   const result=await db.execute({sql:"UPDATE hof_roster SET published=1,updated_at=? WHERE tournament_slug=? AND state='confirmed'",args:[now,slug]});if(!result.rowsAffected)throw new HttpError(409,"Add at least one confirmed participant before publishing.");
    await db.execute({sql:"UPDATE hof_tournaments SET roster_published=1,updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});await audit(db,actor,action,slug,{}, {published:true});return json({ok:true});
   }
   if(action==="set_medal"){
