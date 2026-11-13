@@ -177,6 +177,12 @@ const slug=url.searchParams.get("slug");
    for(const row of rows.rows){const id=String(row.id);if(!grouped.has(id))grouped.set(id,{id,label:String(row.label),role:String(row.role),title:String(row.title),created_at:String(row.created_at),revoked_at:row.revoked_at?String(row.revoked_at):null,assignments:[]});if(row.tournament_slug)grouped.get(id).assignments.push({tournament_slug:String(row.tournament_slug),match_id:row.match_id?String(row.match_id):null,event_title:row.event_title?String(row.event_title):String(row.tournament_slug),round_label:row.round_label?String(row.round_label):null,match_order:row.match_order==null?null:Number(row.match_order)});}
    staff=[...grouped.values()];
   }
+  if(matches.length&&slug){
+   const dependencyRows=await db.execute({sql:"SELECT d.match_id,d.depends_on_match_id,d.dependency_type FROM hof_match_dependencies d JOIN hof_matches m ON m.id=d.match_id WHERE m.tournament_slug=?",args:[slug]});
+   const dependencyMap=new Map<string,{dependsOnMatchId:string;dependencyType:string}[]>();
+   for(const edge of dependencyRows.rows){const key=String(edge.match_id),items=dependencyMap.get(key)||[];items.push({dependsOnMatchId:String(edge.depends_on_match_id),dependencyType:String(edge.dependency_type)});dependencyMap.set(key,items);}
+   matches=matches.map((match:any)=>({...match,dependencies:(dependencyMap.get(String(match.id))||[]).filter(edge=>matches.some((candidate:any)=>String(candidate.id)===edge.dependsOnMatchId))}));
+  }
   let roster:any[]=[];if(slug&&await can(actor,"manage_event",slug,null,db)){const r=await db.execute({sql:"SELECT p.id,p.display_name,p.resonator_icon,r.state,r.published,r.seed_position,r.reserve_order FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? ORDER BY CASE r.state WHEN 'confirmed' THEN 0 WHEN 'reserve' THEN 1 ELSE 2 END,COALESCE(r.seed_position,r.reserve_order,9999),p.display_name COLLATE NOCASE",args:[slug]});roster=r.rows;}
   const reserves=roster.filter((row:any)=>row.state==="reserve");
   return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff});
