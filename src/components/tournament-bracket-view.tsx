@@ -108,7 +108,7 @@ function BracketLane({title, matches, renderControls}: {title: string; matches: 
  const startDrag = (e: PointerEvent<HTMLDivElement>) => {
   const target = e.target as Element, interactive = target.closest("button,a,input,select,textarea,label");
   // The enclosing tournament modal is intentionally not an exclusion: its bracket must pan too.
-  if (e.button !== 0 || !e.isPrimary || (interactive && e.currentTarget.contains(interactive))) return;
+  if (!e.currentTarget.contains(target) || e.button !== 0 || !e.isPrimary || interactive) return;
   drag.current = {id: e.pointerId, x: e.clientX, left: e.currentTarget.scrollLeft};
   e.currentTarget.dataset.dragging = "true"; e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault();
  };
