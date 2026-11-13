@@ -220,4 +220,5 @@ export const migrations = [
     "ALTER TABLE hof_roster ADD COLUMN display_name_snapshot TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE hof_roster ADD COLUMN resonator_icon_snapshot TEXT NOT NULL DEFAULT ''"
   ]},
+  {version:24,statements:["ALTER TABLE hof_matches ADD COLUMN bracket_position INTEGER NOT NULL DEFAULT -1"]},
 ];
