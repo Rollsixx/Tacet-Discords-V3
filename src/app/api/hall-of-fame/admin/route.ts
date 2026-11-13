@@ -289,6 +289,28 @@ export async function POST(request:Request){
    await db.execute({sql:"UPDATE hof_matches SET state=?,version=version+1,updated_at=? WHERE id=?",args:[state,now,matchId]});
    await audit(db,actor,action,String(m.rows[0].tournament_slug),{}, {state:"resolved",resolution:rationale});return json({ok:true});
   }
+  if(action==="delete_tournament"){
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only a full-access Black Shores administrator can delete tournaments.");
+   if(!slug)throw new HttpError(400,"Choose a tournament to delete.");
+   tx=await db.transaction("write");
+   const event=(await tx.execute({sql:"SELECT slug,title,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];
+   if(!event)throw new HttpError(404,"Tournament not found.");
+   const matchFilter="tournament_slug=?";
+   const matchArgs=[slug];
+   await tx.execute({sql:"DELETE FROM hof_match_dependencies WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+") OR depends_on_match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:[...matchArgs,...matchArgs]});
+   await tx.execute({sql:"DELETE FROM hof_match_evidence WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
+   await tx.execute({sql:"DELETE FROM hof_match_claims WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
+   await tx.execute({sql:"DELETE FROM hof_disputes WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
+   await tx.execute({sql:"DELETE FROM hof_staff_assignments WHERE tournament_slug=?",args:[slug]});
+   await tx.execute({sql:"DELETE FROM hof_registrations WHERE tournament_slug=?",args:[slug]});
+   await tx.execute({sql:"DELETE FROM hof_roster WHERE tournament_slug=?",args:[slug]});
+   await tx.execute({sql:"DELETE FROM hof_medals WHERE tournament_slug=?",args:[slug]});
+   await tx.execute({sql:"DELETE FROM hof_announcements WHERE tournament_slug=?",args:[slug]});
+   await tx.execute({sql:"DELETE FROM hof_matches WHERE tournament_slug=?",args:[slug]});
+   await tx.execute({sql:"DELETE FROM hof_tournaments WHERE slug=?",args:[slug]});
+   await audit(tx,actor,action,slug,{title:String(event.title),status:String(event.status)},{deleted:true,relatedEventDataRemoved:true},"Tournament permanently deleted by administrator.");
+   await tx.commit();tx=null;return json({ok:true,deleted:true,title:String(event.title)});
+  }
   if(action==="archive"){
    if(!slug)throw new HttpError(400,"Tournament is required.");if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can archive events.");
    const event=await db.execute({sql:"SELECT status,medals_published FROM hof_tournaments WHERE slug=?",args:[slug]});if(!event.rows.length)throw new HttpError(404,"Tournament not found.");
