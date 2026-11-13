@@ -171,7 +171,7 @@ const STYLES = `
 .tournament-bracket-view .tb-scroll{height:clamp(360px,calc(100dvh - 260px),660px);width:100%;overflow:auto;padding:18px 20px;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#45606e #0d171e;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;background-color:#0d171e;background-image:radial-gradient(#39505a45 .65px,transparent .65px);background-size:16px 16px}
 .tournament-bracket-view .tb-scroll[data-dragging=true]{cursor:grabbing}
 .tournament-bracket-view .tb-scroll:focus-visible{outline:2px solid #78d9cc;outline-offset:-3px}
-.tournament-bracket-view .tb-stage{position:relative;flex:none;margin:0 auto}
+.tournament-bracket-view .tb-stage{position:relative;flex:none;margin:0 auto;overflow:hidden}
 .tournament-bracket-view .tb-board{position:relative;transform-origin:top left;isolation:isolate}
 .tournament-bracket-view .tb-lines{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:visible}
 .tournament-bracket-view .tb-lines path{fill:none;stroke:#425c6a;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
