@@ -2,6 +2,7 @@
 
 import {useEffect,useState} from "react";
 import type {ReactNode} from "react";
+import {createPortal} from "react-dom";
 
 type Dependency={dependsOnMatchId?:string;depends_on_match_id?:string;dependencyType?:string;dependency_type?:string;targetSlot?:string;target_slot?:string};
 type MatchInput=any;
@@ -30,8 +31,8 @@ function laneTitle(side:string){
  return side.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())+" bracket";
 }
 function startBracketDrag(event:any){
- const target=event.target as HTMLElement;if(target.closest("button,summary,input,select"))return;
- const element=event.currentTarget as HTMLDivElement;element.dataset.dragging="true";element.dataset.dragStartX=String(event.clientX);element.dataset.dragStartScroll=String(element.scrollLeft);element.setPointerCapture(event.pointerId);
+ const target=event.target as HTMLElement;if(target.closest("button,summary,input,select,a,[role=dialog]"))return;
+ const element=event.currentTarget as HTMLDivElement;element.dataset.dragging="true";element.dataset.dragStartX=String(event.clientX);element.dataset.dragStartScroll=String(element.scrollLeft);element.setPointerCapture(event.pointerId);event.preventDefault();
 }
 function moveBracketDrag(event:any){
  const element=event.currentTarget as HTMLDivElement;if(element.dataset.dragging!=="true")return;
@@ -43,16 +44,20 @@ function endBracketDrag(event:any){
 function statusLabel(state:string){return state.replaceAll("_"," ");}
 
 function MatchManagementControl({match,renderControls}:{match:NormalizedMatch;renderControls:Props["renderControls"]}){
+ const [open,setOpen]=useState(false),[mounted,setMounted]=useState(false);
  const label=match.state==="pending_publication"?"Verify winner":["ready","scheduled","in_progress"].includes(match.state)?"Report winner":"Match options";
  const icon=match.state==="pending_publication"?"✓":["ready","scheduled","in_progress"].includes(match.state)?"♛":"⋯";
- return <details className="tb-manage">
-  <summary aria-label={label} title={label}><span aria-hidden="true">{icon}</span><span className="tb-sr-only">{label}</span></summary>
-  <div className="tb-manage-backdrop" onClick={event=>event.currentTarget.parentElement?.removeAttribute("open")} aria-hidden="true"/>
-  <div className="tb-manage-panel" role="dialog" aria-label={`Manage ${match.roundLabel}, match ${match.order}`}>
-   <div className="tb-manage-panel-head"><strong>Match {match.order}</strong><button type="button" onClick={event=>event.currentTarget.closest("details")?.removeAttribute("open")}>Close</button></div>
-   {renderControls?.(match.raw)}
-  </div>
- </details>
+ useEffect(()=>{setMounted(true);const close=(event:Event)=>{if((event as CustomEvent).detail===match.id)setOpen(false)};const key=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false)};window.addEventListener("close-bracket-match-dialog",close);window.addEventListener("keydown",key);return()=>{window.removeEventListener("close-bracket-match-dialog",close);window.removeEventListener("keydown",key)}},[match.id]);
+ return <>
+  <div className="tb-manage"><button type="button" className="tb-manage-trigger" aria-label={label} title={label} onClick={()=>setOpen(true)}><span aria-hidden="true">{icon}</span></button></div>
+  {open&&mounted&&createPortal(<div className="tb-manage-host" data-match-dialog={match.id} onMouseDown={event=>{if(event.target===event.currentTarget)setOpen(false)}}>
+   <div className="tb-manage-backdrop" aria-hidden="true"/>
+   <section className="tb-manage-panel" role="dialog" aria-modal="true" aria-label={`Manage ${match.roundLabel}, match ${match.order}`}>
+    <div className="tb-manage-panel-head"><strong>Match {match.order}</strong><button type="button" onClick={()=>setOpen(false)}>Close</button></div>
+    {renderControls?.(match.raw)}
+   </section>
+  </div>,document.body)}
+ </>
 }
 
 function BracketLane({title,matches,renderControls}:{title:string;matches:NormalizedMatch[];renderControls?:Props["renderControls"]}){
@@ -131,39 +136,49 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-entrant.winner .tb-slot-mark{border-color:#5da58d;color:#a1efd0}
    .tb-player-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
    .tb-outcome{margin:4px 3px 0;color:#a9c1cb;font-size:10px}
-   .tb-match-card:has(.tb-manage[open]){z-index:30}\n   .tb-manage{position:absolute;right:0;top:-4px;margin:0;border:0;background:transparent;padding:0}\n   .tb-manage summary{display:grid;place-items:center;width:27px;height:27px;border:1px solid #385563;border-radius:8px;background:#14232c;color:var(--tb-accent);font-size:17px;font-weight:800;line-height:1;cursor:pointer;list-style:none}.tb-manage summary::-webkit-details-marker{display:none}.tb-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}\n   .hof-admin .tb-manage{position:absolute;right:0;top:-4px;margin:0!important;border:0!important;border-radius:0;background:transparent;padding:0!important}\n   .hof-admin .tb-manage>summary{margin:0!important;padding:0;border:1px solid #385563;background:#14232c;color:var(--tb-accent)}\n   .hof-admin .tb-manage[open]>summary{margin-bottom:0}\n   .tb-manage[open]>.tb-manage-backdrop{position:fixed;inset:0;z-index:0;background:rgba(3,8,12,.68);backdrop-filter:blur(3px)}\n   .tb-manage[open]>.tb-manage-panel{position:fixed;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));max-height:min(84vh,620px);overflow:auto;padding:18px;border:1px solid #3c5866;border-radius:14px;background:#101a23;box-shadow:0 24px 70px #000b}\n   .tb-manage-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;color:#e5eff3}\n   .tb-manage-panel-head button{min-height:32px;padding:5px 10px;border:1px solid #3c5866;border-radius:7px;background:#1b2a34;color:#e5eff3;cursor:pointer}
-   .tb-manage summary{color:var(--tb-accent);font-size:11px;font-weight:700;cursor:pointer}
-   .tb-manage .tb-winner-choice{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;border:0;padding:0}
-   .tb-manage .tb-winner-choice legend{grid-column:1/-1;margin-bottom:4px;color:#a9bbc5;font-size:12px;font-weight:700}
-   .tb-manage .tb-winner-choice label{display:block;min-width:0;cursor:pointer}
-   .tb-manage .tb-winner-choice input{position:absolute;opacity:0;pointer-events:none}
-   .tb-manage .tb-winner-choice label>span{display:grid;gap:5px;min-height:74px;padding:12px;border:1px solid #304653;border-radius:10px;background:#0d171f;color:#dce8ec}
-   .tb-manage .tb-winner-choice input:checked+span{border-color:#74ded2;background:rgba(44,112,110,.25);box-shadow:0 0 0 1px #74ded2}
-   .tb-manage .tb-winner-choice small{color:#87a0ac;font-size:10px;letter-spacing:.08em}
-   .tb-manage .tb-winner-choice strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+   .tb-match-card:has(.tb-manage-trigger:focus-visible){z-index:30}\n   .tb-manage{position:absolute;right:7px;top:6px;margin:0!important;border:0!important;border-radius:0;background:transparent;padding:0!important;z-index:4}
+   .tb-manage-trigger{display:grid;place-items:center;width:28px;height:28px;margin:0!important;padding:0!important;border:1px solid #496574!important;border-radius:8px!important;background:#12212b!important;color:var(--tb-accent)!important;font-size:16px!important;font-weight:800;line-height:1;cursor:pointer}
+   .tb-manage-trigger:hover{background:#1b3440!important;border-color:#74ded2!important}
+   .tb-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+   .tb-manage-host{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:18px}
+   .tb-manage-backdrop{position:absolute;inset:0;background:rgba(3,8,12,.76);backdrop-filter:blur(4px)}
+   .tb-manage-panel{position:relative;z-index:1;width:min(500px,calc(100vw - 36px));max-height:min(84dvh,700px);overflow:auto;padding:22px;border:1px solid #3c5866;border-radius:16px;background:#101a23;box-shadow:0 24px 70px #000b;overscroll-behavior:contain}
+   .tb-manage-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;color:#e5eff3;font-size:18px}
+   .tb-manage-panel-head button{min-height:36px;padding:7px 12px;border:1px solid #3c5866;border-radius:8px;background:#1b2a34;color:#e5eff3;cursor:pointer}
+   .tb-manage-panel form{display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px}
+   .tb-manage-panel form>label{grid-column:1/-1;min-width:0}
+   .tb-manage-panel form button{justify-self:start;min-height:42px;padding:9px 16px;font-size:14px}
+   .tb-manage-panel .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+   .tb-manage-panel .actions button{min-height:40px;padding:8px 14px}
+   .tb-manage-panel .tb-winner-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 16px;border:0;padding:0}
+   .tb-manage-panel .tb-winner-choice legend{grid-column:1/-1;margin-bottom:4px;color:#a9bbc5;font-size:14px;font-weight:700}
+   .tb-manage-panel .tb-winner-choice label{position:relative;display:block;min-width:0;cursor:pointer;user-select:none}
+   .tb-manage-panel .tb-winner-choice input{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none}
+   .tb-manage-panel .tb-winner-choice label>span{display:grid;gap:8px;min-height:94px;padding:16px;border:1px solid #304653;border-radius:12px;background:#0d171f;color:#dce8ec;transition:background .15s,border-color .15s,box-shadow .15s}
+   .tb-manage-panel .tb-winner-choice label:hover>span{border-color:#678391;background:#14232d}
+   .tb-manage-panel .tb-winner-choice input:checked+span{border-color:#74ded2;background:rgba(44,112,110,.25);box-shadow:0 0 0 2px #74ded2}
+   .tb-manage-panel .tb-winner-choice small{color:#87a0ac;font-size:11px;letter-spacing:.08em}
+   .tb-manage-panel .tb-winner-choice strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px}
+   .tb-scroll{user-select:none;-webkit-user-select:none}
+   .tb-scroll [data-dragging="true"]{cursor:grabbing}
    .hof-event-detail.is-bracket{display:flex;flex-direction:column;height:100%;min-height:0}
-   .hof-modal-card.is-event-modal{width:min(96vw,1320px);height:min(98dvh,1000px);max-height:98dvh}
+   .hof-modal-card.is-event-modal{width:min(98vw,1480px);height:min(98dvh,1100px);max-height:98dvh}
    .hof-modal-content:has(.hof-event-detail.is-bracket){overflow:hidden}
    .hof-event-detail.is-bracket>.tournament-bracket-view{display:flex;flex:1;flex-direction:column;min-height:0}
    .hof-event-detail.is-bracket .tb-lane:not(.tb-third){display:flex;flex:1;flex-direction:column;min-height:0;margin:0;border:0;border-radius:0;background:transparent}
-   .hof-event-detail.is-bracket .tb-lane-head{flex:none;padding:9px 16px}
-   .hof-event-detail.is-bracket .tb-scroll{flex:1;min-height:0;padding:8px 12px 10px}
-   .hof-event-detail.is-bracket .tb-match-card{min-height:58px;padding:4px 7px}
-   .hof-event-detail.is-bracket .tb-match-head{margin-bottom:1px;font-size:9px}
-   .hof-event-detail.is-bracket .tb-entrant{height:17px;padding:1px 4px;font-size:11px}
-   .hof-event-detail.is-bracket .tb-slot-mark{width:15px;height:15px;font-size:8px}
+   .hof-event-detail.is-bracket .tb-lane-head{flex:none;padding:11px 16px}
+   .hof-event-detail.is-bracket .tb-scroll{flex:1;min-height:0;padding:12px 16px 14px}
+   .hof-event-detail.is-bracket .tb-match-card{min-height:72px;padding:7px 9px}
+   .hof-event-detail.is-bracket .tb-match-head{margin-bottom:4px;font-size:10px}
+   .hof-event-detail.is-bracket .tb-entrant{height:23px;padding:2px 5px;font-size:12px}
+   .hof-event-detail.is-bracket .tb-slot-mark{width:17px;height:17px;font-size:9px}
    .hof-event-detail.is-bracket .tb-third{flex:none;margin:0 12px 8px}
-   .hof-event-detail.is-bracket .tb-third .tb-scroll{height:106px;flex:none}
+   .hof-event-detail.is-bracket .tb-third .tb-scroll{height:116px;flex:none}
    .hof-admin .tournament-bracket-view{display:flex;flex-direction:column}
    .hof-admin .tb-lane:not(.tb-third){flex:none}
    .hof-admin .bracket-fullscreen:fullscreen{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding:16px}
    .hof-admin .bracket-fullscreen:fullscreen>.tournament-bracket-view{flex:1;min-height:0}
    .hof-admin .bracket-fullscreen:fullscreen .tb-scroll{overflow-x:auto;overflow-y:hidden}
-   .tb-manage form{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
-   .tb-manage form>label{grid-column:1/-1;min-width:0}
-   .tb-manage form button{justify-self:start;min-height:34px;padding:7px 10px;font-size:11px}
-   .tb-manage .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-   .tb-manage .actions button{min-height:34px;padding:7px 10px;font-size:11px}
    .tb-third-place-note{margin:0;padding:0 16px 14px;color:var(--tb-muted);font-size:12px}
    .tb-empty{margin:10px 0;padding:22px;border:1px dashed var(--tb-line);border-radius:12px;color:var(--tb-muted);text-align:center;background:rgba(10,17,24,.62)}
    @media(max-width:650px){.tb-lane-head{padding:11px 13px}.tb-scroll{padding:17px 12px 14px}.tb-match-card{width:198px}.tb-round-label{width:198px}}
