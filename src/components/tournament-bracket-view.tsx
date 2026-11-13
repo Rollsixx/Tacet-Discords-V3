@@ -31,15 +31,27 @@ function laneTitle(side:string){
  return side.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())+" bracket";
 }
 function startBracketDrag(event:any){
- const target=event.target as HTMLElement;if(target.closest("button,summary,input,select,a,[role=dialog]"))return;
- const element=event.currentTarget as HTMLDivElement;element.dataset.dragging="true";element.dataset.dragStartX=String(event.clientX);element.dataset.dragStartScroll=String(element.scrollLeft);element.setPointerCapture(event.pointerId);event.preventDefault();
+ const target=event.target as HTMLElement;
+ if(event.button!==0||event.isPrimary===false||target.closest("button,summary,input,select,a,[role=dialog]"))return;
+ const element=event.currentTarget as HTMLDivElement;
+ element.dataset.dragging="true";
+ element.dataset.dragPointerId=String(event.pointerId);
+ element.dataset.dragStartX=String(event.clientX);
+ element.dataset.dragStartScroll=String(element.scrollLeft);
+ try{element.setPointerCapture(event.pointerId)}catch{}
+ event.preventDefault();
 }
 function moveBracketDrag(event:any){
- const element=event.currentTarget as HTMLDivElement;if(element.dataset.dragging!=="true")return;
+ const element=event.currentTarget as HTMLDivElement;
+ if(element.dataset.dragging!=="true"||element.dataset.dragPointerId!==String(event.pointerId))return;
  element.scrollLeft=Number(element.dataset.dragStartScroll||0)-(event.clientX-Number(element.dataset.dragStartX||0));
+ event.preventDefault();
 }
 function endBracketDrag(event:any){
- const element=event.currentTarget as HTMLDivElement;delete element.dataset.dragging;try{element.releasePointerCapture(event.pointerId)}catch{}
+ const element=event.currentTarget as HTMLDivElement;
+ if(element.dataset.dragPointerId!==String(event.pointerId))return;
+ delete element.dataset.dragging;delete element.dataset.dragPointerId;
+ try{if(element.hasPointerCapture(event.pointerId))element.releasePointerCapture(event.pointerId)}catch{}
 }
 function statusLabel(state:string){return state.replaceAll("_"," ");}
 
@@ -49,7 +61,7 @@ function MatchManagementControl({match,renderControls}:{match:NormalizedMatch;re
  const icon=match.state==="pending_publication"?"✓":["ready","scheduled","in_progress"].includes(match.state)?"✎":"⋯";
  useEffect(()=>{setMounted(true);const close=(event:Event)=>{if((event as CustomEvent).detail===match.id)setOpen(false)};const key=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false)};window.addEventListener("close-bracket-match-dialog",close);window.addEventListener("keydown",key);return()=>{window.removeEventListener("close-bracket-match-dialog",close);window.removeEventListener("keydown",key)}},[match.id]);
  return <>
-  <div className="tb-manage" style={{position:"absolute",right:"-15px",top:"50%",left:"auto",transform:"translateY(-50%)",width:28,height:28,zIndex:6}}><button type="button" className="tb-manage-trigger" aria-label={label} title={label} onClick={()=>setOpen(true)}><span aria-hidden="true">{icon}</span></button></div>
+  <div className="tb-manage" style={{position:"absolute",right:"8px",top:"50%",left:"auto",transform:"translateY(-50%)",width:28,height:28,zIndex:6}}><button type="button" className="tb-manage-trigger" aria-label={label} title={label} onClick={()=>setOpen(true)}><span aria-hidden="true">{icon}</span></button></div>
   {open&&mounted&&createPortal(<div className="tb-manage-host" data-match-dialog={match.id} onMouseDown={event=>{if(event.target===event.currentTarget)setOpen(false)}}>
    <div className="tb-manage-backdrop" aria-hidden="true"/>
    <section className="tb-manage-panel" role="dialog" aria-modal="true" aria-label={`Manage ${match.roundLabel}, match ${match.order}`}>
@@ -121,14 +133,14 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-lane-head{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--tb-line);background:rgba(19,31,41,.86)}
    .tb-lane-head h3{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:#c5d9e1}
    .tb-lane-head span{color:var(--tb-muted);font-size:12px}.tb-lane-head .tb-scroll-hint{margin-left:auto;font-size:11px}
-   .tb-scroll{max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;padding:14px 18px 14px;scrollbar-color:#45616f #111a22;scrollbar-width:thin;touch-action:pan-x;cursor:grab}
+   .tb-scroll{max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;padding:14px 18px 14px;scrollbar-color:#45616f #111a22;scrollbar-width:thin;touch-action:none;cursor:grab}
    .tb-scroll:focus-visible{outline:2px solid var(--tb-accent);outline-offset:-3px}.tb-scroll:active{cursor:grabbing}
    .tb-board{position:relative;min-width:100%;isolation:isolate}
    .tb-lines{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:0}
    .tb-lines path{fill:none;stroke:#6d8794;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.78}
    .tb-lines path.loser{stroke:#c9a977;stroke-dasharray:5 4}
    .tb-round-label{position:absolute;top:0;width:204px;height:27px;color:#8fa6b4;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .tb-match-card{position:absolute!important;z-index:1;width:204px;min-height:78px;padding:7px 9px;border:1px solid #36505e;border-radius:9px;background:linear-gradient(180deg,rgba(35,51,62,.98),rgba(19,30,39,.98));box-shadow:0 7px 18px #0004}
+    .tb-match-card{position:absolute!important;z-index:1;width:204px;min-height:78px;padding:7px 42px 7px 9px;border:1px solid #36505e;border-radius:9px;background:linear-gradient(180deg,rgba(35,51,62,.98),rgba(19,30,39,.98));box-shadow:0 7px 18px #0004}
    .tb-match-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 4px;padding-right:0;color:#8fa5b1;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
    .tb-state{max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b8c6cd;font-size:9px}
    .tb-state.ready,.tb-state.published,.tb-state.completed{color:#80dfc2}
@@ -140,7 +152,7 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-entrant.winner .tb-slot-mark{border-color:#5da58d;color:#a1efd0}
    .tb-player-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
    .tb-outcome{margin:4px 3px 0;color:#a9c1cb;font-size:10px}
-   .tb-match-card:has(.tb-manage-trigger:focus-visible){z-index:30}\n   .tb-match-card.tb-third-match{border-color:#8a744b}\n   .tb-match-card>.tb-manage{position:absolute!important;right:-15px!important;top:50%!important;left:auto!important;bottom:auto!important;transform:translateY(-50%)!important;width:28px!important;height:28px!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;padding:0!important;z-index:6!important;display:block!important}\n   .tb-manage{position:absolute;right:-15px;top:50%;left:auto;bottom:auto;transform:translateY(-50%);width:28px;height:28px;margin:0!important;border:0!important;border-radius:0;background:transparent;padding:0!important;z-index:6}
+   .tb-match-card:has(.tb-manage-trigger:focus-visible){z-index:30}\n   .tb-match-card.tb-third-match{border-color:#8a744b}\n   .tb-match-card>.tb-manage{position:absolute!important;right:8px!important;top:50%!important;left:auto!important;bottom:auto!important;transform:translateY(-50%)!important;width:28px!important;height:28px!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;padding:0!important;z-index:6!important;display:block!important}\n   .tb-manage{position:absolute;right:8px;top:50%;left:auto;bottom:auto;transform:translateY(-50%);width:28px;height:28px;margin:0!important;border:0!important;border-radius:0;background:transparent;padding:0!important;z-index:6}
    .tb-manage-trigger{display:grid;place-items:center;width:28px!important;height:28px!important;min-height:28px!important;margin:0!important;padding:0!important;border:1px solid #496574!important;border-radius:8px!important;background:#12212b!important;color:var(--tb-accent)!important;font-size:16px!important;font-weight:800;line-height:1;cursor:pointer}
    .tb-manage-trigger:hover{background:#1b3440!important;border-color:#74ded2!important}
    .tb-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -163,7 +175,7 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-manage-panel .tb-winner-choice input:checked+span{border-color:#74ded2;background:rgba(44,112,110,.25);box-shadow:0 0 0 2px #74ded2}
    .tb-manage-panel .tb-winner-choice small{color:#87a0ac;font-size:11px;letter-spacing:.08em}
    .tb-manage-panel .tb-winner-choice strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px}
-   .tb-scroll{user-select:none;-webkit-user-select:none}
+   .tb-scroll{user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
    .tb-scroll [data-dragging="true"]{cursor:grabbing}
    .hof-event-detail.is-bracket{display:flex;flex-direction:column;height:100%;min-height:0}
    .hof-modal-card.is-event-modal{width:min(98vw,1480px);height:min(98dvh,1100px);max-height:98dvh}
@@ -171,7 +183,7 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .hof-event-detail.is-bracket>.tournament-bracket-view{display:flex;flex:1;flex-direction:column;min-height:0}
    .hof-event-detail.is-bracket .tb-lane:not(.tb-third){display:flex;flex:1;flex-direction:column;min-height:0;margin:0;border:0;border-radius:0;background:transparent}
    .hof-event-detail.is-bracket .tb-lane-head{flex:none;padding:11px 16px}
-   .hof-event-detail.is-bracket .tb-scroll{flex:1;min-height:0;padding:12px 16px 14px;overflow-y:hidden!important}
+   .hof-event-detail.is-bracket .tb-scroll{flex:1;min-height:0;padding:12px 16px 14px;overflow-x:auto!important;overflow-y:hidden!important;touch-action:none;cursor:grab}
    .hof-event-detail.is-bracket .tb-match-card{min-height:72px;padding:7px 9px}
    .hof-event-detail.is-bracket .tb-match-head{margin-bottom:4px;font-size:10px}
    .hof-event-detail.is-bracket .tb-entrant{height:23px;padding:2px 5px;font-size:12px}
