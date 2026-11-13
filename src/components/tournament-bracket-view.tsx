@@ -49,7 +49,7 @@ function MatchManagementControl({match,renderControls}:{match:NormalizedMatch;re
  const icon=match.state==="pending_publication"?"✓":["ready","scheduled","in_progress"].includes(match.state)?"✎":"⋯";
  useEffect(()=>{setMounted(true);const close=(event:Event)=>{if((event as CustomEvent).detail===match.id)setOpen(false)};const key=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false)};window.addEventListener("close-bracket-match-dialog",close);window.addEventListener("keydown",key);return()=>{window.removeEventListener("close-bracket-match-dialog",close);window.removeEventListener("keydown",key)}},[match.id]);
  return <>
-  <div className="tb-manage"><button type="button" className="tb-manage-trigger" aria-label={label} title={label} onClick={()=>setOpen(true)}><span aria-hidden="true">{icon}</span></button></div>
+  <div className="tb-manage" style={{position:"absolute",right:"-15px",top:"50%",left:"auto",transform:"translateY(-50%)",width:28,height:28,zIndex:6}}><button type="button" className="tb-manage-trigger" aria-label={label} title={label} onClick={()=>setOpen(true)}><span aria-hidden="true">{icon}</span></button></div>
   {open&&mounted&&createPortal(<div className="tb-manage-host" data-match-dialog={match.id} onMouseDown={event=>{if(event.target===event.currentTarget)setOpen(false)}}>
    <div className="tb-manage-backdrop" aria-hidden="true"/>
    <section className="tb-manage-panel" role="dialog" aria-modal="true" aria-label={`Manage ${match.roundLabel}, match ${match.order}`}>
@@ -64,11 +64,13 @@ function BracketLane({title,matches,renderControls}:{title:string;matches:Normal
  const [viewportHeight,setViewportHeight]=useState(0);
  useEffect(()=>{const update=()=>setViewportHeight(window.innerHeight);update();window.addEventListener("resize",update);return()=>window.removeEventListener("resize",update)},[]);
  if(!matches.length)return null;
- const rounds=[...new Set(matches.map(m=>m.round))].sort((a,b)=>a-b),minRound=rounds[0],maxRound=rounds[rounds.length-1],depth=maxRound-minRound+1;
+ const bracketMatches=matches.filter(m=>m.side!=="third_place"),thirdMatches=matches.filter(m=>m.side==="third_place");
+ const rounds=[...new Set(bracketMatches.map(m=>m.round))].sort((a,b)=>a-b),minRound=rounds[0],maxRound=rounds[rounds.length-1],depth=maxRound-minRound+1;
  const adminControls=Boolean(renderControls),leafCount=Math.pow(2,Math.max(0,depth-1)),leafSpacing=adminControls?82:56,maxHeight=adminControls?Math.max(400,(viewportHeight||900)-280):Math.max(320,(viewportHeight||900)-416),height=Math.max(adminControls?400:320,Math.min(leafCount*leafSpacing,maxHeight)),cardHeight=adminControls?80:60,columnWidth=adminControls?310:222,cardWidth=adminControls?270:204,headerSpace=38;
  const width=rounds.length*columnWidth;
- const xFor=(m:NormalizedMatch)=>(m.round-minRound)*columnWidth;
+ const xFor=(m:NormalizedMatch)=>m.side==="third_place"?Math.max(0,(rounds.length-1)*columnWidth):(m.round-minRound)*columnWidth;
  const yFor=(m:NormalizedMatch)=>{
+  if(m.side==="third_place")return headerSpace+height-cardHeight/2-8;
   const offset=Math.max(0,m.round-minRound);
   const group=m.bracketPosition??(m.order-1);
   const center=(group*Math.pow(2,offset)+Math.pow(2,offset-1))/leafCount*height;
@@ -79,9 +81,10 @@ function BracketLane({title,matches,renderControls}:{title:string;matches:Normal
  const edges:{source:NormalizedMatch;target:NormalizedMatch;kind:string}[]=[];
  for(const target of matches){
   const explicit=target.dependencies.map(d=>({source:byId.get(String(d.dependsOnMatchId??d.depends_on_match_id??"")),kind:String(d.dependencyType??d.dependency_type??"winner")})).filter((x):x is {source:NormalizedMatch;kind:string}=>Boolean(x.source));
-  if(explicit.length){for(const edge of explicit)if(edge.source.side===target.side)edges.push({source:edge.source,target,kind:edge.kind});continue}
-  const fallback=matches.find(m=>m.round===target.round-1&&m.order===Math.ceil(target.order*2-1))||null;
-  const fallback2=matches.find(m=>m.round===target.round-1&&m.order===Math.ceil(target.order*2))||null;
+  if(explicit.length){for(const edge of explicit)if(edge.source.side===target.side||(target.side==="third_place"&&edge.kind==="loser"))edges.push({source:edge.source,target,kind:edge.kind});continue}
+  if(target.side==="third_place")continue;
+  const fallback=bracketMatches.find(m=>m.round===target.round-1&&m.order===Math.ceil(target.order*2-1))||null;
+  const fallback2=bracketMatches.find(m=>m.round===target.round-1&&m.order===Math.ceil(target.order*2))||null;
   if(fallback)edges.push({source:fallback,target,kind:"winner"});
   if(fallback2)edges.push({source:fallback2,target,kind:"winner"});
  }
@@ -92,8 +95,9 @@ function BracketLane({title,matches,renderControls}:{title:string;matches:Normal
     <svg className="tb-lines" width={width} height={height+headerSpace} viewBox={`0 0 ${width} ${height+headerSpace}`} aria-hidden="true">
      {edges.map(({source,target,kind})=>{const x1=xFor(source)+cardWidth,x2=xFor(target),y1=yFor(source),y2=yFor(target),mid=x1+(x2-x1)/2;return <path key={source.id+"-"+target.id+"-"+kind} className={kind==="loser"?"loser":"winner"} d={`M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`}/>})}
     </svg>
-    {rounds.map((round,index)=><div className="tb-round-label" key={round} style={{left:(index*columnWidth)+"px",width:cardWidth+"px"}}>{matches.find(m=>m.round===round)?.roundLabel||("Round "+round)}</div>)}
-    {matches.map(m=><article className="tb-match-card" key={m.id} style={{left:xFor(m)+"px",top:(yFor(m)-cardHeight/2)+"px",width:cardWidth+"px"}} aria-label={m.roundLabel+", match "+m.order}>
+    {rounds.map((round,index)=><div className="tb-round-label" key={round} style={{left:(index*columnWidth)+"px",width:cardWidth+"px"}}>{bracketMatches.find(m=>m.round===round)?.roundLabel||("Round "+round)}</div>)}
+    {thirdMatches.map(m=><div className="tb-round-label tb-third-round-label" key={"third-label-"+m.id} style={{left:xFor(m)+"px",top:(headerSpace+height-28)+"px",width:cardWidth+"px"}}>Third-place playoff</div>)}
+    {matches.map(m=><article className={"tb-match-card"+(m.side==="third_place"?" tb-third-match":"")} key={m.id} style={{left:xFor(m)+"px",top:(yFor(m)-cardHeight/2)+"px",width:cardWidth+"px"}} aria-label={(m.side==="third_place"?"Third-place playoff":m.roundLabel)+", match "+m.order}>
      <div className="tb-match-head"><span>Match {m.order}</span><span className={"tb-state "+m.state}>{statusLabel(m.state)}</span></div>
      <div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.aId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.aId?"✓":"A"}</span><span className="tb-player-name">{m.aName||slotName(m,"participant_a")}</span></div>
      <div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.bId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.bId?"✓":"B"}</span><span className="tb-player-name">{m.bName||slotName(m,"participant_b")}</span></div>
@@ -136,7 +140,7 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-entrant.winner .tb-slot-mark{border-color:#5da58d;color:#a1efd0}
    .tb-player-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
    .tb-outcome{margin:4px 3px 0;color:#a9c1cb;font-size:10px}
-   .tb-match-card:has(.tb-manage-trigger:focus-visible){z-index:30}\n   .tb-match-card>.tb-manage{position:absolute!important;right:-15px!important;top:50%!important;left:auto!important;bottom:auto!important;transform:translateY(-50%)!important;width:28px!important;height:28px!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;padding:0!important;z-index:6!important;display:block!important}\n   .tb-manage{position:absolute;right:-15px;top:50%;left:auto;bottom:auto;transform:translateY(-50%);width:28px;height:28px;margin:0!important;border:0!important;border-radius:0;background:transparent;padding:0!important;z-index:6}
+   .tb-match-card:has(.tb-manage-trigger:focus-visible){z-index:30}\n   .tb-match-card.tb-third-match{border-color:#8a744b}\n   .tb-match-card>.tb-manage{position:absolute!important;right:-15px!important;top:50%!important;left:auto!important;bottom:auto!important;transform:translateY(-50%)!important;width:28px!important;height:28px!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;padding:0!important;z-index:6!important;display:block!important}\n   .tb-manage{position:absolute;right:-15px;top:50%;left:auto;bottom:auto;transform:translateY(-50%);width:28px;height:28px;margin:0!important;border:0!important;border-radius:0;background:transparent;padding:0!important;z-index:6}
    .tb-manage-trigger{display:grid;place-items:center;width:28px!important;height:28px!important;min-height:28px!important;margin:0!important;padding:0!important;border:1px solid #496574!important;border-radius:8px!important;background:#12212b!important;color:var(--tb-accent)!important;font-size:16px!important;font-weight:800;line-height:1;cursor:pointer}
    .tb-manage-trigger:hover{background:#1b3440!important;border-color:#74ded2!important}
    .tb-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -147,7 +151,7 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-manage-panel-head button{min-height:36px;padding:7px 12px;border:1px solid #3c5866;border-radius:8px;background:#1b2a34;color:#e5eff3;cursor:pointer}
    .tb-manage-panel form{display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px}
    .tb-manage-panel form>label{grid-column:1/-1;min-width:0}
-   .tb-manage-panel form button{justify-self:start;min-height:42px;padding:9px 16px;font-size:14px}
+   .tb-manage-panel form button{display:inline-flex;align-items:center;justify-content:center;justify-self:start;min-height:42px;padding:9px 16px;border:1px solid #4caeaa;border-radius:9px;background:#69d5ca;color:#071b20;font-size:14px;font-weight:750;line-height:1.2;cursor:pointer;box-shadow:0 5px 16px rgba(50,180,171,.18)}\n   .tb-manage-panel form button:hover:not(:disabled){background:#8ce5dc;border-color:#83e5dc}\n   .tb-manage-panel form button:disabled{opacity:.55;cursor:not-allowed}
    .tb-manage-panel .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
    .tb-manage-panel .actions button{min-height:40px;padding:8px 14px}
    .tb-manage-panel .tb-winner-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 16px;border:0;padding:0}
@@ -183,8 +187,8 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-empty{margin:10px 0;padding:22px;border:1px dashed var(--tb-line);border-radius:12px;color:var(--tb-muted);text-align:center;background:rgba(10,17,24,.62)}
    @media(max-width:650px){.tb-lane-head{padding:11px 13px}.tb-scroll{padding:17px 12px 14px}.tb-match-card{width:198px}.tb-round-label{width:198px}}
   `}</style>
-  {main.length?<BracketLane title="Main bracket" matches={main} renderControls={renderControls}/>:null}
+  {main.length?<BracketLane title="Main bracket" matches={[...main,...third]} renderControls={renderControls}/>:null}
   {otherSides.map(side=><BracketLane key={side} title={laneTitle(side)} matches={all.filter(m=>m.side===side)} renderControls={renderControls}/>)}
-  {third.length?<section className="tb-lane tb-third"><div className="tb-lane-head"><h3>Third-place playoff</h3><span>Bronze medal match</span></div><p className="tb-third-place-note">The semifinal losers meet here for third place.</p><div className="tb-scroll" tabIndex={0} role="region" aria-label="Third-place playoff" onPointerDown={startBracketDrag} onPointerMove={moveBracketDrag} onPointerUp={endBracketDrag} onPointerCancel={endBracketDrag}><div className="tb-board" style={{width:240+"px",height:"110px"}}>{third.map(m=><article className="tb-match-card" key={m.id} style={{left:0,top:"0px"}}><div className="tb-match-head"><span>{m.roundLabel}</span><span className={"tb-state "+m.state}>{statusLabel(m.state)}</span></div><div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.aId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.aId?"✓":"A"}</span><span className="tb-player-name">{m.aName}</span></div><div className={"tb-entrant"+(m.winnerId&&m.winnerId===m.bId?" winner":"")}><span className="tb-slot-mark">{m.winnerId&&m.winnerId===m.bId?"✓":"B"}</span><span className="tb-player-name">{m.bName}</span></div>{renderControls&&<MatchManagementControl match={m} renderControls={renderControls}/>}</article>)}</div></div></section>:null}
+
  </div>
 }
