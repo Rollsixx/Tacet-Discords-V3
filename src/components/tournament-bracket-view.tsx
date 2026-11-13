@@ -33,7 +33,7 @@ function statusLabel(state:string){return state.replaceAll("_"," ");}
 function BracketLane({title,matches,renderControls}:{title:string;matches:NormalizedMatch[];renderControls?:Props["renderControls"]}){
  if(!matches.length)return null;
  const rounds=[...new Set(matches.map(m=>m.round))].sort((a,b)=>a-b),minRound=rounds[0],maxRound=rounds[rounds.length-1],depth=maxRound-minRound+1;
- const leafCount=Math.pow(2,Math.max(0,depth-1)),height=Math.max(410,leafCount*104),columnWidth=258,cardWidth=224,headerSpace=38;
+ const leafCount=Math.pow(2,Math.max(0,depth-1)),height=Math.max(410,leafCount*104),columnWidth=222,cardWidth=204,headerSpace=38;
  const width=rounds.length*columnWidth;
  const xFor=(m:NormalizedMatch)=>(m.round-minRound)*columnWidth;
  const yFor=(m:NormalizedMatch)=>{
@@ -52,7 +52,7 @@ function BracketLane({title,matches,renderControls}:{title:string;matches:Normal
   if(fallback2)edges.push({source:fallback2,target,kind:"winner"});
  }
  return <section className="tb-lane" aria-label={title}>
-  <div className="tb-lane-head"><h3>{title}</h3><span>{matches.length} {matches.length===1?"match":"matches"}</span></div>
+  <div className="tb-lane-head"><h3>{title}</h3><span>{matches.length} {matches.length===1?"match":"matches"}</span><span className="tb-scroll-hint">Follow rounds →</span></div>
   <div className="tb-scroll" tabIndex={0} role="region" aria-label={title+" bracket. Scroll horizontally to follow later rounds."}>
    <div className="tb-board" style={{width:width+"px",height:(height+headerSpace)+"px"}}>
     <svg className="tb-lines" width={width} height={height+headerSpace} viewBox={`0 0 ${width} ${height+headerSpace}`} aria-hidden="true">
@@ -82,15 +82,15 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-lane{margin:14px 0 22px;border:1px solid var(--tb-line);border-radius:13px;background:rgba(12,20,28,.72);overflow:hidden}
    .tb-lane-head{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--tb-line);background:rgba(19,31,41,.86)}
    .tb-lane-head h3{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:#c5d9e1}
-   .tb-lane-head span{color:var(--tb-muted);font-size:12px}
+   .tb-lane-head span{color:var(--tb-muted);font-size:12px}.tb-lane-head .tb-scroll-hint{margin-left:auto;font-size:11px}
    .tb-scroll{max-width:100%;overflow:auto;overscroll-behavior-inline:contain;padding:20px 18px 18px;scrollbar-color:#45616f #111a22;scrollbar-width:thin}
    .tb-scroll:focus-visible{outline:2px solid var(--tb-accent);outline-offset:-3px}
    .tb-board{position:relative;min-width:100%;isolation:isolate}
    .tb-lines{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:0}
    .tb-lines path{fill:none;stroke:#6d8794;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.78}
    .tb-lines path.loser{stroke:#c9a977;stroke-dasharray:5 4}
-   .tb-round-label{position:absolute;top:0;width:224px;height:27px;color:#8fa6b4;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-   .tb-match-card{position:absolute;z-index:1;width:224px;min-height:78px;padding:7px 9px;border:1px solid #36505e;border-radius:9px;background:linear-gradient(180deg,rgba(35,51,62,.98),rgba(19,30,39,.98));box-shadow:0 7px 18px #0004}
+   .tb-round-label{position:absolute;top:0;width:204px;height:27px;color:#8fa6b4;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+   .tb-match-card{position:absolute;z-index:1;width:204px;min-height:78px;padding:7px 9px;border:1px solid #36505e;border-radius:9px;background:linear-gradient(180deg,rgba(35,51,62,.98),rgba(19,30,39,.98));box-shadow:0 7px 18px #0004}
    .tb-match-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 5px;color:#8fa5b1;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
    .tb-state{max-width:124px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b8c6cd;font-size:9px}
    .tb-state.ready,.tb-state.published,.tb-state.completed{color:#80dfc2}
@@ -111,7 +111,7 @@ export default function TournamentBracketView({matches,renderControls}:Props){
    .tb-manage .actions button{min-height:34px;padding:7px 10px;font-size:11px}
    .tb-third-place-note{margin:0;padding:0 16px 14px;color:var(--tb-muted);font-size:12px}
    .tb-empty{margin:10px 0;padding:22px;border:1px dashed var(--tb-line);border-radius:12px;color:var(--tb-muted);text-align:center;background:rgba(10,17,24,.62)}
-   @media(max-width:650px){.tb-lane-head{padding:11px 13px}.tb-scroll{padding:17px 12px 14px}.tb-match-card{width:210px}.tb-round-label{width:210px}}
+   @media(max-width:650px){.tb-lane-head{padding:11px 13px}.tb-scroll{padding:17px 12px 14px}.tb-match-card{width:198px}.tb-round-label{width:198px}}
   `}</style>
   {main.length?<BracketLane title="Main bracket" matches={main} renderControls={renderControls}/>:null}
   {otherSides.map(side=><BracketLane key={side} title={laneTitle(side)} matches={all.filter(m=>m.side===side)} renderControls={renderControls}/>)}
