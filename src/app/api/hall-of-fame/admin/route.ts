@@ -34,12 +34,12 @@ async function requireCan(actor:Actor,capability:string,slug:string|null,matchId
 async function audit(db:any,actor:Actor,action:string,slug:string|null,before:unknown,after:unknown,reason=""){
  await db.execute({sql:"INSERT INTO hof_audit_events(id,tournament_slug,actor_id,actor_role,action,reason,before_state,after_state,outcome,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",args:[randomUUID(),slug,actor.id,actor.title,action,reason,JSON.stringify(before||{}),JSON.stringify(after||{}),"success",new Date().toISOString()]});
 }
-async function addMatch(tx:any,slug:string,round:number,label:string,order:number,side:string,left:any,right:any,now:string){
+async function addMatch(tx:any,slug:string,round:number,label:string,order:number,side:string,left:any,right:any,now:string,bracketPosition=-1){
  const leftId=left?.kind==="player"?left.id:null,rightId=right?.kind==="player"?right.id:null;
  const state=leftId&&rightId?"ready":"awaiting_competitors",id=randomUUID();
- await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",args:[id,slug,round,label,order,side,leftId,rightId,state,now]});
- if(left?.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner')",args:[id,left.id]});
- if(right?.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'winner')",args:[id,right.id]});
+ await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,bracket_position,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",args:[id,slug,round,label,order,side,leftId,rightId,state,bracketPosition,now]});
+ if(left?.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_a')",args:[id,left.id]});
+ if(right?.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_b')",args:[id,right.id]});
  return {kind:"match",id,round,order,left,right};
 }
 function shuffled<T>(items:T[]){const out=[...items];for(let i=out.length-1;i>0;i--){const j=randomInt(i+1);[out[i],out[j]]=[out[j],out[i]];}return out;}
@@ -58,13 +58,18 @@ async function prepareSingleElimination(db:any,slug:string,actor:Actor,now:strin
   if(entrants.length<4)throw new HttpError(409,"At least four confirmed entrants are needed for a third-place medal bracket.");
   if(entrants.length<Number(event.capacity_min))throw new HttpError(409,"The confirmed roster is below this event's minimum capacity.");
   let size=1;while(size<entrants.length)size*=2;
-  const byeCount=size-entrants.length;
-  let nodes:any[]=[];
-  for(let i=0;i<byeCount;i++)nodes.push({kind:"player",id:entrants[i]});
-  const remaining=entrants.slice(byeCount);
-  for(let i=0;i<remaining.length;i+=2){
-   const left={kind:"player",id:remaining[i]},right=remaining[i+1]?{kind:"player",id:remaining[i+1]}:null;
-   nodes.push(await addMatch(tx,slug,1,"Round 1",Math.floor(i/2)+1,"main",left,right,now));
+  const byeCount=size-entrants.length,byeEntrants=entrants.slice(0,byeCount),remaining=entrants.slice(byeCount);
+  const roundOneMatchCount=size/2-byeCount,roundOneGroupCount=size/4;
+  let nodes:any[]=[],byeIndex=0,roundOneIndex=0;
+  for(let group=0;group<roundOneGroupCount;group++){
+   const leftIsBye=byeIndex<byeEntrants.length;
+   let left:any;
+   if(leftIsBye)left={kind:"player",id:byeEntrants[byeIndex++]};
+   else{const entrantIndex=roundOneIndex*2;left=await addMatch(tx,slug,1,"Round 1",++roundOneIndex,"main",{kind:"player",id:remaining[entrantIndex]},{kind:"player",id:remaining[entrantIndex+1]},now,group*2);}
+   let right:any;
+   if(roundOneIndex<roundOneMatchCount){const entrantIndex=roundOneIndex*2;right=await addMatch(tx,slug,1,"Round 1",++roundOneIndex,"main",{kind:"player",id:remaining[entrantIndex]},{kind:"player",id:remaining[entrantIndex+1]},now,group*2+1);}
+   else right={kind:"player",id:byeEntrants[byeIndex++]};
+   nodes.push(left,right);
   }
   const height=Math.log2(size);let round=2,order=0;
   while(nodes.length>1){
@@ -73,14 +78,14 @@ async function prepareSingleElimination(db:any,slug:string,actor:Actor,now:strin
     const left=nodes[i]||null,right=nodes[i+1]||null;
     if(!left||!right){next.push(left||right);continue}
     const label=round===height?"Final":"Round "+round;
-    next.push(await addMatch(tx,slug,round,label,++order,"main",left,right,now));
+    next.push(await addMatch(tx,slug,round,label,++order,"main",left,right,now,order-1));
    }
    nodes=next;round++;
   }
   const final=nodes[0],bronzeMatchIds:string[]=[];
   if(entrants.length>=4&&final?.kind==="match"&&final.left?.kind==="match"&&final.right?.kind==="match"){
    const bronzeId=randomUUID();
-   await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,updated_at) VALUES(?,?,?,?,?,'third_place',NULL,NULL,'awaiting_competitors',?)",args:[bronzeId,slug,height,"Third-place match",1,now]});
+   await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,bracket_position,updated_at) VALUES(?,?,?,?,?,'third_place',NULL,NULL,'awaiting_competitors',0,?)",args:[bronzeId,slug,height,"Third-place match",1,now]});
    await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'loser')",args:[bronzeId,final.left.id]});
    await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type) VALUES(?,?,'loser')",args:[bronzeId,final.right.id]});
    bronzeMatchIds.push(bronzeId);
@@ -161,12 +166,12 @@ const slug=url.searchParams.get("slug");
   if(slug){
    const mayManage=await can(actor,"manage_event",slug,null,db);
    if(mayManage){
-    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
+    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_position,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
     matches=result.rows;
    }else if(actor.role==="referee"){
     const assigned=await db.execute({sql:"SELECT match_id FROM hof_staff_assignments WHERE staff_id=? AND tournament_slug=? AND match_id IS NOT NULL",args:[actor.id,slug]});
     const allowed=new Set(assigned.rows.map((row:any)=>String(row.match_id)));
-    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
+    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_position,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
     matches=result.rows.filter((row:any)=>allowed.has(String(row.id)));
    }
   }
@@ -178,9 +183,9 @@ const slug=url.searchParams.get("slug");
    staff=[...grouped.values()];
   }
   if(matches.length&&slug){
-   const dependencyRows=await db.execute({sql:"SELECT d.match_id,d.depends_on_match_id,d.dependency_type FROM hof_match_dependencies d JOIN hof_matches m ON m.id=d.match_id WHERE m.tournament_slug=?",args:[slug]});
-   const dependencyMap=new Map<string,{dependsOnMatchId:string;dependencyType:string}[]>();
-   for(const edge of dependencyRows.rows){const key=String(edge.match_id),items=dependencyMap.get(key)||[];items.push({dependsOnMatchId:String(edge.depends_on_match_id),dependencyType:String(edge.dependency_type)});dependencyMap.set(key,items);}
+   const dependencyRows=await db.execute({sql:"SELECT d.match_id,d.depends_on_match_id,d.dependency_type,d.target_slot FROM hof_match_dependencies d JOIN hof_matches m ON m.id=d.match_id WHERE m.tournament_slug=?",args:[slug]});
+   const dependencyMap=new Map<string,{dependsOnMatchId:string;dependencyType:string;targetSlot:string}[]>();
+   for(const edge of dependencyRows.rows){const key=String(edge.match_id),items=dependencyMap.get(key)||[];items.push({dependsOnMatchId:String(edge.depends_on_match_id),dependencyType:String(edge.dependency_type),targetSlot:String(edge.target_slot||"")});dependencyMap.set(key,items);}
    matches=matches.map((match:any)=>({...match,dependencies:(dependencyMap.get(String(match.id))||[]).filter(edge=>matches.some((candidate:any)=>String(candidate.id)===edge.dependsOnMatchId))}));
   }
   let roster:any[]=[];if(slug&&await can(actor,"manage_event",slug,null,db)){const r=await db.execute({sql:"SELECT p.id,p.display_name,p.resonator_icon,r.state,r.published,r.seed_position,r.reserve_order FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? ORDER BY CASE r.state WHEN 'confirmed' THEN 0 WHEN 'reserve' THEN 1 ELSE 2 END,COALESCE(r.seed_position,r.reserve_order,9999),p.display_name COLLATE NOCASE",args:[slug]});roster=r.rows;}
@@ -227,6 +232,48 @@ export async function POST(request:Request){
    if(targetMatch){const m=await db.execute({sql:"SELECT 1 FROM hof_matches WHERE id=? AND tournament_slug=?",args:[targetMatch,eventSlug]});if(!m.rows.length)throw new HttpError(404,"Match not found for this event.");if(role!=="referee")throw new HttpError(400,"Match-specific assignment is for referees.");}
    await db.execute({sql:"INSERT OR IGNORE INTO hof_staff_assignments(staff_id,tournament_slug,match_id,created_by,created_at) VALUES(?,?,?,?,?)",args:[staffId,eventSlug,targetMatch,actor.id,now]});
    await audit(db,actor,"assign_staff",eventSlug,{}, {staffId,matchId:targetMatch});return json({ok:true});
+  }
+  if(action==="repair_bye_bracket"){
+   if(!slug)throw new HttpError(400,"Tournament is required.");
+   await requireCan(actor,"manage_event",slug,null,db);
+   tx=await db.transaction("write");
+   const event=(await tx.execute({sql:"SELECT status,format FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];
+   if(!event)throw new HttpError(404,"Tournament not found.");
+   if(event.format!=="single_elimination"||!["bracket_prepared","bracket_revealed"].includes(String(event.status)))throw new HttpError(409,"Only an unrevised single-elimination bracket can be repaired.");
+   const roster=(await tx.execute({sql:"SELECT p.id FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? AND r.state='confirmed' AND r.published=1 ORDER BY COALESCE(r.seed_position,999999),p.display_name COLLATE NOCASE,p.id",args:[slug]})).rows;
+   const entrants=roster.map((row:any)=>String(row.id));let size=1;while(size<entrants.length)size*=2;
+   const byeCount=size-entrants.length;
+   if(byeCount<=0||entrants.length<5)throw new HttpError(409,"This bracket does not need bye repair.");
+   const allMatches=(await tx.execute({sql:"SELECT id,round_number,match_order,bracket_side,participant_a,participant_b,winner_id,outcome,outcome_published,state FROM hof_matches WHERE tournament_slug=? ORDER BY round_number,match_order",args:[slug]})).rows;
+   if(allMatches.some((m:any)=>m.winner_id||m.outcome||Number(m.outcome_published)||["pending_publication","published","in_progress","disputed","suspended","result_recorded"].includes(String(m.state))))throw new HttpError(409,"Bracket repair is blocked after any match result has been recorded.");
+   const roundOne=allMatches.filter((m:any)=>Number(m.round_number)===1&&m.bracket_side==="main");
+   const roundTwo=allMatches.filter((m:any)=>Number(m.round_number)===2&&m.bracket_side==="main");
+   const expectedRoundOne=entrants.length-size/2,expectedRoundTwo=size/4;
+   if(roundOne.length!==expectedRoundOne||roundTwo.length!==expectedRoundTwo)throw new HttpError(409,"This bracket does not match the supported bye layout.");
+   const firstRoundEntrants=new Set(roundOne.flatMap((m:any)=>[m.participant_a,m.participant_b].filter(Boolean).map(String)));
+   if(firstRoundEntrants.size!==entrants.length-byeCount)throw new HttpError(409,"The first-round entrants do not match the published roster.");
+   const byeSet=new Set(entrants.filter((id:string)=>!firstRoundEntrants.has(id))),orderedByes:string[]=[];
+   for(const match of roundTwo)for(const id of [match.participant_a,match.participant_b])if(id&&byeSet.has(String(id))&&!orderedByes.includes(String(id)))orderedByes.push(String(id));
+   for(const id of entrants)if(byeSet.has(id)&&!orderedByes.includes(id))orderedByes.push(id);
+   const orderedRoundOne=[...roundOne],slots:any[]=[];let byeIndex=0,matchIndex=0;
+   for(let group=0;group<expectedRoundTwo;group++){
+    if(byeIndex<orderedByes.length)slots.push({kind:"player",id:orderedByes[byeIndex++]});
+    else{const match=orderedRoundOne[matchIndex];slots.push({kind:"match",id:String(match.id)});await tx.execute({sql:"UPDATE hof_matches SET bracket_position=? WHERE id=?",args:[group*2,String(match.id)]});matchIndex++;}
+    if(matchIndex<orderedRoundOne.length){const match=orderedRoundOne[matchIndex];slots.push({kind:"match",id:String(match.id)});await tx.execute({sql:"UPDATE hof_matches SET bracket_position=? WHERE id=?",args:[group*2+1,String(match.id)]});matchIndex++;}
+    else slots.push({kind:"player",id:orderedByes[byeIndex++]});
+   }
+   for(let group=0;group<roundTwo.length;group++){
+    const match=roundTwo[group],left=slots[group*2],right=slots[group*2+1],a=left.kind==="player"?left.id:null,b=right.kind==="player"?right.id:null;
+    await tx.execute({sql:"DELETE FROM hof_match_dependencies WHERE match_id=?",args:[match.id]});
+    await tx.execute({sql:"UPDATE hof_matches SET participant_a=?,participant_b=?,winner_id=NULL,outcome='',outcome_published=0,state=?,bracket_position=?,version=version+1,updated_at=? WHERE id=?",args:[a,b,a&&b?"ready":"awaiting_competitors",group,now,match.id]});
+    if(left.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_a')",args:[match.id,left.id]});
+    if(right.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_b')",args:[match.id,right.id]});
+   }
+   const later=allMatches.filter((m:any)=>m.bracket_side==="main"&&Number(m.round_number)>2);
+   for(const match of later)await tx.execute({sql:"UPDATE hof_matches SET bracket_position=?,updated_at=? WHERE id=?",args:[Number(match.match_order)-1,now,match.id]});
+   await tx.execute({sql:"UPDATE hof_tournaments SET updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});
+   await audit(tx,actor,"repair_bye_bracket",slug,{roundOneMatches:roundOne.length,roundTwoMatches:roundTwo.length},{byes:byeCount,roundTwo:roundTwo.map((m:any,i:number)=>({matchOrder:i+1,byeParticipant:[slots[i*2],slots[i*2+1]].find((node:any)=>node.kind==="player")?.id||null,sourceMatches:[slots[i*2],slots[i*2+1]].filter((node:any)=>node.kind==="match").map((node:any)=>node.id)}))});
+   await tx.commit();tx=null;return json({ok:true,byes:byeCount});
   }
   if(action==="prepare_bracket"){
    if(!slug)throw new HttpError(400,"Tournament is required.");
