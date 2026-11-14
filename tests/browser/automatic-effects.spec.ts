@@ -1,8 +1,9 @@
+import { clickAdminNavigation } from './admin-navigation';
 import {test,expect} from '@playwright/test';
 const token='browser-test-only-token-00000000000000000000',headers={Authorization:'Bearer '+token};
 test('moves-only draft resolves equipped passives and exposes source gaps without manual effect setup',async({page,request},info)=>{
  const character=info.project.name==='desktop'?'Chisa':'Hsin';const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await page.getByLabel('Resonator',{exact:true}).selectOption(character);
+ await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');await page.getByLabel('Resonator',{exact:true}).selectOption(character);
  const workspace=await(await request.get('/api/admin/rotations?character='+character,{headers})).json();
  const auto=page.getByLabel('Automatic equipped effects');await expect(auto).toBeVisible();await expect(auto).toContainText('Add moves only.');await expect(auto).toContainText('Equipped Sonata sets');await expect(auto).toContainText('Equipped Main Echo');
  await expect(page.getByText('Advanced conditional assumptions · 0 configured',{exact:true})).toBeVisible();
