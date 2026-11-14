@@ -8,7 +8,7 @@ const publicStatuses=new Set(publicStates);
 
 function pageNumber(value:string|null){const n=Number(value||1);return Number.isFinite(n)?Math.max(1,Math.min(10000,Math.floor(n))):1;}
 function publicTournament(row:any){
- return {slug:String(row.slug),title:String(row.title),boss:String(row.boss),format:String(row.format),status:String(row.status),capacityMin:Number(row.capacity_min),capacityMax:Number(row.capacity_max),registrationDeadline:row.registration_deadline?String(row.registration_deadline):null,timezone:String(row.timezone),rules:String(row.rules||""),publicNotice:String(row.public_notice||""),eventDate:row.event_date?String(row.event_date):null,rosterPublished:Boolean(row.roster_published),bracketPublished:Boolean(row.bracket_published),medalsPublished:Boolean(row.medals_published),updatedAt:String(row.updated_at),artworkUrl:"/api/hall-of-fame?section=artwork&slug="+encodeURIComponent(String(row.slug))};
+ return {slug:String(row.slug),title:String(row.title),boss:String(row.boss),format:String(row.format),status:String(row.status),capacityMin:Number(row.capacity_min),capacityMax:Number(row.capacity_max),registrationDeadline:row.registration_deadline?String(row.registration_deadline):null,timezone:String(row.timezone),rules:String(row.rules||""),publicNotice:String(row.public_notice||""),eventDate:row.event_date?String(row.event_date):null,rosterPublished:Boolean(row.roster_published),bracketPublished:Boolean(row.bracket_published),medalsPublished:Boolean(row.medals_published),updatedAt:String(row.updated_at),artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(String(row.slug))};
 }
 async function tournamentBySlug(slug:string,db:any){
  const result=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE slug=? AND status IN (${placeholders})`,args:[slug,...publicStates]});
@@ -23,7 +23,7 @@ async function recentMedalists(db:any){
  const events=new Map<string,any>();
  for(const row of result.rows){
   const slug=String(row.slug);let event=events.get(slug);
-  if(!event){event={slug,title:String(row.title),boss:String(row.boss),format:String(row.format),status:String(row.status),eventDate:row.event_date?String(row.event_date):null,artworkUrl:"/api/hall-of-fame?section=artwork&slug="+encodeURIComponent(slug),medals:[]};events.set(slug,event);}
+  if(!event){event={slug,title:String(row.title),boss:String(row.boss),format:String(row.format),status:String(row.status),eventDate:row.event_date?String(row.event_date):null,artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(slug),medals:[]};events.set(slug,event);}
   if(row.medal&&row.participant_id)event.medals.push({medal:String(row.medal),participantId:String(row.participant_id),name:String(row.display_name),resonatorIcon:String(row.resonator_icon)});
  }
  return [...events.values()];
@@ -94,7 +94,7 @@ export async function GET(request:Request){
   }
   const all=await db.execute({sql:`SELECT slug,title,boss,format,status,event_date,updated_at FROM hof_tournaments WHERE status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
   const currentRow=all.rows.find((row:any)=>["announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","suspended"].includes(String(row.status)));
-  const current=currentRow?{slug:String(currentRow.slug),title:String(currentRow.title),boss:String(currentRow.boss),format:String(currentRow.format),status:String(currentRow.status),eventDate:currentRow.event_date?String(currentRow.event_date):null,artworkUrl:"/api/hall-of-fame?section=artwork&slug="+encodeURIComponent(String(currentRow.slug))}:null;
+  const current=currentRow?{slug:String(currentRow.slug),title:String(currentRow.title),boss:String(currentRow.boss),format:String(currentRow.format),status:String(currentRow.status),eventDate:currentRow.event_date?String(currentRow.event_date):null,artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(String(currentRow.slug))}:null;
   const medalists=section==="hologram"?await recentMedalists(db):[];
   const list=section==="hologram"?await participants((url.searchParams.get("q")||"").slice(0,50),pageNumber(url.searchParams.get("page")),url.searchParams.get("sort")||"medals",db):null;
   return Response.json({current,medalists,participants:list},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
