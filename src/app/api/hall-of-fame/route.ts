@@ -18,6 +18,16 @@ async function officialMedals(slug:string,db:any){
  const result=await db.execute({sql:`SELECT m.medal,p.id,p.display_name,p.resonator_icon FROM hof_medals m JOIN hof_participants p ON p.id=m.participant_id WHERE m.tournament_slug=? AND m.published=1 ORDER BY CASE m.medal WHEN 'gold' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END`,args:[slug]});
  return result.rows.map((row:any)=>({medal:String(row.medal),participantId:String(row.id),name:String(row.display_name),resonatorIcon:String(row.resonator_icon)}));
 }
+async function recentMedalists(db:any){
+ const result=await db.execute({sql:`WITH recent AS (SELECT slug,title,boss,format,status,event_date,updated_at FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 ORDER BY COALESCE(event_date,updated_at) DESC,slug DESC LIMIT 12) SELECT r.slug,r.title,r.boss,r.format,r.status,r.event_date,r.updated_at,m.medal,p.id participant_id,p.display_name,p.resonator_icon FROM recent r LEFT JOIN hof_medals m ON m.tournament_slug=r.slug AND m.published=1 LEFT JOIN hof_participants p ON p.id=m.participant_id ORDER BY COALESCE(r.event_date,r.updated_at) DESC,r.slug DESC,CASE m.medal WHEN 'gold' THEN 1 WHEN 'silver' THEN 2 WHEN 'bronze' THEN 3 ELSE 4 END`,args:[]});
+ const events=new Map<string,any>();
+ for(const row of result.rows){
+  const slug=String(row.slug);let event=events.get(slug);
+  if(!event){event={slug,title:String(row.title),boss:String(row.boss),format:String(row.format),status:String(row.status),eventDate:row.event_date?String(row.event_date):null,artworkUrl:"/api/hall-of-fame?section=artwork&slug="+encodeURIComponent(slug),medals:[]};events.set(slug,event);}
+  if(row.medal&&row.participant_id)event.medals.push({medal:String(row.medal),participantId:String(row.participant_id),name:String(row.display_name),resonatorIcon:String(row.resonator_icon)});
+ }
+ return [...events.values()];
+}
 async function publicRoster(slug:string,db:any){
  const result=await db.execute({sql:`SELECT p.id,p.display_name,p.resonator_icon FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? AND r.published=1 AND r.state='confirmed' ORDER BY p.display_name COLLATE NOCASE,p.id`,args:[slug]});
  return result.rows.map((row:any)=>({id:String(row.id),name:String(row.display_name),resonatorIcon:String(row.resonator_icon)}));
@@ -82,12 +92,10 @@ export async function GET(request:Request){
    const profile=await eventHistoryForParticipant((url.searchParams.get("id")||"").slice(0,80),db);
    return Response.json({participant:profile},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
   }
-  const all=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
-  const events=all.rows.map(publicTournament);
-  const currentCandidate=events.find((event:any)=>["announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","suspended"].includes(event.status));
-  const current=currentCandidate?await eventDetail(currentCandidate,db):null;
-  const medalistRows=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 ORDER BY COALESCE(event_date,updated_at) DESC,slug DESC LIMIT 12`,args:[]});
-  const medalists=await Promise.all(medalistRows.rows.map(async(row:any)=>{const event=publicTournament(row);return {...event,medals:await officialMedals(event.slug,db)}}));
+  const all=await db.execute({sql:`SELECT slug,title,boss,format,status,event_date,updated_at FROM hof_tournaments WHERE status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
+  const currentRow=all.rows.find((row:any)=>["announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","suspended"].includes(String(row.status)));
+  const current=currentRow?{slug:String(currentRow.slug),title:String(currentRow.title),boss:String(currentRow.boss),format:String(currentRow.format),status:String(currentRow.status),eventDate:currentRow.event_date?String(currentRow.event_date):null,artworkUrl:"/api/hall-of-fame?section=artwork&slug="+encodeURIComponent(String(currentRow.slug))}:null;
+  const medalists=section==="hologram"?await recentMedalists(db):[];
   const list=section==="hologram"?await participants((url.searchParams.get("q")||"").slice(0,50),pageNumber(url.searchParams.get("page")),url.searchParams.get("sort")||"medals",db):null;
   return Response.json({current,medalists,participants:list},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
  }catch(error){return failure(error);}

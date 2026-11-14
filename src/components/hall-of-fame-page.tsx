@@ -2,7 +2,9 @@
 import {useCallback,useEffect,useRef,useState} from "react";
 import Link from "next/link";
 import {ResonatorPortrait} from "@/components/resonator-portrait";
-import TournamentBracketView from "@/components/tournament-bracket-view";
+import dynamic from "next/dynamic";
+
+const TournamentBracketView=dynamic(()=>import("@/components/tournament-bracket-view"),{loading:()=><div className="hof-empty">Loading bracket…</div>});
 
 type EventRecord={slug:string;title:string;boss:string;format:string;status:string;artworkUrl?:string;eventDate?:string|null;rules?:string;publicNotice?:string;medals?:{medal:string;participantId:string;name:string;resonatorIcon:string}[];roster?:{id:string;name:string;resonatorIcon:string}[];matches?:any[];announcements?:any[]};
 type Participant={id:string;name:string;resonatorIcon:string;gold:number;silver:number;bronze:number;contestsJoined:number};
@@ -13,7 +15,7 @@ function Medal({kind}:{kind:string}){return <span className={"hof-medal "+kind}>
 export default function HallOfFamePage(){
  const dialogRef=useRef<HTMLElement|null>(null);
  const [tab,setTab]=useState<Tab>("overview"),[data,setData]=useState<any>(null),[busy,setBusy]=useState(true),[error,setError]=useState(""),[query,setQuery]=useState(""),[page,setPage]=useState(1),[sort,setSort]=useState("medals"),[overlay,setOverlay]=useState<{type:string;key:string}|null>(null),[detail,setDetail]=useState<any>(null),[joinContestUrl,setJoinContestUrl]=useState("");
- const load=useCallback(async()=>{setBusy(true);setError("");try{const res=await fetch("/api/hall-of-fame?section="+tab+"&q="+encodeURIComponent(query)+"&page="+page+"&sort="+sort,{cache:"no-store"});if(!res.ok)throw new Error("Could not load Hall of Fame data.");setData(await res.json());}catch(e){setError(e instanceof Error?e.message:"Could not load data.");}finally{setBusy(false)}},[tab,query,page,sort]);
+ const load=useCallback(async()=>{if(tab==="photography"){setBusy(false);return}setBusy(true);setError("");try{const params=new URLSearchParams({section:tab});if(tab==="hologram"){params.set("q",query);params.set("page",String(page));params.set("sort",sort)}const res=await fetch("/api/hall-of-fame?"+params.toString());if(!res.ok)throw new Error("Could not load Hall of Fame data.");setData(await res.json());}catch(e){setError(e instanceof Error?e.message:"Could not load data.");}finally{setBusy(false)}},[tab,query,page,sort]);
  useEffect(()=>{const sync=()=>{const p=new URLSearchParams(location.search);setTab(tabs.includes(p.get("tab") as Tab)?p.get("tab") as Tab:"overview");const type=p.get("view"),key=p.get("id")||p.get("slug");setOverlay(type&&key?{type,key}:null)};sync();addEventListener("popstate",sync);return()=>removeEventListener("popstate",sync)},[]);
  useEffect(()=>{void load()},[load]);
  useEffect(()=>{let active=true;fetch("/api/hall-of-fame?section=invite",{cache:"no-store"}).then(r=>r.json()).then(d=>{if(active&&typeof d.joinContestUrl==="string")setJoinContestUrl(d.joinContestUrl)}).catch(()=>{});return()=>{active=false}},[]);
