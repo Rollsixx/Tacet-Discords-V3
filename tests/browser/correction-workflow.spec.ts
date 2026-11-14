@@ -1,3 +1,4 @@
+import { clickAdminNavigation } from './admin-navigation';
 import{test,expect}from'@playwright/test';
 const token='browser-test-only-token-00000000000000000000',headers={Authorization:'Bearer '+token};
 test('blank-note correction preserves original evidence and directly approves and ranks the selected build',async({page,request},info)=>{
@@ -6,7 +7,7 @@ test('blank-note correction preserves original evidence and directly approves an
  const before=(await(await request.get('/api/moderation?view=player&uid='+uid,{headers})).json()).builds[0];
  const slot=before.data.slots.find((s:{substats:{value:string}[]})=>s.substats[0].value==='DEF 8.1%').slot;
  expect((await request.get('/api/admin/source-evidence?id='+before.id)).status()).toBe(401);
- await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:/Submissions/}).click();await page.getByRole('button',{name:'Review '+character+' by Synthetic correction QA',exact:true}).filter({hasText:uid}).click();
+ await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,/Submissions/);await page.getByRole('button',{name:'Review '+character+' by Synthetic correction QA',exact:true}).filter({hasText:uid}).click();
  const form=page.getByLabel('Moderator Echo substat correction');await form.getByRole('combobox').nth(0).selectOption(String(slot));await form.getByRole('combobox').nth(1).selectOption('1');await form.getByRole('combobox').nth(3).selectOption('DEF 11.8%');
  await expect(form.getByRole('textbox')).toHaveValue('');await expect(page.getByLabel('Review note',{exact:true})).toHaveValue('');await expect(form).toContainText('DEF 11.9%');await expect(form).toContainText('DEF 8.1%');await form.getByRole('button',{name:'Compare retained original screenshot',exact:true}).click();await expect(form.getByAltText('Retained original build screenshot')).toBeVisible();
  const save=form.getByRole('button',{name:'Save correction and revalidate',exact:true});await expect(save).toBeEnabled();const done=page.waitForResponse(r=>r.url().endsWith('/api/moderation')&&r.request().method()==='PUT');await save.click();const response=await done;expect(response.status(),await response.text()).toBe(200);expect((await response.json()).ranked).toBe(true);
