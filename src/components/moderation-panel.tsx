@@ -195,7 +195,7 @@ export function ModerationPanel() {
  return <section className={`moderation-panel bs-console ${authenticated?'bs-unlocked':'bs-locked'}`} aria-label="Moderator workspace">
  {!authenticated?<div className="bs-login"><Link className="bs-brand" href="/"><span>✦</span><div><strong>TACET DISCORDS</strong><small>BLACK SHORES · ADMINISTRATION</small></div></Link><span className="eyebrow">Restricted access</span><h1>Welcome to Black Shores.</h1><p>Your workspace for community events, player builds, and official scoring.</p>
   <form onSubmit={e=>{e.preventDefault();void unlock();}}>
-   <label className="field"><span>Black Shores access token</span><input type="password" autoComplete="off" required minLength={32} value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your Owner, moderator, or assigned Hall of Fame token" /><small>Your Black Shores title determines the pages and actions available to you.</small></label>
+   <label className="field" htmlFor="blackshores-access-token"><span>Black Shores access token</span><input id="blackshores-access-token" aria-describedby="blackshores-token-help" type="password" autoComplete="off" required minLength={32} value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your Owner, moderator, or assigned Hall of Fame token" /></label><small id="blackshores-token-help">Your Black Shores title determines the pages and actions available to you.</small>
    
    <button className="action" disabled={busy}>{busy?'Checking access…':'Continue to workspace'}</button>
   </form><small>Token access only. Your token stays in memory and is cleared on reload or when you lock the desk.</small><Link className="text-link" href="/">← Return to website</Link>

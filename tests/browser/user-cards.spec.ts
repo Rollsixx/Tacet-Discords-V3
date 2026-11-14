@@ -1,3 +1,4 @@
+import { clickAdminNavigation } from './admin-navigation';
 import { test, expect } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -80,8 +81,8 @@ test('all five official categories score only after approval and identity verifi
  }
  expect((await(await request.get('/api/public/leaderboards?character='+character)).json()).builds).toHaveLength(0);
  await page.goto('/BlackShores');
- await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
- await page.getByRole('button',{name:'Unlock review desk'}).click();
+ await page.getByLabel('Black Shores access token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
+ await page.getByRole('button',{name:'Continue to workspace'}).click();
  await expect(page.getByText('Scoring: Source image, numeric fields and scoring policy validated; moderator approval and identity verification required.',{exact:true})).toBeVisible();
  await page.getByLabel('Reviewer name (audit trail)').fill('Scoring Browser QA');
  const manualVerification=page.getByLabel('I manually matched this UID/IGN to the member outside the website.');
@@ -159,8 +160,8 @@ test('moderator can verify and revoke an approved player after initial review',a
  test.skip(!directory||!process.env.USER_BUILD_CARD_UID,'Private source evidence required.');
  const uid=process.env.USER_BUILD_CARD_UID!;
  await page.goto('/BlackShores');
- await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
- await page.getByRole('button',{name:'Unlock review desk'}).click();
+ await page.getByLabel('Black Shores access token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
+ await page.getByRole('button',{name:'Continue to workspace'}).click();
  await page.getByLabel('Review queue',{exact:true}).selectOption('approved');
  await page.getByLabel('Find UID or IGN',{exact:true}).fill(uid);
  await page.getByRole('button',{name:'Apply filters',exact:true}).click();
@@ -194,10 +195,10 @@ test('verified UID inherits review status and admin groups every build under one
  expect(pending).toHaveLength(1);expect(pending[0].identityVerified).toBe(true);
  expect((await request.get('/api/moderation?view=players')).status()).toBe(401);
  expect((await request.get('/api/moderation?view=player&uid='+uid)).status()).toBe(401);
- await page.goto('/BlackShores',{waitUntil:'networkidle'});await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
+ await page.goto('/BlackShores',{waitUntil:'networkidle'});await page.getByLabel('Black Shores access token',{exact:true}).fill('browser-test-only-token-00000000000000000000');await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await expect(page.locator('.bs-inherited')).toContainText('Build approval and scoring readiness');
  await expect(page.getByLabel('I manually matched this UID/IGN to the member outside the website.')).toHaveCount(0);
- await page.getByRole('button',{name:'Players & builds',exact:true}).click();
+ await clickAdminNavigation(page,'Players & builds');
  await expect(page.getByRole('button',{name:'Open player Scoring Browser QA UID '+uid,exact:true})).toHaveCount(1);
  await page.getByRole('button',{name:'Open player Scoring Browser QA UID '+uid,exact:true}).click();
  await expect(page.getByLabel('All imported builds').getByRole('button')).toHaveCount(5);
@@ -221,7 +222,7 @@ test('rotation editor previews an approved source build through the server optim
  const token='browser-test-only-token-00000000000000000000',headers={Authorization:'Bearer '+token};
  const workspace=await(await request.get('/api/admin/rotations?character=Carlotta',{headers})).json();
  const saved=await request.post('/api/admin/rotations',{headers,data:{operation:'save',character:'Carlotta',revision:workspace.draft?.revision||0,spec:workspace.active.spec}});expect(saved.ok()).toBe(true);
- await page.goto('/BlackShores',{waitUntil:'networkidle'});await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await page.getByRole('button',{name:'Test against builds',exact:true}).click();
+ await page.goto('/BlackShores',{waitUntil:'networkidle'});await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');await page.getByRole('button',{name:'Test against builds',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Provisional damage comparison'})).toBeVisible();await expect(page.locator('.rotation-manager')).toContainText('1 build tested');await expect(page.locator('.rotation-table').first()).toContainText('296,418.56');await expect(page.getByText('Per-action expected damage',{exact:true})).toBeVisible();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('rotation-real-approved-build-preview.png'),fullPage:true});
  expect((await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds[0].score).toBeCloseTo(scoringCases.cases.find(c=>c.character==='Carlotta')!.score,5);
@@ -235,7 +236,7 @@ test('owner-reviewed rotation publishes only after explicit confirmation and can
  const initial=(await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds[0].score;
  const spec={...workspace.active.spec,mode:'admin-reviewed',name:'Browser owner-reviewed rotation',conditions:'Sufficient energy and Substance at start; owner reviewed cooldowns and weapon buff uptime. No team buffs.',actions:workspace.active.spec.actions.map((a:Record<string,unknown>,i:number)=>({...a,effects:i===0?[{id:'buffs:Deconstruction',isEnabled:true}]:[]}))};
  expect((await request.post('/api/admin/rotations',{headers,data:{operation:'save',character:'Carlotta',revision:workspace.draft?.revision||0,spec}})).ok()).toBe(true);
- await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await page.getByRole('button',{name:'Validate draft',exact:true}).click();await page.getByRole('button',{name:'Preview leaderboard changes',exact:true}).click();
+ await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');await page.getByRole('button',{name:'Validate draft',exact:true}).click();await page.getByRole('button',{name:'Preview leaderboard changes',exact:true}).click();
  await expect(page.getByRole('button',{name:'Review publication confirmation'})).toBeEnabled({timeout:30000});await page.getByRole('button',{name:'Review publication confirmation'}).click();
  const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();const phrase=await dialog.locator('strong').textContent();await dialog.getByLabel('Publication confirmation').fill(phrase!);await expect(dialog.getByRole('button',{name:'Confirm publication',exact:true})).toBeDisabled();await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Confirm publication',exact:true}).click();await expect(page.getByText('Official rotation activated atomically. Previous scores and versions are retained.',{exact:true})).toBeVisible();
  const changed=(await(await request.get('/api/public/leaderboards?character=Carlotta')).json()).builds;expect(changed).toHaveLength(1);expect(changed[0].score).not.toBe(initial);expect(changed[0].data.assessment.calculation.benchmarkMode).toBe('admin-reviewed');

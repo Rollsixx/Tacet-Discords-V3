@@ -1,9 +1,10 @@
+import { clickAdminNavigation } from './admin-navigation';
 import {test,expect} from '@playwright/test';
 const token='browser-test-only-token-00000000000000000000';const headers={Authorization:'Bearer '+token};
 test('rotation drafts autosave, reorder and survive reload; blank optional notes validate and preview without bypassing publication guards',async({page,request},info)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  expect((await request.get('/api/admin/rotations')).status()).toBe(401);
- await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();
+ await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');
  await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();await expect(page.getByText('Optimizer connected · Owner-reviewed benchmark',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(39);
  await page.getByLabel('Evaluation mode').selectOption('admin-reviewed');await page.getByLabel('Starting conditions & combat review notes').fill('');
@@ -11,7 +12,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
  await page.getByLabel('Repeat action 1',{exact:true}).fill('2');await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
  const name=await page.locator('.rotation-actions li').first().locator('strong').textContent();await page.getByRole('button',{name:'Move action 1 down',exact:true}).click();await expect(page.locator('.rotation-actions li').first().locator('strong')).not.toHaveText(name!);await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
- await page.getByLabel('Add verified attack data').selectOption('skill:ArtofViolenceDMG');const count=await page.locator('.rotation-actions li').count();await page.getByRole('button',{name:'Add attack',exact:true}).click();await expect(page.locator('.rotation-actions li')).toHaveCount(count+1);await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});await page.getByRole('button',{name:'Remove action '+(count+1),exact:true}).click();await expect(page.locator('.rotation-actions li')).toHaveCount(count);await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
+ const attackPicker=page.getByRole('combobox',{name:'Search verified attacks'});await attackPicker.fill('Art of Violence');await page.getByRole('option',{name:/Art of Violence/}).click();const count=await page.locator('.rotation-actions li').count();await page.getByRole('button',{name:'Add attack',exact:true}).click();await expect(page.locator('.rotation-actions li')).toHaveCount(count+1);await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});await page.getByRole('button',{name:'Remove action '+(count+1),exact:true}).click();await expect(page.locator('.rotation-actions li')).toHaveCount(count);await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
  await page.getByRole('button',{name:'Validate draft',exact:true}).click();await expect(page.getByText('Passed · optimizer configuration checked; owner review required',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Preview leaderboard changes',exact:true})).toBeEnabled();
  const workspace=await(await request.get('/api/admin/rotations?character=Carlotta',{headers})).json();expect(workspace.draft.spec.name).toBe('Browser draft '+info.project.name);expect(workspace.draft.spec.conditions).toBe('');
  const conflict=await request.post('/api/admin/rotations',{headers,data:{operation:'save',character:'Carlotta',revision:0,spec:workspace.draft.spec}});expect(conflict.status()).toBe(409);
@@ -25,7 +26,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  }
  await expect.poll(()=>page.locator('.rotation-actions li').nth(1).locator('div').first().evaluate(el=>el.getBoundingClientRect().width)).toBeGreaterThan(120);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('rotation-editor.png'),fullPage:true});
- await page.reload();await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await expect(page.getByLabel('Rotation name',{exact:true})).toHaveValue('Browser draft '+info.project.name);expect(errors).toEqual([]);
+ await page.reload();await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');await expect(page.getByLabel('Rotation name',{exact:true})).toHaveValue('Browser draft '+info.project.name);expect(errors).toEqual([]);
 });
 
 test('expanded leaderboard categories load with local portraits',async({page},info)=>{
@@ -49,7 +50,7 @@ test('expanded leaderboard categories load with local portraits',async({page},in
 });
 
 test('effect editor separates categories, groups every Echo by cost and preserves draft configuration',async({page,request},info)=>{
- await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();
+ await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');
  await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();
  await page.getByLabel('Evaluation mode').selectOption('admin-reviewed');
  const effects=page.locator('.rotation-effects').first();await effects.locator('summary').click();
@@ -84,7 +85,7 @@ test('owner-first resonators expose clear unranked categories and editable empty
   await page.goto('/leaderboards?character='+name);await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();await expect(page.getByRole('status').filter({hasText:'Rankings are awaiting'})).toBeVisible();
   const data=await(await request.get('/api/public/leaderboards?character='+name)).json();expect(data.rotationReady).toBe(false);expect(data.builds).toHaveLength(0);
  }
- await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();
+ await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');
  for(const name of ['Lucy','Lucilla','Rebecca']){
   await page.getByLabel('Resonator',{exact:true}).selectOption(name);await expect(page.getByText('Official rotation required',{exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Awaiting owner rotation · '+name,exact:true})).toBeVisible();
   const data=await(await request.get('/api/admin/rotations?character='+name,{headers})).json();expect(data.active.policy_id).toBe('awaiting-owner-rotation/1');expect(data.active.spec.actions).toHaveLength(0);expect(data.catalog.length).toBeGreaterThan(0);
@@ -93,7 +94,7 @@ test('owner-first resonators expose clear unranked categories and editable empty
 });
 
 test('shared rotation defaults inherit into moves, overrides reset, paste expands and range edits preserve defaults',async({page,request},info)=>{
- await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await page.getByLabel('Resonator',{exact:true}).selectOption('Chisa');await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();
+ await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');await page.getByLabel('Resonator',{exact:true}).selectOption('Chisa');await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();
  const get=async()=>await(await request.get('/api/admin/rotations?character=Chisa',{headers})).json();let w=await get();
  // Each viewport starts from an explicit empty shared setup in the local fixture.
  const original=w.active.spec;await request.post('/api/admin/rotations',{headers,data:{operation:'save',character:'Chisa',revision:w.draft?.revision||0,spec:{...original,mode:'admin-reviewed',conditions:'Browser fixture only',defaults:[],actions:original.actions.map((a:{type:string;key:string;count:number})=>({type:a.type,key:a.key,count:a.count,effects:[]}))}}});
@@ -104,10 +105,10 @@ test('shared rotation defaults inherit into moves, overrides reset, paste expand
  await expect.poll(async()=>(await get()).draft.spec.defaults.length).toBe(2);
  const first=page.locator('.rotation-effects').first();await first.locator(':scope > summary').click();await first.getByRole('group',{name:'Effect category for action 1',exact:true}).getByRole('button',{name:/Sonata/}).click();await expect(first.locator('.rotation-inherited article')).toHaveCount(2);
  await first.locator('.rotation-inherited article').filter({hasText:'Thread of Severed Fate'}).getByRole('button').click();await first.locator('.rotation-effect input[type=checkbox]').uncheck();await expect.poll(async()=>(await get()).draft.spec.actions[0].effects[0]?.isEnabled).toBe(false);
- await page.getByLabel('Search moves',{exact:true}).fill('SerratedLoopDMG');await page.getByLabel('Add verified attack data',{exact:true}).selectOption('skill:SerratedLoopDMG');await page.getByRole('button',{name:'Add attack',exact:true}).click();await page.getByLabel('Search moves',{exact:true}).fill('');
+ const attackPicker=page.getByRole('combobox',{name:'Search verified attacks'});await attackPicker.fill('SerratedLoopDMG');await page.getByRole('option',{name:/Serrated Loop DMG/}).click();await page.getByRole('button',{name:'Add attack',exact:true}).click();await attackPicker.fill('');
  await page.getByText('Paste a moveset',{exact:true}).click();await page.getByLabel('Paste moveset',{exact:true}).fill('liberation: MomentofNihilityDMG x25');await page.getByRole('button',{name:'Add pasted moves',exact:true}).click();await expect.poll(async()=>{const a=(await get()).draft.spec.actions;return a.slice(-2).map((x:{count:number})=>x.count).join(',');}).toBe('20,5');
  await page.getByText('Advanced overrides for a range of moves',{exact:true}).click();await page.getByLabel('Copy from move',{exact:true}).fill('1');await page.getByLabel('Range start',{exact:true}).fill('2');await page.getByLabel('Range end',{exact:true}).fill('3');await page.getByRole('button',{name:'Copy overrides to range',exact:true}).click();await expect.poll(async()=>(await get()).draft.spec.actions[2].effects[0]?.isEnabled).toBe(false);await page.getByRole('button',{name:'Reset range to defaults',exact:true}).click();await expect.poll(async()=>(await get()).draft.spec.actions[2].effects.length).toBe(0);
  await first.locator('.rotation-effect').getByRole('button',{name:/^Remove /}).click();await expect(first.locator('.rotation-inherited article')).toHaveCount(2);await expect.poll(async()=>(await get()).draft.spec.actions[0].effects.length).toBe(0);expect((await get()).draft.spec.defaults.every((e:{isEnabled:boolean})=>e.isEnabled)).toBe(true);
  await page.getByRole('button',{name:'Validate draft',exact:true}).click();await expect(page.getByText('Passed · optimizer configuration checked; owner review required',{exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('shared-defaults.png'),fullPage:true});
- await page.reload();await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk'}).click();await page.getByRole('button',{name:'Rotations',exact:true}).click();await page.getByLabel('Resonator',{exact:true}).selectOption('Chisa');await expect(page.locator('.rotation-defaults>summary')).toHaveText('Rotation defaults · 2 configured');
+ await page.reload();await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');await page.getByLabel('Resonator',{exact:true}).selectOption('Chisa');await expect(page.locator('.rotation-defaults>summary')).toHaveText('Rotation defaults · 2 configured');
 });

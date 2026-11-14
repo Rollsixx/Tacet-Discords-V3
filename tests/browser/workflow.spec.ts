@@ -1,3 +1,4 @@
+import { clickAdminNavigation, openAdminMenu } from './admin-navigation';
 import { test, expect } from "@playwright/test";
 import { existsSync, writeFileSync } from "node:fs";
 const fixture = process.env.REFERENCE_CARD_PATH || ".cache/reference-four-slot.jpeg";
@@ -20,7 +21,7 @@ test("four pages render without overflow or browser errors", async ({ page }, te
       await expect(page.getByRole('button',{name:'Choose a 1.x Resonator'})).toHaveAttribute('aria-expanded','false');
       await expect(page.locator('.placeholder,.lb-table').first()).toBeVisible();
     }
-    await expect(page.locator('nav[aria-label="Main navigation"] a')).toHaveCount(4);
+    await expect(page.locator('nav[aria-label="Main navigation"] a')).toHaveCount(5);
     for (const width of [360, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -122,8 +123,8 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
     if(!failedCrop){failedCrop=true;await route.fulfill({status:503,body:'Temporary image failure'});}else await route.continue();
   });
   await page.goto("/BlackShores");
-  await page.getByLabel("Moderator token", { exact: true }).fill("browser-test-only-token-00000000000000000000");
-  await page.getByRole("button", { name: "Unlock review desk" }).click();
+  await page.getByLabel("Black Shores access token", { exact: true }).fill("browser-test-only-token-00000000000000000000");
+  await page.getByRole("button", { name: "Continue to workspace" }).click();
   await expect(page.getByRole('button',{name:'Retry image',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Retry image',exact:true}).click();
   await expect(page.locator(".moderation-panel .echo-crop")).toHaveCount(5);
@@ -159,9 +160,9 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   const approved = await (await request.get("/api/public/builds?id=" + saved.id)).json();
   expect(approved.builds[0].status).toBe("approved"); expect(approved.builds[0].score).toBeNull();
   await page.goto('/BlackShores');
-  await page.getByLabel('Moderator token',{exact:true}).fill('  browser-test-only-token-00000000000000000000  ');
-  await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
-  await page.getByRole('button',{name:'Players & builds',exact:true}).click();
+  await page.getByLabel('Black Shores access token',{exact:true}).fill('  browser-test-only-token-00000000000000000000  ');
+  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
+  await clickAdminNavigation(page,'Players & builds');
   await page.getByLabel('Find UID or IGN',{exact:true}).fill(saved.id);
   await page.getByRole('button',{name:'Apply filters',exact:true}).click();
   await expect(page.getByRole('button',{name:'Delete Hsin',exact:true})).toBeVisible();
@@ -175,13 +176,13 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   expect((await(await request.get('/api/public/builds?id='+saved.id)).json()).builds).toHaveLength(0);
   expect((await request.get('/api/assets/'+saved.id+'-1-portrait')).status()).toBe(404);
   expect((await request.delete('/api/moderation',{data:{id:saved.id,confirm:true,reviewer:'QA',note:''}})).status()).toBe(401);
-  await page.getByRole('button',{name:'Audit history',exact:true}).click();
+  await clickAdminNavigation(page,'Audit history');
   await page.getByLabel('Search audit history',{exact:true}).fill(saved.id);
   await page.getByRole('button',{name:'Search history',exact:true}).click();
   await expect(page.locator('.bs-activity strong').filter({hasText:'deleted'})).toHaveCount(1);
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:testInfo.outputPath('admin-audit-history.png'),fullPage:true});
-  await page.getByRole('button',{name:'System status',exact:true}).click();
+  await clickAdminNavigation(page,'System status');
   await expect(page.getByRole('heading',{name:'Service health',exact:true})).toBeVisible();
   await expect(page.locator('.bs-system')).toContainText('Ready');
   await expect(page.locator('.bs-system')).toContainText('Hiyuki');
@@ -196,28 +197,28 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
 test('Black Shores gates the queue, stays off Profiles, and clears access on reload', async ({page,request}, info) => {
  await page.goto('/profiles');
  await expect(page.getByText('Moderator access',{exact:true})).toHaveCount(0);
- await expect(page.getByLabel('Moderator token',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Black Shores access token',{exact:true})).toHaveCount(0);
  expect((await request.get('/api/moderation')).status()).toBe(401);
  await page.goto('/BlackShores');
  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content',/noindex/);
  await expect(page.getByLabel('Review queue',{exact:true})).toHaveCount(0);
- await page.getByLabel('Moderator token',{exact:true}).fill('incorrect-token-00000000000000000000');
- await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
+ await page.getByLabel('Black Shores access token',{exact:true}).fill('incorrect-token-00000000000000000000');
+ await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await expect(page.locator('.moderation-panel [role=alert]')).toContainText('authorization required');
  await expect(page.getByLabel('Review queue',{exact:true})).toHaveCount(0);
- await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
- await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
+ await page.getByLabel('Black Shores access token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
+ await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await expect(page.getByLabel('Review queue',{exact:true})).toBeVisible();
  await page.screenshot({path:info.outputPath('black-shores-review-desk.png'),fullPage:true});
- await page.getByRole('link',{name:'View public website',exact:false}).click();
+ await openAdminMenu(page);await page.getByRole('link',{name:'View public website',exact:false}).click();
  await expect(page.locator('nav[aria-label="Main navigation"]')).toBeVisible();
- await expect(page.getByRole('heading',{name:'Find a player',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'See where your build stands.'})).toBeVisible();
  await page.goto('/BlackShores');
- await page.getByLabel('Moderator token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
- await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();
+ await page.getByLabel('Black Shores access token',{exact:true}).fill('browser-test-only-token-00000000000000000000');
+ await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await expect(page.getByLabel('Review queue',{exact:true})).toBeVisible();
  await page.reload();
- await expect(page.getByLabel('Moderator token',{exact:true})).toHaveValue('');
+ await expect(page.getByLabel('Black Shores access token',{exact:true})).toHaveValue('');
  await expect(page.getByLabel('Review queue',{exact:true})).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

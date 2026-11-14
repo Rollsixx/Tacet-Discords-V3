@@ -1,3 +1,4 @@
+import { clickAdminNavigation } from './admin-navigation';
 import {test,expect} from '@playwright/test';
 const token='browser-test-only-token-00000000000000000000';const headers={Authorization:'Bearer '+token};
 test('identity recovery is private, guarded and preserves an approved player build',async({page,request},info)=>{
@@ -5,7 +6,7 @@ test('identity recovery is private, guarded and preserves an approved player bui
  expect((await request.get('/api/admin/identities?id=00000000-0000-0000-0000-000000000000')).status()).toBe(401);
  const uid=info.project.name==='desktop'?'822222223':'822222222';
  const before=(await(await request.get('/api/moderation?view=player&uid='+uid,{headers})).json()).builds[0];
- await page.goto('/BlackShores');await page.getByLabel('Moderator token',{exact:true}).fill(token);await page.getByRole('button',{name:'Unlock review desk',exact:true}).click();await page.getByRole('button',{name:'Players & builds',exact:true}).click();await page.getByRole('button',{name:'Open player Identity Review QA UID '+uid,exact:true}).click();
+ await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();await clickAdminNavigation(page,'Players & builds');await page.getByRole('button',{name:'Open player Identity Review QA UID '+uid,exact:true}).click();
  if(before.status==='pending'){await expect(page.getByRole('button',{name:'Publish without ranking Carlotta',exact:true})).toBeDisabled();const denied=await request.post('/api/moderation',{headers,data:{id:before.id,action:'approved',reviewer:'Browser QA',note:'No explicit unranked consent',identityVerified:true}});expect(denied.status()).toBe(422);}
  for(let i=0;i<6;i++){await page.getByLabel('Review note',{exact:true}).pressSequentially('Test');if(before.status==='pending')await page.getByLabel('This build still has unresolved scoring requirements.',{exact:false}).setChecked(i%2===0);await expect(page.getByLabel('Equipment identity recovery')).toHaveCount(1);}
  await page.getByRole('button',{name:'Review Echo identities',exact:true}).click();await expect(page.getByLabel('Echo 1 identity',{exact:true})).toBeVisible();

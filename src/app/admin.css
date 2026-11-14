@@ -18,6 +18,7 @@
 .bs-login .action { width:100%; margin-top:18px; }
 .bs-login .text-link { display:block; margin-top:24px; }
 .bs-login small { font-size:12px; color:var(--muted); }
+.bs-login form>small { display:block; margin-top:7px; }
 .bs-login-error { max-width:460px; padding:16px; margin:0 auto 30px; border:1px solid #714b55; border-radius:10px; }
 .bs-shell { display:grid; grid-template-columns:224px minmax(0,1fr); min-height:100vh; }
 .bs-sidebar { position:sticky; top:0; height:100vh; background:#0d141f; border-right:1px solid var(--border); padding:28px 16px; display:flex; flex-direction:column; gap:26px; }
