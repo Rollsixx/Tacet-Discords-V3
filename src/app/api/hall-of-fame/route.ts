@@ -39,9 +39,13 @@ async function participants(search:string,page:number,sort:string,db:any){
  const count=await db.execute({sql:`SELECT COUNT(DISTINCT p.id) total FROM hof_participants p JOIN hof_roster r ON r.participant_id=p.id JOIN hof_tournaments t ON t.slug=r.tournament_slug WHERE r.published=1 AND r.state='confirmed' AND t.status IN (${placeholders}) AND (?='' OR instr(lower(p.display_name),lower(?))>0)`,args:[...publicStates,search,search]});
  return {items:rows,total:Number(count.rows[0]?.total||0),page,perPage:10,hasMore:(page*10)<Number(count.rows[0]?.total||0)};
 }
-async function eventDetail(event:any,db:any,includeBracket=false){
- const medals=await officialMedals(event.slug,db);
- const roster=event.rosterPublished?await publicRoster(event.slug,db):[];
+async function eventDetail(event:any,db:any,detailTab="overview",includeBracket=false){
+ const [medals,roster,announcementRows,matchRows]=await Promise.all([
+  officialMedals(event.slug,db),
+  detailTab==="participants"&&event.rosterPublished?publicRoster(event.slug,db):Promise.resolve(null),
+  detailTab==="announcements"?db.execute({sql:`SELECT id,category,title,body,published_at FROM hof_announcements WHERE tournament_slug=? AND published=1 AND retracted_at IS NULL ORDER BY CASE category WHEN 'critical' THEN 1 WHEN 'pinned' THEN 2 ELSE 3 END, published_at DESC`,args:[event.slug]}):Promise.resolve({rows:[]}),
+  detailTab==="matches"?db.execute({sql:`SELECT m.id,m.round_label,m.state,m.outcome,m.updated_at,a.display_name name_a,b.display_name name_b,w.display_name winner_name FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b LEFT JOIN hof_participants w ON w.id=m.winner_id WHERE m.tournament_slug=? AND m.outcome_published=1 AND m.state='published' ORDER BY m.updated_at DESC LIMIT 40`,args:[event.slug]}):Promise.resolve({rows:[]})
+ ]);
  let matches:any[]|null=null;
  if(event.bracketPublished&&includeBracket){
   const result=await db.execute({sql:`SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_position,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.scheduled_at,m.outcome_published,a.display_name name_a,b.display_name name_b,w.display_name winner_name FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b LEFT JOIN hof_participants w ON w.id=m.winner_id WHERE m.tournament_slug=? AND m.state<>'cancelled' ORDER BY m.round_number,m.match_order`,args:[event.slug]});
@@ -50,10 +54,7 @@ async function eventDetail(event:any,db:any,includeBracket=false){
   for(const edge of dependencyRows.rows){const key=String(edge.match_id),items=dependencyMap.get(key)||[];items.push({dependsOnMatchId:String(edge.depends_on_match_id),dependencyType:String(edge.dependency_type),targetSlot:String(edge.target_slot||"")});dependencyMap.set(key,items);}
   matches=result.rows.map((row:any)=>({id:String(row.id),round:Number(row.round_number),roundLabel:String(row.round_label),order:Number(row.match_order),bracketPosition:Number(row.bracket_position),side:String(row.bracket_side),state:row.outcome_published?String(row.state):String(row.state)==="awaiting_competitors"?"awaiting_competitors":(row.scheduled_at?"scheduled":"ready"),participantA:row.participant_a?{id:String(row.participant_a),name:String(row.name_a)}:null,participantB:row.participant_b?{id:String(row.participant_b),name:String(row.name_b)}:null,winner:row.outcome_published&&row.winner_id?{id:String(row.winner_id),name:String(row.winner_name)}:null,outcome:row.outcome_published?String(row.outcome):"",scheduledAt:row.scheduled_at?String(row.scheduled_at):null,dependencies:dependencyMap.get(String(row.id))||[]}));
  }
- const announcements=await db.execute({sql:`SELECT id,category,title,body,published_at FROM hof_announcements WHERE tournament_slug=? AND published=1 AND retracted_at IS NULL ORDER BY CASE category WHEN 'critical' THEN 1 WHEN 'pinned' THEN 2 ELSE 3 END, published_at DESC`,args:[event.slug]});
- const matchResults=await db.execute({sql:`SELECT m.id,m.round_label,m.state,m.outcome,m.updated_at,a.display_name name_a,b.display_name name_b,w.display_name winner_name FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b LEFT JOIN hof_participants w ON w.id=m.winner_id WHERE m.tournament_slug=? AND m.outcome_published=1 AND m.state='published' ORDER BY m.updated_at DESC LIMIT 40`,args:[event.slug]});
- const publicEvidence=await db.execute({sql:`SELECT e.match_id,e.evidence_url,e.note FROM hof_match_evidence e JOIN hof_matches m ON m.id=e.match_id WHERE m.tournament_slug=? AND e.public_approved=1 AND m.outcome_published=1 ORDER BY e.created_at DESC`,args:[event.slug]});
- return {...event,medals,roster,matches,announcements:announcements.rows.map((row:any)=>({id:String(row.id),category:String(row.category),title:String(row.title),body:String(row.body),publishedAt:row.published_at?String(row.published_at):null})),recentMatches:matchResults.rows.map((row:any)=>({id:String(row.id),round:String(row.round_label),state:String(row.state),outcome:String(row.outcome),updatedAt:String(row.updated_at),participantA:row.name_a?String(row.name_a):null,participantB:row.name_b?String(row.name_b):null,winner:row.winner_name?String(row.winner_name):null})),evidence:publicEvidence.rows.map((row:any)=>({matchId:String(row.match_id),url:String(row.evidence_url),note:String(row.note)}))};
+ return {...event,medals,roster,matches,announcements:announcementRows.rows.map((row:any)=>({id:String(row.id),category:String(row.category),title:String(row.title),body:String(row.body),publishedAt:row.published_at?String(row.published_at):null})),recentMatches:matchRows.rows.map((row:any)=>({id:String(row.id),round:String(row.round_label),state:String(row.state),outcome:String(row.outcome),updatedAt:String(row.updated_at),participantA:row.name_a?String(row.name_a):null,participantB:row.name_b?String(row.name_b):null,winner:row.winner_name?String(row.winner_name):null}))};
 }
 async function eventHistoryForParticipant(id:string,db:any){
  const base=await db.execute({sql:`SELECT id,display_name,resonator_icon FROM hof_participants WHERE id=?`,args:[id]});
@@ -86,8 +87,8 @@ export async function GET(request:Request){
   }
   if(section==="event"){
    const event=await tournamentBySlug((url.searchParams.get("slug")||"").slice(0,80),db);
-   const includeBracket=url.searchParams.get("includeBracket")==="1";
-   return Response.json({event:event?await eventDetail(event,db,includeBracket):null},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
+   const includeBracket=url.searchParams.get("includeBracket")==="1",detailTab=url.searchParams.get("tab")||"overview";
+   return Response.json({event:event?await eventDetail(event,db,detailTab,includeBracket):null},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
   }
   if(section==="participant"){
    const profile=await eventHistoryForParticipant((url.searchParams.get("id")||"").slice(0,80),db);
