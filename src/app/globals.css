@@ -1177,7 +1177,7 @@ input[readonly] { opacity: .75; cursor: default; }
 .home-medal-counts span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .home-medal-counts i{font-style:normal}.home-medal-counts small{color:var(--muted);font-size:11px}
 .home-medal-movement{position:absolute;right:16px;bottom:12px;font-size:12px;font-weight:750}
-.home-medal-player .home-medal-tenure{position:static;margin-top:6px;color:#ffd66e;font-size:12px}
+.home-medal-rank-context .home-medal-tenure{position:static;margin:0;color:#ffd66e;font-size:12px}
 @media(max-width:800px){.home-medal-card-grid{grid-template-columns:1fr;gap:12px}.home-medal-card>a{min-height:0}.home-medal-card{max-width:none}.home-medal-counts{gap:clamp(14px,5vw,30px)}}
 
 /* Current and best rank context in profiles and expanded leaderboard builds */

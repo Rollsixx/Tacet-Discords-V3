@@ -72,6 +72,11 @@
 .home-hero-feature-copy .rank-badge { min-width: 27px; height: 24px; padding: 2px 5px; font-size: 12px; }
 .home-hero-feature-copy > a { margin-top: 3px; color: #83e5dc; font-size: 13px; font-weight: 750; }
 .home-hero-feature-copy > a:hover { color: #b5fff5; }
+.home-hero-spotlight-player { align-items: center; flex-wrap: nowrap; }
+.home-hero-spotlight-player .home-spotlight-rank { display: inline-flex; width: max-content; min-width: 42px; height: 28px; flex: 0 0 auto; flex-flow: row nowrap; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; line-height: 1; }
+.home-hero-spotlight-player .home-spotlight-rank > span { display: inline; line-height: 1; }
+.home-hero-feature-link { position: absolute; z-index: 2; left: 16px; bottom: 13px; color: #83e5dc; font-size: 13px; font-weight: 750; }
+.home-hero-feature-link:hover { color: #b5fff5; }
 .home-hero-feature-controls { position: absolute; z-index: 2; right: 15px; bottom: 14px; display: flex; align-items: center; gap: 7px; }
 .home-hero-feature-controls button { width: 9px; height: 9px; padding: 0; border: 1px solid #a5d7d6; border-radius: 999px; background: #18272f; cursor: pointer; }
 .home-hero-feature-controls button.active { width: 23px; background: #77dfd4; border-color: #77dfd4; }
@@ -143,7 +148,8 @@
 .home-medal-player small { color: var(--home-muted); font-size: 13px; }
 .home-medal-counts { gap: clamp(8px, 1.2vw, 16px); font-size: 14px; }
 .home-medal-counts small { color: var(--home-muted); font-size: 13px; }
-.home-medal-player .home-medal-tenure { width: fit-content; margin-top: 6px; padding: 4px 8px; border: 1px solid #8e763e; border-radius: 999px; background: #352d1c; color: #f1d98e; font-size: 12px; font-weight: 750; }
+.home-medal-rank-context { display: flex; min-width: 0; align-items: center; gap: 9px; }
+.home-medal-rank-context .home-medal-tenure { position: static; width: fit-content; padding: 5px 8px; border: 1px solid #8e763e; border-radius: 999px; background: #352d1c; color: #f1d98e; font-size: 12px; font-weight: 750; white-space: nowrap; }
 .medal-standings-updated { margin-bottom: 10px; color: var(--home-muted); font-size: 13px; }
 .home-overview a:focus-visible, .home-player-search button:focus-visible { outline: 2px solid #88ece1; outline-offset: 3px; }
 @media (max-width: 900px) {
