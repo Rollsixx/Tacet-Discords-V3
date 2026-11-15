@@ -1641,3 +1641,13 @@ input[readonly] { opacity: .75; cursor: default; }
  .bc-echo-copy .bc-echo-set{font-size:.66rem}
  .bc-echo-main-stat,.bc-echo-substats>div,.bc-echo-substats dd{font-size:.72rem}
 }
+
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -10,7 +10,10 @@ export async function rateLimit(key: string, max: number, db: Client = database(
       window=excluded.window RETURNING count`,
     args: [key, window],
   });
-  if (key === "submission-global" && Number(result.rows[0].count) === 1) {
+  // Global endpoint buckets provide a bounded cleanup opportunity even when
+  // no build submissions are made. This also prunes per-UID buckets created
+  // by endpoints such as profile avatar updates.
+  if (key.endsWith("-global") && Number(result.rows[0].count) === 1) {
     await db.execute({ sql: "DELETE FROM rate_limits WHERE window<?", args: [window - 10] });
   }
   if (Number(result.rows[0].count) > max) throw new HttpError(429, "Too many requests. Wait one minute.");
