@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import type {Client} from '@libsql/client';
 import {database} from './database.ts';
 import {HttpError,type SubmissionInput} from './validation.ts';
-import {assessSource} from './source-evidence.mjs';
+import {assessProfileDetails,assessSource} from './source-evidence.mjs';
 import {visualReadiness,assessmentReadiness} from '../scanner/scoring-readiness.ts';
 import {POLICY_VERSION} from './scoring-versions.mjs';
 import {applyPublishedRotation} from './rotations/store.mjs';
@@ -73,4 +73,19 @@ export async function submit(input: SubmissionInput, db: Client = database(), re
     }
     return { ok: true, id, status, createdAt, readiness:{...visualReadiness(assessment.visualReport||[],assessment.statsVerified===true),rolls:assessment.rollsVerified??(assessment.eligible?true:null),ready:data.assessment.eligible,awaitingRotation:assessmentReadiness(data.assessment).awaitingRotation,reason:data.assessment.reason} };
   } finally { tx.close(); }
+}
+
+export async function completeProfileDetails(id:string,sourceImage:Buffer,db:Client=database()){
+  const profileDetails=await assessProfileDetails(sourceImage);
+  if(!profileDetails)return false;
+  const tx=await db.transaction("write");
+  try{
+    const row=await tx.execute({sql:"SELECT data FROM submissions WHERE id=?",args:[id]});
+    if(!row.rows.length)return false;
+    const data=JSON.parse(String(row.rows[0].data||"{}"));
+    data.assessment={...(data.assessment||{}),profileDetails};
+    await tx.execute({sql:"UPDATE submissions SET data=? WHERE id=?",args:[JSON.stringify(data),id]});
+    await tx.commit();
+    return true;
+  }finally{tx.close();}
 }
