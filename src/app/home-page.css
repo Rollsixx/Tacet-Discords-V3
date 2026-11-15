@@ -60,9 +60,7 @@
   background: radial-gradient(ellipse at 72% 28%, #57c9d328, transparent 46%), linear-gradient(145deg, #172730, #101820 74%);
 }
 .home-hero-feature-label { position: absolute; z-index: 2; top: 15px; left: 16px; color: #a7c2cb; font-size: 13px; font-weight: 800; letter-spacing: .14em; }
-.home-hero-feature-art { position: absolute; inset: 0 0 0 auto; width: 64%; overflow: hidden; }
-.home-hero-feature-art::after { position: absolute; inset: 0; content: ""; background: linear-gradient(90deg, #121c23 0%, #121c23a8 20%, transparent 68%), linear-gradient(0deg, #101820 0%, transparent 48%); }
-.home-hero-portrait { position: absolute; right: -8px; bottom: -18px; width: 100%; height: 116%; object-fit: contain; object-position: right bottom; background: transparent; filter: drop-shadow(0 10px 22px #0009); }
+.home-hero-feature-mark { position: absolute; right: 14px; bottom: -30px; color: #67d8dc; font-size: clamp(112px, 14vw, 170px); font-weight: 900; letter-spacing: -.13em; line-height: 1; opacity: .13; text-shadow: 0 0 54px #54d2d5; transform: rotate(-8deg); }
 .home-hero-feature-copy { position: relative; z-index: 1; display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 6px; padding: 54px 16px 15px; }
 .home-hero-feature-copy > span { color: var(--home-muted); font-size: 13px; }
 .home-hero-feature-copy > strong { max-width: 76%; overflow: hidden; color: #f0f7f8; font-size: 22px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
@@ -156,8 +154,7 @@
   .home-intro > .home-hero-copy > p { font-size: 15px; }
   .home-actions { margin: 14px 0 12px; }
   .home-hero-feature { min-height: 142px; }
-  .home-hero-feature-art { width: 46%; }
-  .home-hero-portrait { right: -4px; bottom: -20px; height: 125%; }
+  .home-hero-feature-mark { right: 8px; bottom: -15px; font-size: 112px; }
   .home-hero-feature-copy { padding: 45px 14px 12px; }
   .home-hero-feature-copy > strong { font-size: 19px; }
   .home-how { gap: 13px; margin-bottom: 32px; padding: 16px; }
