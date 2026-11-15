@@ -15,7 +15,7 @@ type PreviewState = {
   error: string;
 };
 
-function PreviewContent({ file, renderFields }: { file: File; renderFields?: (slot: number) => React.ReactNode }) {
+function PreviewContent({ file, renderFields, selectedSlot, onSelectSlot }: { file: File; renderFields?: (slot: number) => React.ReactNode; selectedSlot?:number|null; onSelectSlot?:(slot:number)=>void }) {
   const [state, setState] = useState<PreviewState | null>(null);
 
   useEffect(() => {
@@ -95,7 +95,7 @@ function PreviewContent({ file, renderFields }: { file: File; renderFields?: (sl
           {current.slots.map(item => (
             <div
               key={item.slot}
-              className="import-echo-card"
+              className={`import-echo-card${selectedSlot===item.slot?" is-focused":""}`}
             >
               <div className="echo-review-images">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -114,6 +114,7 @@ function PreviewContent({ file, renderFields }: { file: File; renderFields?: (sl
                 height={56}
                 className="echo-review-sonata"
               /></div>
+              {onSelectSlot&&<button type="button" className="echo-focus-button" aria-pressed={selectedSlot===item.slot} onClick={()=>onSelectSlot(item.slot)}>{selectedSlot===item.slot?"Highlighted in screenshot":"Highlight in screenshot"}</button>}
               {renderFields?.(item.slot)}
             </div>
           ))}
@@ -123,8 +124,8 @@ function PreviewContent({ file, renderFields }: { file: File; renderFields?: (sl
   );
 }
 
-export function EchoVisualPreview({ file, renderFields }: { file: File | null; renderFields?: (slot: number) => React.ReactNode }) {
+export function EchoVisualPreview({ file, renderFields, selectedSlot, onSelectSlot }: { file: File | null; renderFields?: (slot: number) => React.ReactNode; selectedSlot?:number|null; onSelectSlot?:(slot:number)=>void }) {
   if (!file) return null;
 
-  return <PreviewContent key={file.name + ":" + file.size + ":" + file.lastModified} file={file} renderFields={renderFields} />;
+  return <PreviewContent key={file.name + ":" + file.size + ":" + file.lastModified} file={file} renderFields={renderFields} selectedSlot={selectedSlot} onSelectSlot={onSelectSlot} />;
 }
