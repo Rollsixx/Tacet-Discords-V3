@@ -61,13 +61,20 @@
 }
 .home-hero-feature-label { position: absolute; z-index: 2; top: 15px; left: 16px; color: #a7c2cb; font-size: 13px; font-weight: 800; letter-spacing: .14em; }
 .home-hero-feature-mark { position: absolute; right: 14px; bottom: -30px; color: #67d8dc; font-size: clamp(112px, 14vw, 170px); font-weight: 900; letter-spacing: -.13em; line-height: 1; opacity: .13; text-shadow: 0 0 54px #54d2d5; transform: rotate(-8deg); }
-.home-hero-feature-copy { position: relative; z-index: 1; display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 6px; padding: 54px 16px 15px; }
+.home-hero-feature-portrait { position: absolute; inset: 0 0 0 auto; width: 56%; height: 100%; border-radius: 0; object-fit: contain; object-position: right bottom; background: transparent; opacity: .7; mask-image: linear-gradient(90deg, transparent, #000 30%); }
+.home-hero-feature-copy { position: relative; z-index: 1; display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 6px; padding: 54px 16px 35px; }
 .home-hero-feature-copy > span { color: var(--home-muted); font-size: 13px; }
 .home-hero-feature-copy > strong { max-width: 76%; overflow: hidden; color: #f0f7f8; font-size: 22px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .home-hero-feature-copy > small { display: flex; max-width: 100%; align-items: center; gap: 7px; color: #d3e0e4; font-size: 13px; }
+.home-hero-spotlight-player span { display: grid; gap: 2px; }
+.home-hero-spotlight-player b { color: #fff; font-size: 16px; font-style: normal; }
+.home-hero-spotlight-player em { color: var(--home-muted); font-size: 12px; font-style: normal; }
 .home-hero-feature-copy .rank-badge { min-width: 27px; height: 24px; padding: 2px 5px; font-size: 12px; }
 .home-hero-feature-copy > a { margin-top: 3px; color: #83e5dc; font-size: 13px; font-weight: 750; }
 .home-hero-feature-copy > a:hover { color: #b5fff5; }
+.home-hero-feature-controls { position: absolute; z-index: 2; right: 15px; bottom: 14px; display: flex; align-items: center; gap: 7px; }
+.home-hero-feature-controls button { width: 9px; height: 9px; padding: 0; border: 1px solid #a5d7d6; border-radius: 999px; background: #18272f; cursor: pointer; }
+.home-hero-feature-controls button.active { width: 23px; background: #77dfd4; border-color: #77dfd4; }
 .home-how {
   display: grid;
   grid-template-columns: minmax(190px, .7fr) minmax(0, 2fr);
@@ -136,7 +143,7 @@
 .home-medal-player small { color: var(--home-muted); font-size: 13px; }
 .home-medal-counts { gap: clamp(8px, 1.2vw, 16px); font-size: 14px; }
 .home-medal-counts small { color: var(--home-muted); font-size: 13px; }
-.home-medal-tenure { top: 59px; right: 16px; padding: 5px 8px; border: 1px solid #8e763e; border-radius: 999px; background: #352d1c; color: #f1d98e; font-size: 13px; font-weight: 750; }
+.home-medal-player .home-medal-tenure { width: fit-content; margin-top: 6px; padding: 4px 8px; border: 1px solid #8e763e; border-radius: 999px; background: #352d1c; color: #f1d98e; font-size: 12px; font-weight: 750; }
 .medal-standings-updated { margin-bottom: 10px; color: var(--home-muted); font-size: 13px; }
 .home-overview a:focus-visible, .home-player-search button:focus-visible { outline: 2px solid #88ece1; outline-offset: 3px; }
 @media (max-width: 900px) {
