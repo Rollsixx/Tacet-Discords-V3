@@ -1,17 +1,16 @@
 "use client";
 
 import {prepareVerificationImage} from "@/lib/scanner/verification-image";
-import {ScoringReadinessCard} from "@/components/scoring-readiness";
+import dynamic from "next/dynamic";
 import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
 import {extractEchoVisuals} from "@/lib/scanner/portrait-regions";
 import { ResonatorPortrait } from "@/components/resonator-portrait";
 import { resonatorDisplayName } from "@/lib/resonators";
 import { useEffect, useRef, useState } from "react";
 import { PageHeading, Panel, LockIcon } from "@/components/ui";
-import { SubmitBuild } from "@/components/submit-build";
 import { EchoVisualPreview } from "@/lib/scanner/echo-visual-preview";
 import { validateEchoSlot } from "@/lib/scanner/stat-validation";
-import { recognizeBuildCard, type RecognitionProgress, type RecognitionResult } from "@/lib/scanner/build-card-ocr";
+import type { RecognitionProgress, RecognitionResult } from "@/lib/scanner/build-card-ocr";
 
 export default function ImportPage() {
   const input = useRef<HTMLInputElement>(null);
@@ -36,6 +35,8 @@ export default function ImportPage() {
     setSubmitted(false); setRunning(true); setResult(null); setProgress(null); setError("");setReadiness(null);
     try {
       const evidence=await prepareVerificationImage(candidate);setFile(evidence);
+      // Keep the OCR engine out of the initial import-page bundle until a screenshot is selected.
+      const {recognizeBuildCard}=await import("@/lib/scanner/build-card-ocr");
       const recognized=await recognizeBuildCard(evidence,setProgress);setResult(recognized);
       if(!recognized.slots.flatMap(validateEchoSlot).length){
        setIdentityChecking(true);const bitmap=await createImageBitmap(evidence);let crops;
