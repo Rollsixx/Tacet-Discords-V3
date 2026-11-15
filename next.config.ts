@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  images: {
+    localPatterns: [
+      { pathname: "/resonators/**", search: "" },
+      // Tournament artwork URLs carry a version query so updated images bypass stale optimizer caches.
+      { pathname: "/api/hall-of-fame/artwork/**" },
+    ],
+  },
   env: {NEXT_PUBLIC_APP_RELEASE: process.env.VERCEL_GIT_COMMIT_SHA || "local"},
   cacheComponents: true,
   serverExternalPackages: ["@libsql/client", "tesseract.js", "sharp"],
