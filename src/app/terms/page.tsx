@@ -1,0 +1,11 @@
+import type {Metadata} from "next";
+
+export const metadata:Metadata={title:"Terms | Tacet Discords",description:"Terms for using Tacet Discords community build tools, profiles, and leaderboards."};
+
+export default function TermsPage(){return <article className="legal-page"><span className="eyebrow">Tacet Discords V3</span><h1>Terms</h1><p className="legal-intro">By using Tacet Discords, you agree to these terms. If you do not agree, do not use the site or submit content.</p><p className="legal-updated">Last updated: November 15, 2026</p>
+ <section><h2>Independent fan project</h2><p>Tacet Discords is an independent community project. It is not affiliated with, endorsed by, or sponsored by Kuro Games. Wuthering Waves, its names, characters, artwork, and other game assets belong to their respective owners.</p></section>
+ <section><h2>Build submissions</h2><p>Only submit builds and screenshots you are allowed to share. You are responsible for the accuracy of information you provide. Submissions may be checked by automated tools and moderators; they may be held for review, corrected, rejected, or removed when they are inaccurate, duplicated, abusive, or do not meet the site’s verification and scoring requirements.</p><p>By submitting a build, you allow the site to process it for verification and scoring, and to display the associated build information if it is approved. You retain any rights you have in your submitted material.</p></section>
+ <section><h2>Acceptable use</h2><p>Do not use the site to disrupt its operation, evade rate limits or review checks, submit someone else’s information without permission, or misrepresent a build or its results. Do not attempt unauthorized access to the site or its administration tools.</p></section>
+ <section><h2>Scores and availability</h2><p>Scores, verification results, profiles, and rankings are community tools and may be revised as scoring rules or source data are corrected. They are not official game results. The site may change, suspend, or discontinue features and does not guarantee uninterrupted availability or error-free results.</p></section>
+ <section><h2>Updates</h2><p>These terms may change as the project evolves. Continued use after an updated version is posted means you accept the revised terms. The date above indicates the latest revision.</p></section>
+ </article>}
