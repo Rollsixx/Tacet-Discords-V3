@@ -163,7 +163,7 @@ export function EchoDetails({build,profile=false,detailId,onCollapse}:{build:Bui
      </div>
     </div>
    </main>
-   <section className="profile-build-echoes"><div className="profile-build-echo-heading"><h3 className="profile-build-section-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3><small><span className="profile-build-legend-swatch">Crit.</span> Teal labels mark Crit. Rate and Crit. DMG substats.</small></div>{echoCards}</section>
+   <section className="profile-build-echoes"><div className="profile-build-echo-heading"><h3 className="profile-build-section-title"><span aria-hidden="true">✧</span> Equipped Echoes</h3></div>{echoCards}</section>
   </div>}
   {!profile&&<>{echoCards}{statsPanel}</>}
  </section>;
