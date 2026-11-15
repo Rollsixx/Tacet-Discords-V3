@@ -39,13 +39,13 @@ async function participants(search:string,page:number,sort:string,db:any){
  const count=await db.execute({sql:`SELECT COUNT(DISTINCT p.id) total FROM hof_participants p JOIN hof_roster r ON r.participant_id=p.id JOIN hof_tournaments t ON t.slug=r.tournament_slug WHERE r.published=1 AND r.state='confirmed' AND t.status IN (${placeholders}) AND (?='' OR instr(lower(p.display_name),lower(?))>0)`,args:[...publicStates,search,search]});
  return {items:rows,total:Number(count.rows[0]?.total||0),page,perPage:10,hasMore:(page*10)<Number(count.rows[0]?.total||0)};
 }
-async function eventDetail(event:any,db:any){
+async function eventDetail(event:any,db:any,includeBracket=false){
  const medals=await officialMedals(event.slug,db);
  const roster=event.rosterPublished?await publicRoster(event.slug,db):[];
- let matches:any[]=[];
- if(event.bracketPublished){
+ let matches:any[]|null=null;
+ if(event.bracketPublished&&includeBracket){
   const result=await db.execute({sql:`SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_position,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.scheduled_at,m.outcome_published,a.display_name name_a,b.display_name name_b,w.display_name winner_name FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b LEFT JOIN hof_participants w ON w.id=m.winner_id WHERE m.tournament_slug=? AND m.state<>'cancelled' ORDER BY m.round_number,m.match_order`,args:[event.slug]});
-  const dependencyRows=await db.execute({sql:"SELECT d.match_id,d.depends_on_match_id,d.dependency_type,d.target_slot FROM hof_match_dependencies d JOIN hof_matches m ON m.id=d.match_id WHERE m.tournament_slug=?",args:[event.slug]});
+  const dependencyRows=event.bracketPublished&&includeBracket?await db.execute({sql:"SELECT d.match_id,d.depends_on_match_id,d.dependency_type,d.target_slot FROM hof_match_dependencies d JOIN hof_matches m ON m.id=d.match_id WHERE m.tournament_slug=?",args:[event.slug]}):{rows:[]};
   const dependencyMap=new Map<string,{dependsOnMatchId:string;dependencyType:string;targetSlot:string}[]>();
   for(const edge of dependencyRows.rows){const key=String(edge.match_id),items=dependencyMap.get(key)||[];items.push({dependsOnMatchId:String(edge.depends_on_match_id),dependencyType:String(edge.dependency_type),targetSlot:String(edge.target_slot||"")});dependencyMap.set(key,items);}
   matches=result.rows.map((row:any)=>({id:String(row.id),round:Number(row.round_number),roundLabel:String(row.round_label),order:Number(row.match_order),bracketPosition:Number(row.bracket_position),side:String(row.bracket_side),state:row.outcome_published?String(row.state):String(row.state)==="awaiting_competitors"?"awaiting_competitors":(row.scheduled_at?"scheduled":"ready"),participantA:row.participant_a?{id:String(row.participant_a),name:String(row.name_a)}:null,participantB:row.participant_b?{id:String(row.participant_b),name:String(row.name_b)}:null,winner:row.outcome_published&&row.winner_id?{id:String(row.winner_id),name:String(row.winner_name)}:null,outcome:row.outcome_published?String(row.outcome):"",scheduledAt:row.scheduled_at?String(row.scheduled_at):null,dependencies:dependencyMap.get(String(row.id))||[]}));
@@ -86,7 +86,8 @@ export async function GET(request:Request){
   }
   if(section==="event"){
    const event=await tournamentBySlug((url.searchParams.get("slug")||"").slice(0,80),db);
-   return Response.json({event:event?await eventDetail(event,db):null},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
+   const includeBracket=url.searchParams.get("includeBracket")==="1";
+   return Response.json({event:event?await eventDetail(event,db,includeBracket):null},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
   }
   if(section==="participant"){
    const profile=await eventHistoryForParticipant((url.searchParams.get("id")||"").slice(0,80),db);
@@ -95,9 +96,12 @@ export async function GET(request:Request){
   const all=await db.execute({sql:`SELECT slug,title,boss,format,status,event_date,updated_at FROM hof_tournaments WHERE status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
   const currentRow=all.rows.find((row:any)=>["announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","suspended"].includes(String(row.status)));
   const current=currentRow?{slug:String(currentRow.slug),title:String(currentRow.title),boss:String(currentRow.boss),format:String(currentRow.format),status:String(currentRow.status),eventDate:currentRow.event_date?String(currentRow.event_date):null,artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(String(currentRow.slug))}:null;
+  const inviteResult=section==="overview"?await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hall_of_fame_join_contest_url"]}):null;
+  const inviteValue=String(inviteResult?.rows[0]?.value||"");let joinContestUrl="";
+  try{const invite=new URL(inviteValue);if(invite.protocol==="https:"&&(invite.hostname==="discord.gg"||invite.hostname==="discord.com"&&invite.pathname.startsWith("/invite/")))joinContestUrl=inviteValue;}catch{}
   const medalists=section==="hologram"?await recentMedalists(db):[];
   const list=section==="hologram"?await participants((url.searchParams.get("q")||"").slice(0,50),pageNumber(url.searchParams.get("page")),url.searchParams.get("sort")||"medals",db):null;
   const cache=section==="overview"?"public, s-maxage=300, stale-while-revalidate=60":"public, s-maxage=30, stale-while-revalidate=60";
-  return Response.json({current,medalists,participants:list},{headers:{"Cache-Control":cache,"Vercel-CDN-Cache-Control":cache,"X-Content-Type-Options":"nosniff"}});
+  return Response.json({current,medalists,participants:list,...(section==="overview"?{joinContestUrl}: {})},{headers:{"Cache-Control":cache,"Vercel-CDN-Cache-Control":cache,"X-Content-Type-Options":"nosniff"}});
  }catch(error){return failure(error);}
 }
