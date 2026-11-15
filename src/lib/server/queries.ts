@@ -32,6 +32,7 @@ export async function listBuilds(options: { search?: string; character?: string;
     args: [options.pending ? "pending" : "approved", options.includePending?1:0, query, query, query, query, character, character, options.id || "", options.id || "", options.uid || "", options.uid || "", ...patchCharacters, ...(rankedProfile?[]:[(page - 1) * 20])],
   });
   let builds=rankedProfile?result.rows.map(publicBuild):result.rows.slice(0,20).map(publicBuild);
+  const totalBuilds=rankedProfile?builds.length:undefined;
   // A player's profile uses the same live rank and movement record as the boards.
   if(!options.includePending&&!options.pending&&(options.uid||options.id)&&builds.length){
     // This client may be an in-memory SQLite database with a single connection;
@@ -49,7 +50,7 @@ export async function listBuilds(options: { search?: string; character?: string;
       return {...build,rank:ranked?.rank??null,rankMovement:ranked?.movement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.trackingSince??null,rankDays:ranked?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(ranked.rankSince))/86400000)):null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.previousRank!==null&&ranked?.previousRank!==undefined};
     });
   }
-  let hasMore=rankedProfile?builds.length>page*20:result.rows.length>20;
+  const hasMore=rankedProfile?builds.length>page*20:result.rows.length>20;
   if(rankedProfile){
     builds=orderProfileBuildsByRank(builds);
     builds=builds.slice((page-1)*20,page*20);
@@ -61,7 +62,7 @@ export async function listBuilds(options: { search?: string; character?: string;
   }
   const medals={top1:medalStanding?.gold||0,top2:medalStanding?.silver||0,top3:medalStanding?.bronze||0,total:medalStanding?.total||0};
   const rankHistory=options.uid&&!options.includePending&&!options.pending?(await listPlayerRankHistory(options.uid,db)).events:[];
- return {builds,page,hasMore,scoring:scoringReadiness,medals,medalStanding,rankHistory};
+ return {builds,page,hasMore,totalBuilds,scoring:scoringReadiness,medals,medalStanding,rankHistory};
 }
 function publicBuild(row: Row) {
  const data=JSON.parse(String(row.data));
