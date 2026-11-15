@@ -1,6 +1,5 @@
 "use client";
 import {verificationImageData} from "@/lib/scanner/verification-image";
-import {ScoringReadinessCard} from "./scoring-readiness";
 import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
 import {featuredResonators, resonatorDisplayName} from "@/lib/resonators";
 import { ResonatorPortrait } from "./resonator-portrait";
@@ -9,20 +8,17 @@ import { useState } from "react";
 import type { RecognitionResult } from "@/lib/scanner/build-card-ocr";
 import { validateEchoSlot } from "@/lib/scanner/stat-validation";
 import { extractEchoVisuals } from "@/lib/scanner/portrait-regions";
-export function SubmitBuild({ file, result, readiness, checking=false, onSubmitted, onReset, onRetryScan }: { file: File; result: RecognitionResult; readiness?:ScoringReadiness|null; checking?:boolean; onSubmitted?: () => void; onReset?: () => void; onRetryScan?:()=>void }) {
+export function SubmitBuild({ file, result, readiness, checking=false, onSubmitted, onReset, onRetryScan, onSubmittingChange }: { file: File; result: RecognitionResult; readiness?:ScoringReadiness|null; checking?:boolean; onSubmitted?: () => void; onReset?: () => void; onRetryScan?:()=>void; onSubmittingChange?:(busy:boolean)=>void }) {
   const uid = result.identity.uid;
   const [ign, setIgn] = useState(result.identity.ign);
   const character = result.identity.character;
   const characterLabel = resonatorDisplayName(character);
   const [confirmed, setConfirmed] = useState(false);
   const [avatarCharacter,setAvatarCharacter] = useState("");
-  const [savedAvatarCharacter,setSavedAvatarCharacter] = useState("");
-  const [avatarSaving,setAvatarSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [id, setId] = useState("");
   const [submissionStatus,setSubmissionStatus]=useState<"pending"|"approved">("pending");
   const [error, setError] = useState("");
-  const [serverReadiness,setServerReadiness]=useState<ScoringReadiness|null>(null);
   const [copyStatus, setCopyStatus] = useState("");
   const issues = result.slots.flatMap(validateEchoSlot);
   const structuralIssues=issues.filter(issue=>issue.code!=="UNSUPPORTED_ROLL");
@@ -30,7 +26,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (busy || checking || id || !uid || !character || !confirmed) return;
-    setBusy(true); setError("");
+    setBusy(true); setError("");onSubmittingChange?.(true);
     try {
       const bitmap = await createImageBitmap(file);
       let visuals;
@@ -46,41 +42,23 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Submission failed.");
-      setServerReadiness(data.readiness||null);setSubmissionStatus(data.status==="approved"?"approved":"pending");setSavedAvatarCharacter(avatarCharacter);setId(data.id);try{localStorage.setItem("tacet-my-uid",uid);}catch{} onSubmitted?.();
+      setSubmissionStatus(data.status==="approved"?"approved":"pending");setId(data.id);try{localStorage.setItem("tacet-my-uid",uid);}catch{} onSubmitted?.();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to submit. Try again."); }
-    finally { setBusy(false); }
-  }
-  async function saveAvatar() {
-    if(avatarSaving||!avatarCharacter||avatarCharacter===savedAvatarCharacter)return;
-    setAvatarSaving(true);setError("");
-    try {
-      const bitmap=await createImageBitmap(file);
-      let visuals;
-      try { visuals=extractEchoVisuals(bitmap,bitmap.width,bitmap.height).map(slot=>({portrait:slot.portrait.toDataURL("image/png"),sonata:slot.sonata.toDataURL("image/png")})); }
-      finally { bitmap.close(); }
-      const sourceImage=await verificationImageData(file);
-      const response=await fetch("/api/profile/avatar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({uid,ign,character,avatarCharacter,confirmed:true,sourceImage,slots:result.slots.map((slot,index)=>({...slot,...visuals[index]}))})});
-      const data=await response.json();
-      if(!response.ok)throw new Error(data.error||"Unable to update your profile avatar.");
-      setSavedAvatarCharacter(data.avatarCharacter);
-    }catch(cause){setError(cause instanceof Error?cause.message:"Unable to update your profile avatar.");}
-    finally{setAvatarSaving(false);}
+    finally { setBusy(false);onSubmittingChange?.(false); }
   }
   async function copyId() {
     try { await navigator.clipboard.writeText(id); setCopyStatus("Copied"); }
     catch { setCopyStatus("Select and copy the submission ID."); }
   }
-  if (id) return <section className="submission-receipt" role="status" aria-label="Submission confirmation">
-    <div className="receipt-icon" aria-hidden="true">✓</div>
-    <div className="receipt-content"><span className="eyebrow">{submissionStatus==="approved"?"Build published":"Submission received"}</span><h2>{submissionStatus==="approved"?"Build approved and ranked":"Build saved · Pending review"}</h2>
-      <p className="muted">{submissionStatus==="approved"?`Your ${characterLabel} build passed verification and scoring checks and is now on the leaderboard.`:`Your ${characterLabel} build is saved privately. It will appear in Profiles after required identity, equipment, and scoring checks are complete.`}</p>
-      <div className="receipt-avatar"><ResonatorPortrait name={avatarCharacter||savedAvatarCharacter||character} className="lb-monogram"/><label htmlFor="receipt-avatar">Profile avatar <select id="receipt-avatar" value={avatarCharacter} onChange={event=>setAvatarCharacter(event.target.value)}><option value="">Keep current avatar</option>{[...new Set(featuredResonators.map(item=>item.patchVersion))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(version=><optgroup key={version} label={`${version} Characters`}>{featuredResonators.filter(item=>item.patchVersion===version).map(item=><option key={item.name} value={item.name}>{item.displayName||item.name}</option>)}</optgroup>)}</select></label><button type="button" className="outline-button" disabled={avatarSaving||avatarCharacter===savedAvatarCharacter} onClick={saveAvatar}>{avatarSaving?"Verifying screenshot…":avatarCharacter===savedAvatarCharacter?"Current avatar":"Change avatar"}</button></div>{error&&<p className="field-error" role="alert">{error}</p>}<dl className="receipt-player"><div><dt>Player</dt><dd>{ign}</dd></div><div><dt>UID</dt><dd>{uid}</dd></div><div><dt>Echoes</dt><dd>5 · Locked</dd></div></dl>
-      <ScoringReadinessCard value={serverReadiness}/>
-      <div className="receipt-reference"><div><span>Submission ID</span><code>{id}</code></div><button type="button" className="outline-button" onClick={copyId}>Copy submission ID</button></div>
-      <p className="receipt-note"><a href={`/submission-status?id=${encodeURIComponent(id)}`}>Check submission status</a> · <a href="/profiles#identity-verification-help">What does Identity verified mean?</a></p>
-      {copyStatus && <p className="muted">{copyStatus}</p>}
-      <p className="receipt-note">{submissionStatus==="approved"?"Your build is public on the leaderboard. Keep this ID for reference.":"Keep this ID for reference while your build awaits required checks."}</p>
-      {onReset && <button type="button" className="action" onClick={onReset}>Import another build</button>}
+  if (id) return <section className={`submission-receipt ${submissionStatus === "approved" ? "receipt-approved" : "receipt-pending"}`} role="status" aria-label="Submission confirmation">
+    <div className="receipt-icon" aria-hidden="true">{submissionStatus==="approved"?"✓":"…"}</div>
+    <div className="receipt-content"><span className="eyebrow">{submissionStatus==="approved"?"Approved · Ranked":"Submission received"}</span><h2>{submissionStatus==="approved"?"Your build is on the leaderboard":"Your build is awaiting review"}</h2>
+      <p className="muted">{submissionStatus==="approved"?`Your ${characterLabel} build passed verification and scoring checks and is now public.`:`Your ${characterLabel} build was saved. It will appear publicly after the required identity, equipment, and scoring checks are complete.`}</p>
+      <dl className="receipt-player"><div><dt>Player</dt><dd>{ign}</dd></div><div><dt>Resonator</dt><dd>{characterLabel}</dd></div><div><dt>UID</dt><dd>{uid}</dd></div></dl>
+      <div className="receipt-reference"><div><span>Submission ID</span><code>{id}</code></div><div className="receipt-reference-actions"><button type="button" className="outline-button" onClick={copyId}>{copyStatus==="Copied"?"Copied":"Copy ID"}</button><a className="outline-button" href={`/submission-status?id=${encodeURIComponent(id)}`}>Check status</a></div></div>
+      {copyStatus && copyStatus!=="Copied"&&<p className="muted">{copyStatus}</p>}
+      <div className="receipt-actions">{submissionStatus==="approved"&&<><a className="outline-button" href={`/leaderboards?character=${encodeURIComponent(character)}`}>View leaderboard</a><a className="outline-button" href={`/profiles?uid=${encodeURIComponent(uid)}`}>View my profile</a></>}{onReset&&<button type="button" className="action" onClick={onReset}>Import another build</button>}</div>
+      <p className="receipt-note">Keep the submission ID to review this result later.</p>
     </div>
   </section>;
   const scanValid = Boolean(uid && character);
