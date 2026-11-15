@@ -21,7 +21,7 @@ export async function assessSource(input){
   const image=input.sourceImage;
   const imageStarted=Date.now();const metadata=await sharp(image,{limitInputPixels:2500000}).metadata();
   if(metadata.width!==1920||metadata.height!==1080)throw sourceFailure('IMAGE_DIMENSIONS','Use an original 1920 × 1080 build card.');
-  const decoded=await decodeFingerprintSource(image);const decodedImage=sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}});stageMetrics.image_processing_ms+=Date.now()-imageStarted;
+  const decoded=await decodeFingerprintSource(image);stageMetrics.image_processing_ms+=Date.now()-imageStarted;
   stage='worker';const workerStarted=Date.now();
   worker=await createWorker('eng',1,{langPath:languagePath,gzip:true,cacheMethod:'none',errorHandler:()=>{}});
   await worker.setParameters({user_defined_dpi:'300',tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
@@ -30,7 +30,8 @@ export async function assessSource(input){
    const width=Math.round(region.width*scale),height=Math.round(region.height*scale);
    // Keep the existing grayscale/contrast transformation, but run it in libvips
    // instead of iterating every output pixel in JavaScript for every OCR crop.
-   const processingStarted=Date.now();let png=await decodedImage.clone().extract(region).resize(width,height,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3})
+   const processingStarted=Date.now();let png=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}})
+    .extract(region).resize(width,height,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3})
     .greyscale().linear(1.5,-64).png().toBuffer();
    if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:width+32,height:height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
    stageMetrics.image_processing_ms+=Date.now()-processingStarted;
@@ -55,7 +56,7 @@ export async function assessSource(input){
   if(parseCardIdentity(header,'','').character.toLowerCase()!==input.character.toLowerCase())throw sourceFailure('CHARACTER_UNREADABLE','Character name could not be confirmed in the screenshot header. Use the original 1920 × 1080 card.');
   const uidText=await read(regionOf(CARD_HEADERS.uid));
   const ur=regionOf(CARD_HEADERS.uidDigits);
-  const uidPixels=await decodedImage.clone().extract(ur).ensureAlpha().raw().toBuffer();
+  const uidPixels=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}}).extract(ur).ensureAlpha().raw().toBuffer();
   ur.width=uidTextWidth(uidPixels,ur.width,ur.height);
   sourceUid=await recoverCardUid(uidText,async variant=>{await worker.setParameters({tessedit_char_whitelist:'0123456789'});const r=await readResult(ur,{linear:true,scale:variant===0?3:4});return {text:r.text,confidence:r.confidence};});
   await worker.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%+ '});
