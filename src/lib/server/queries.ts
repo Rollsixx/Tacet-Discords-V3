@@ -239,7 +239,7 @@ export async function medalStandings(db:Client=database(),options:{refresh?:bool
 
 export async function listLeaderboard(options:{character?:string;search?:string;page?:number;rotationPolicyId?:string|null}={},db:Client=database()){
  const character=options.character||SUPPORTED[0],page=Number.isFinite(options.page)?Math.min(10000,Math.max(1,Math.floor(options.page||1))):1;
- if(!SUPPORTED.includes(character))return {builds:[],page,hasMore:false,scoring:scoringReadiness,rotationReady:false};
+ if(!SUPPORTED.includes(character))return {builds:[],page,hasMore:false,totalBuilds:0,scoring:scoringReadiness,rotationReady:false};
  const search=(options.search||"").slice(0,64).trim().toLowerCase();
  const policy=Object.prototype.hasOwnProperty.call(options,"rotationPolicyId")?{policy_id:options.rotationPolicyId}:(await db.execute({sql:"SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?",args:[character]})).rows[0];
  const rotationReady=rotationPolicyReady(policy?.policy_id);
@@ -247,7 +247,7 @@ export async function listLeaderboard(options:{character?:string;search?:string;
  const matching=Object.entries(state).filter(([uid,entry])=>entry.active!==false&&Number.isInteger(Number(entry.rank))&&(!search||uid.toLowerCase().includes(search)||(entry.ign||"").toLowerCase().includes(search))).sort((a,b)=>Number(a[1].rank)-Number(b[1].rank)||a[0].localeCompare(b[0]));
  const pageEntries=matching.slice((page-1)*20,page*20);
  const builds=await loadRankedBuilds(pageEntries.map(([uid,history])=>({character,uid,history})),db);
- return {builds,page,hasMore:matching.length>page*20,scoring:scoringReadiness,rotationReady};
+ return {builds,page,hasMore:matching.length>page*20,totalBuilds:matching.length,scoring:scoringReadiness,rotationReady};
 }
 
 export async function listLeaderboardRankChanges(limit=100,db:Client=database(),filters:{character?:string;player?:string;from?:string;to?:string}={}){
