@@ -97,6 +97,7 @@ export async function GET(request:Request){
   const current=currentRow?{slug:String(currentRow.slug),title:String(currentRow.title),boss:String(currentRow.boss),format:String(currentRow.format),status:String(currentRow.status),eventDate:currentRow.event_date?String(currentRow.event_date):null,artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(String(currentRow.slug))}:null;
   const medalists=section==="hologram"?await recentMedalists(db):[];
   const list=section==="hologram"?await participants((url.searchParams.get("q")||"").slice(0,50),pageNumber(url.searchParams.get("page")),url.searchParams.get("sort")||"medals",db):null;
-  return Response.json({current,medalists,participants:list},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
+  const cache=section==="overview"?"public, s-maxage=300, stale-while-revalidate=60":"public, s-maxage=30, stale-while-revalidate=60";
+  return Response.json({current,medalists,participants:list},{headers:{"Cache-Control":cache,"Vercel-CDN-Cache-Control":cache,"X-Content-Type-Options":"nosniff"}});
  }catch(error){return failure(error);}
 }
