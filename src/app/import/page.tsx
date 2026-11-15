@@ -3,7 +3,7 @@
 import {prepareVerificationImage} from "@/lib/scanner/verification-image";
 import dynamic from "next/dynamic";
 import type {ScoringReadiness} from "@/lib/scanner/scoring-readiness";
-import {extractEchoVisuals} from "@/lib/scanner/portrait-regions";
+import {extractEchoVisuals,getEchoVisualRegions} from "@/lib/scanner/portrait-regions";
 import { ResonatorPortrait } from "@/components/resonator-portrait";
 import { resonatorDisplayName } from "@/lib/resonators";
 import { useEffect, useRef, useState } from "react";
@@ -30,6 +30,7 @@ export default function ImportPage() {
   const [identityChecking,setIdentityChecking]=useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedEcho,setSelectedEcho]=useState<number|null>(null);
   const [dragOver,setDragOver]=useState(false);
   const previewUrl = useRef("");
   useEffect(() => () => { if (previewUrl.current) URL.revokeObjectURL(previewUrl.current); }, []);
@@ -111,12 +112,12 @@ export default function ImportPage() {
           {result&&<p className="muted scan-footnote">Preliminary check. Final verification happens when you submit.</p>}
         </Panel>
         {result&&corrections.length>0&&<details className="ocr-corrections"><summary>OCR corrections · {corrections.length} values recovered</summary><ul>{corrections.map((correction,index)=><li key={`${correction.slot}-${correction.label}-${index}`}><strong>Echo {correction.slot} · {correction.label}</strong><span>{correction.raw||"Unreadable"} → {correction.value}</span></li>)}</ul></details>}
-        <div className="import-evidence-layout">{preview && <details className="source-preview" open><summary>Original screenshot · compare with the extracted Echo values</summary>
+        <div className="import-evidence-layout">{preview && <details className="source-preview" open><summary>Original screenshot{selectedEcho?` · Echo ${selectedEcho} highlighted`:" · compare with extracted Echoes"}</summary>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="Selected build screenshot" />
+          <div className="source-preview-image"><img src={preview} alt="Selected build screenshot" />{selectedEcho&&(()=>{const region=getEchoVisualRegions()[selectedEcho-1]?.portrait;return region?<span aria-hidden="true" className="echo-source-highlight" style={{left:`${region.x/1920*100}%`,top:`${region.y/1080*100}%`,width:`${region.width/1920*100}%`,height:`${region.height/1080*100}%`}}/>:null;})()}</div>
         </details>}{result && <section className="import-extracted" aria-label="Extracted Echo values">
           <details className="echo-review-details"><summary>Review {result.slots.length} Echoes · {issues.length?"check flagged values":"stats locked from screenshot"}</summary>
-          <EchoVisualPreview file={file} renderFields={slotNumber => {
+          <EchoVisualPreview file={file} selectedSlot={selectedEcho} onSelectSlot={slotNumber=>setSelectedEcho(current=>current===slotNumber?null:slotNumber)} renderFields={slotNumber => {
             const slot = result.slots[slotNumber - 1];
             const warnings = validateEchoSlot(slot);
             return <><div className="echo-lock-label"><LockIcon /> Locked from screenshot</div><h3 className="echo-review-title">Echo {slot.slot}{slot.presence === "empty" ? " — No equipped Echo detected" : ""}</h3><fieldset disabled={slot.presence === "empty"} className="echo-fields">
