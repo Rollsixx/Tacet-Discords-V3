@@ -12,6 +12,11 @@ import { EchoVisualPreview } from "@/lib/scanner/echo-visual-preview";
 import { validateEchoSlot } from "@/lib/scanner/stat-validation";
 import type { RecognitionProgress, RecognitionResult } from "@/lib/scanner/build-card-ocr";
 
+const ScoringReadinessCard = dynamic(() => import("@/components/scoring-readiness").then(module => module.ScoringReadinessCard));
+const SubmitBuild = dynamic(() => import("@/components/submit-build").then(module => module.SubmitBuild), {
+  loading: () => <Panel><p role="status">Preparing the submission form…</p></Panel>,
+});
+
 export default function ImportPage() {
   const input = useRef<HTMLInputElement>(null);
   const scanning = useRef(false);
