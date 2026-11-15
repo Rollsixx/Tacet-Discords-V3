@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./home-page.css";
 import { SiteFrame } from "@/components/site-frame";
 
 export const metadata: Metadata = {
