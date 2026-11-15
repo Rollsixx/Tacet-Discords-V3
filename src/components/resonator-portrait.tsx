@@ -1,23 +1,16 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import { useState } from "react";
 import { featuredResonators } from "@/lib/resonators";
 export function ResonatorPortrait({name,className="",priority=false}:{name:string;className?:string;priority?:boolean}){
- const [failed,setFailed]=useState<string|null>(null);
- const image=useRef<HTMLImageElement>(null);
- useEffect(()=>{
-  const element=image.current;
-  if(!element)return;
-  const failedImage=()=>setFailed(name);
-  // An eager image can fail before React hydrates; synchronize that external load state.
-  if(element.complete&&element.naturalWidth===0)failedImage();
-  element.addEventListener('error',failedImage);
-  return()=>element.removeEventListener('error',failedImage);
- },[name]);
+ return <Portrait key={name} name={name} className={className} priority={priority}/>;
+}
+function Portrait({name,className,priority}:{name:string;className:string;priority:boolean}){
+ const [failed,setFailed]=useState(false);
  const character=featuredResonators.find(item=>item.name===name);
  const label=character?.displayName||character?.name||name;
  const fallback=<span className={`resonator-portrait portrait-fallback ${className}`} role="img" aria-label={`${label||'Unknown character'} portrait unavailable`}>{character?.monogram||name.slice(0,2).toUpperCase()||'?'}</span>;
- if(!character||failed===name)return fallback;
- // The source portraits are 256px PNGs. Next serves cached, responsive WebP/AVIF variants.
- return <Image ref={image} src={`/resonators/${character.name}.png`} alt={`${label} portrait`} width={128} height={128} sizes="128px" quality={75} className={`resonator-portrait ${className}`} loading={priority?'eager':'lazy'} onError={()=>setFailed(name)}/>;
+ if(!character||failed)return fallback;
+ // Public artwork is served locally; screenshot scanning never contacts an image host.
+ // eslint-disable-next-line @next/next/no-img-element
+ return <img src={`/resonators/${character.name}.png`} alt={`${label} portrait`} width={128} height={128} className={`resonator-portrait ${className}`} loading={priority?'eager':'lazy'} onError={()=>setFailed(true)}/>;
 }
