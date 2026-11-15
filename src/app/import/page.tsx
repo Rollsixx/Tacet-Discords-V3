@@ -29,6 +29,7 @@ export default function ImportPage() {
   const [readiness,setReadiness]=useState<ScoringReadiness|null>(null);
   const [identityChecking,setIdentityChecking]=useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [dragOver,setDragOver]=useState(false);
   const previewUrl = useRef("");
   useEffect(() => () => { if (previewUrl.current) URL.revokeObjectURL(previewUrl.current); }, []);
@@ -66,28 +67,40 @@ export default function ImportPage() {
     if (scanning.current) return;
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
     previewUrl.current = "";
-    setFile(null); setPreview(""); setResult(null); setProgress(null); setError("");setReadiness(null);
+    setFile(null); setPreview(""); setResult(null); setProgress(null); setError("");setReadiness(null);setSubmitted(false);setSubmitting(false);
     if (input.current) input.current.value = "";
   }
   const identity = result?.identity || progress?.identity;
   const slots = result?.slots || progress?.slots || [];
   const issues = result?.slots.flatMap(validateEchoSlot) || [];
+  const corrections = result?.slots.flatMap(slot=>[
+    ...(slot.cost.autoRecovered?[{slot:slot.slot,label:"Cost",raw:slot.cost.raw,value:slot.cost.value}]:[]),
+    ...(slot.mainStat.autoRecovered?[{slot:slot.slot,label:"Main stat",raw:slot.mainStat.raw,value:slot.mainStat.value}]:[]),
+    ...slot.substats.flatMap((stat,index)=>stat.autoRecovered?[{slot:slot.slot,label:`Substat ${index+1}`,raw:stat.raw,value:stat.value}]:[]),
+  ])||[];
+  const journey = ["Upload", "Review scan", "Confirm details", "Submit", "Review"];
+  const activeJourneyStep = submitted ? 4 : submitting ? 3 : result ? 2 : running ? 1 : 0;
   const stages = [
     { label: "Character", done: Boolean(identity), pass: Boolean(identity?.character) },
     { label: "Player details", done: Boolean(identity), pass: Boolean(identity?.uid && identity?.ign) },
     ...Array.from({ length: 5 }, (_, i) => ({ label: `Echo ${i + 1} stats`, done: Boolean(slots[i]), pass: Boolean(slots[i] && !validateEchoSlot(slots[i]).length) })),
   ];
   return <>
-    <PageHeading eyebrow="Build workspace / 01" title="Import your build." description="Drop a 1920 × 1080 build card. Scanning starts automatically; review the results before uploading." />
+    <PageHeading eyebrow="Build import" title="Import your build." description="Scan a complete build card, check the extracted details, then submit it for verification." />
     <div className="import-workspace">
+      <nav className="import-journey" aria-label="Import steps"><ol>{journey.map((step,index)=><li key={step} className={index===activeJourneyStep?"is-current":index<activeJourneyStep?"is-complete":""} aria-current={index===activeJourneyStep?"step":undefined}><span>{index<activeJourneyStep?"✓":String(index+1).padStart(2,"0")}</span><strong>{step}</strong></li>)}</ol></nav>
       <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" className="visually-hidden" aria-label="Choose build screenshot" disabled={running} onChange={e => choose(e.target.files?.[0])} />
       {!file ? <Panel><div className={`upload-zone${dragOver?' drag-active':''}`} onDragEnter={e=>{e.preventDefault();setDragOver(true);}} onDragOver={e => {e.preventDefault();setDragOver(true);}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setDragOver(false);}} onDrop={e => { e.preventDefault();setDragOver(false); choose(e.dataTransfer.files[0]); }}>
-        <div className="upload-icon" aria-hidden="true">↑</div><h2>Drop your build card here</h2><p className="muted">1920 × 1080 · PNG, JPEG or WebP · Up to 10 MB</p>
-        <p className="muted">You can also paste a screenshot with Ctrl+V.</p><details className="build-card-guide"><summary>What should my 1920 × 1080 screenshot show?</summary><p>Generate your build card with WuWa Bot, then upload the full card image at 1920 × 1080. Make sure it shows your player name and UID, Resonator, weapon, and all five Echo cards with their main stats and substats. Don’t use the in-game Resonator details screen or crop, resize, or cover any values.</p></details>
+        <div className="upload-icon" aria-hidden="true">↑</div><h2>{dragOver?"Release to scan":"Drop your build card here"}</h2>
         <button className="action" onClick={() => input.current?.click()}>Browse screenshot</button>
+        <p className="upload-format">PNG, JPEG or WebP · up to 10 MB</p>
+        <div className="upload-requirements"><strong>Use a full 1920 × 1080 WuWa Bot card</strong><span>Keep the image uncropped and unresized. It needs your player name and UID, Resonator, weapon, and five Echo cards with their main stats and substats.</span></div>
+        <div className="upload-example" aria-label="Example layout: player and Resonator details above five Echo cards"><div className="upload-example-player"><span>PLAYER + UID</span><span>RESONATOR + WEAPON</span></div><div className="upload-example-echos">{Array.from({length:5},(_,index)=><span key={index}>ECHO {index+1}<small>MAIN STAT<br/>SUBSTATS</small></span>)}</div><small className="upload-example-caption">Example of the information that must be visible</small></div>
+        <p className="upload-paste">Or paste a screenshot with Ctrl+V</p>
       </div></Panel> : <>
         <div className="import-file-bar"><div><strong>{file.name}</strong><p className="muted">{running ? "Scanning automatically…" : "Screenshot scanned · Stats locked"}</p></div><button className="outline-button" disabled={running} onClick={reset}>{submitted ? "Import another build" : "Choose another screenshot"}</button></div>
-        <Panel className="scan-panel"><h2>Scan progress</h2>
+        <Panel className="scan-panel"><div className="scan-results-title"><div><span className="eyebrow">Step 2 · Review scan</span><h2>Scan results</h2></div></div>
+          {result&&<div className="scan-summary"><div className="scan-summary-character"><ResonatorPortrait name={identity?.character||""} className="import-character-portrait"/><div><span className="eyebrow">{identity?.character?"Resonator":"Resonator not detected"}</span><strong>{identity?.character?resonatorDisplayName(identity.character):"Check the screenshot"}</strong></div></div><div className="scan-summary-check"><strong>{result.slots.length}/5 Echoes read</strong><span>{issues.length?`${issues.length} value${issues.length===1?"":"s"} need review`:"Stats locked to this screenshot"}</span></div><a className="action" href="#player-details-title">Continue to details</a></div>}
           <div className="scan-stages" aria-label="Scan progress">{stages.map(stage => {
             const state = stage.done ? stage.pass ? "pass" : "review" : error ? "failed" : running ? "scanning" : "waiting";
             return <div key={stage.label} className={`scan-stage scan-${state}`}><span className="scan-symbol" aria-hidden="true">{state === "pass" ? "✓" : state === "review" || state === "failed" ? "!" : "·"}</span><strong>{stage.label}</strong><small>{state === "pass" ? "Passed" : state === "review" ? "Needs review" : state === "failed" ? "Not scanned" : state === "scanning" ? "Scanning" : "Waiting"}</small></div>;
@@ -95,14 +108,14 @@ export default function ImportPage() {
           <div role="status" className="scan-status">{running ? progress?.label || "Preparing scanner…" : error ? "Scan could not finish." : result ? issues.length ? `${issues.length} stat issue(s) require review` : "All Echo stat checks passed. Your Echo stats are locked to this scan." : "Waiting for screenshot"}</div>
           {running && <progress aria-label="Screenshot scan" value={progress?.completed || 0} max={progress?.total || 38} />}
           {result&&<ScoringReadinessCard value={readiness} checking={identityChecking} preliminary/>}
-          <p className="muted scan-footnote">A stat pass does not establish Echo identity or leaderboard eligibility. Passed means the extracted fields are readable and structurally valid. Every stat is checked against the screenshot when you submit.</p>
+          {result&&<p className="muted scan-footnote">Preliminary check. Final verification happens when you submit.</p>}
         </Panel>
-        {identity && <Panel className="import-character"><ResonatorPortrait key={identity.character} name={identity.character||""} className="import-character-portrait"/><div><span className="eyebrow">Character</span><h2>{identity.character ? resonatorDisplayName(identity.character) : "Character unreadable"}</h2></div><span className="tag">{identity.character ? "Scanned from card" : "Rescan required"}</span></Panel>}
-        {preview && <details className="source-preview" open><summary>Original screenshot · compare with the extracted Echo values</summary>
+        {result&&corrections.length>0&&<details className="ocr-corrections"><summary>OCR corrections · {corrections.length} values recovered</summary><ul>{corrections.map((correction,index)=><li key={`${correction.slot}-${correction.label}-${index}`}><strong>Echo {correction.slot} · {correction.label}</strong><span>{correction.raw||"Unreadable"} → {correction.value}</span></li>)}</ul></details>}
+        <div className="import-evidence-layout">{preview && <details className="source-preview" open><summary>Original screenshot · compare with the extracted Echo values</summary>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="Selected build screenshot" />
         </details>}{result && <section className="import-extracted" aria-label="Extracted Echo values">
-          <div className="import-results-heading"><h2>{result.slots.length} Echo slots processed</h2><span className="tag">{issues.length ? "Rescan required" : "No structural warnings"}</span></div>
+          <details className="echo-review-details"><summary>Review {result.slots.length} Echoes · {issues.length?"check flagged values":"stats locked from screenshot"}</summary>
           <EchoVisualPreview file={file} renderFields={slotNumber => {
             const slot = result.slots[slotNumber - 1];
             const warnings = validateEchoSlot(slot);
@@ -111,14 +124,15 @@ export default function ImportPage() {
               <label>Main stat<input aria-label={`Echo ${slot.slot} main stat`} value={slot.mainStat.value} readOnly aria-readonly="true" /></label>
               {slot.substats.map((stat, i) => <label key={i}>Substat {i + 1}<textarea aria-label={`Echo ${slot.slot} substat ${i + 1}`} value={stat.value} readOnly aria-readonly="true" rows={2} /></label>)}
             </fieldset><span className={`scan-chip ${warnings.length ? "needs-review" : "passed"}`}>{warnings.length ? "Needs review" : "Stats passed"}</span>
-              {warnings.map(issue => <p key={issue.code} className="field-error">{issue.message}</p>)}
-              <details><summary>Original OCR and automatic corrections</summary><p className="muted">Cost: {slot.cost.raw || "Unreadable"}{slot.cost.autoRecovered ? ` (recovered from image: ${slot.cost.value})` : ""}</p><p className="muted">{slot.mainStat.raw}{slot.mainStat.autoRecovered ? ` (corrected to ${slot.mainStat.value})` : ""}</p>{slot.substats.map((stat, i) => <p className="muted" key={i}>Substat {i+1}: {stat.raw || "Unreadable"}{stat.autoRecovered ? ` (corrected to ${stat.value})` : ""}</p>)}</details></>;
+              {warnings.map(issue => <p key={issue.code} className="field-error">{issue.message}</p>)}</>;
           }} />
+          </details>
         </section>}
-        {result&&<SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onRetryScan={()=>void scan(file)} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />}
+        </div>
+        {result&&<SubmitBuild key={file.name + file.lastModified} file={file} result={result} readiness={readiness} checking={running} onSubmittingChange={setSubmitting} onRetryScan={()=>void scan(file)} onSubmitted={() => setSubmitted(true)} onReset={() => { reset(); window.scrollTo({ top: 0 }); }} />}
       </>}
       {error && <div className="workspace-note"><p role="alert" className="field-error">{error}</p>{file && !running && <button className="outline-button" onClick={() => scan(file)}>Retry scan</button>}</div>}
-      <p className="muted import-privacy">Large screenshots are prepared once before scanning; the same image is used for upload verification. Only your character and Echo cards are used here. After you submit, the server checks your screenshot UID, Echo stats and scoring evidence, then discards the original. Approved builds show your UID and IGN publicly.</p>
+      <ul className="import-privacy" aria-label="Screenshot privacy"><li><span aria-hidden="true">◈</span>Only your Resonator and Echo cards are used for the scan.</li><li><span aria-hidden="true">✓</span>Your UID is verified server-side when you submit.</li><li><span aria-hidden="true">⌫</span>The original screenshot is discarded after submission.</li></ul>
     </div>
   </>;
 }
