@@ -1,5 +1,6 @@
 "use client";
-import {ChangeEvent,useEffect,useState} from 'react';
+import {useEffect,useState} from 'react';
+import type {ChangeEvent,FormEvent} from 'react';
 
 type Featured={name:string;displayName?:string;element:string};
 type Settings={featured:Featured[];cycle:number;featuredThisCycle:number;poolSize:number;nextShuffleAt:string|null;joinContestUrl?:string|null;heroBannerAvailable?:boolean};
@@ -12,7 +13,8 @@ async function prepareBanner(file:File){
  try{
   const canvas=document.createElement('canvas');canvas.width=1920;canvas.height=960;
   const context=canvas.getContext('2d');if(!context)throw new Error('Your browser could not prepare the image.');
-  const scale=Math.max(canvas.width/bitmap.width,canvas.height/bitmap.height),width=bitmap.width*scale,height=bitmap.height*scale;
+  const scale=Math.min(canvas.width/bitmap.width,canvas.height/bitmap.height),width=bitmap.width*scale,height=bitmap.height*scale;
+  context.fillStyle='#081017';context.fillRect(0,0,canvas.width,canvas.height);
   context.drawImage(bitmap,(canvas.width-width)/2,(canvas.height-height)/2,width,height);
   for(const quality of [.88,.8,.72,.64,.56]){
    const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/webp',quality));
@@ -49,7 +51,7 @@ export function HomeFeaturedSettings({token}:{token:string}){
   catch(cause){setBannerStatus(cause instanceof Error?cause.message:'Could not prepare the banner image.');}
  }
 
- async function saveBanner(event:React.FormEvent){
+ async function saveBanner(event:FormEvent){
   event.preventDefault();if(!bannerData)return;setSavingBanner(true);setBannerStatus('');
   try{const response=await fetch('/api/admin/home-featured',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({heroBannerDataUrl:bannerData})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the Hall of Fame banner.');setBannerData('');setBannerPreview('/api/hall-of-fame/hero-banner?v='+Date.now());setSettings(previous=>previous?{...previous,heroBannerAvailable:true}:previous);setBannerStatus('Hall of Fame hero banner saved.');}
   catch(cause){setBannerStatus(cause instanceof Error?cause.message:'Could not save the Hall of Fame banner.');}
@@ -57,7 +59,7 @@ export function HomeFeaturedSettings({token}:{token:string}){
  }
 
  return <section className="bs-panel" aria-labelledby="home-featured-heading">
-  <style jsx global>{`.bs-home-invite{margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}.bs-home-invite h3{margin:0 0 7px;font-size:15px}.bs-home-invite>p{margin:0 0 14px;color:var(--muted);font-size:12px}.bs-home-invite-form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px}.bs-home-invite-form .field{margin:0}.bs-home-invite-form input{width:100%;height:43px;border:1px solid var(--border);border-radius:8px;background:#0c1420;color:var(--text);padding:10px 12px;font:inherit;font-size:12px}.bs-home-invite-form .action,.bs-banner-form .action{min-height:43px;padding:0 16px;border:1px solid #385777;border-radius:8px;background:#1b3047;color:#e4f2ff;font:inherit;font-size:12px;font-weight:700;cursor:pointer}.bs-home-invite-form .action:disabled,.bs-banner-form .action:disabled{opacity:.6;cursor:wait}.bs-banner-editor{margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}.bs-banner-editor h3{margin:0 0 7px;font-size:15px}.bs-banner-editor>p{margin:0 0 14px;color:var(--muted);font-size:12px}.bs-banner-preview{display:block;width:100%;max-height:260px;aspect-ratio:2/1;object-fit:cover;border:1px solid var(--border);border-radius:10px;background:#081017;margin:0 0 14px}.bs-banner-empty{display:grid;place-items:center;width:100%;aspect-ratio:2/1;border:1px dashed var(--border);border-radius:10px;background:#0b131b;color:var(--muted);margin:0 0 14px;font-size:12px}.bs-banner-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.bs-banner-form .field{margin:0;flex:1 1 280px}.bs-banner-form input[type=file]{width:100%;color:var(--muted);font:inherit;font-size:12px}.bs-banner-form .action{min-width:150px}@media(max-width:650px){.bs-home-invite-form{grid-template-columns:1fr}.bs-home-invite-form .action{justify-self:start}.bs-banner-form{align-items:stretch;flex-direction:column}.bs-banner-form .action{align-self:flex-start}}`}</style>
+  <style jsx global>{`.bs-home-invite{margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}.bs-home-invite h3{margin:0 0 7px;font-size:15px}.bs-home-invite>p{margin:0 0 14px;color:var(--muted);font-size:12px}.bs-home-invite-form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px}.bs-home-invite-form .field{margin:0}.bs-home-invite-form input{width:100%;height:43px;border:1px solid var(--border);border-radius:8px;background:#0c1420;color:var(--text);padding:10px 12px;font:inherit;font-size:12px}.bs-home-invite-form .action,.bs-banner-form .action{min-height:43px;padding:0 16px;border:1px solid #385777;border-radius:8px;background:#1b3047;color:#e4f2ff;font:inherit;font-size:12px;font-weight:700;cursor:pointer}.bs-home-invite-form .action:disabled,.bs-banner-form .action:disabled{opacity:.6;cursor:wait}.bs-banner-editor{margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}.bs-banner-editor h3{margin:0 0 7px;font-size:15px}.bs-banner-editor>p{margin:0 0 14px;color:var(--muted);font-size:12px}.bs-banner-preview{display:block;width:100%;max-height:260px;aspect-ratio:2/1;object-fit:contain;border:1px solid var(--border);border-radius:10px;background:#081017;margin:0 0 14px}.bs-banner-empty{display:grid;place-items:center;width:100%;aspect-ratio:2/1;border:1px dashed var(--border);border-radius:10px;background:#0b131b;color:var(--muted);margin:0 0 14px;font-size:12px}.bs-banner-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.bs-banner-form .field{margin:0;flex:1 1 280px}.bs-banner-form input[type=file]{width:100%;color:var(--muted);font:inherit;font-size:12px}.bs-banner-form .action{min-width:150px}@media(max-width:650px){.bs-home-invite-form{grid-template-columns:1fr}.bs-home-invite-form .action{justify-self:start}.bs-banner-form{align-items:stretch;flex-direction:column}.bs-banner-form .action{align-self:flex-start}}`}</style>
   <div className="bs-panel-heading"><div><h2 id="home-featured-heading">Featured Resonator Rotation</h2><p>The Home page rotates three supported Resonators every three days. Each Resonator appears once per cycle before the next shuffle begins.</p></div></div>
   {error&&<p className="field-error" role="alert">{error}</p>}
   {!settings?<p role="status">Loading page settings…</p>:<>
@@ -66,7 +68,7 @@ export function HomeFeaturedSettings({token}:{token:string}){
    {settings.nextShuffleAt&&<p className="bs-action-help">Next shuffle: <time dateTime={settings.nextShuffleAt}>{new Date(settings.nextShuffleAt).toLocaleString()}</time></p>}
    <div className="bs-banner-editor">
     <h3>Hall of Fame · Hero banner</h3>
-    <p>Upload a banner image for the Hall of Fame page. It is center-cropped to 1920 × 960 and compressed to WebP under 1.5 MB.</p>
+    <p>Upload a banner image for the Hall of Fame page. The full image is fit inside 1920 × 960 without cropping and compressed to WebP under 1.5 MB.</p>
     {bannerPreview?<img className="bs-banner-preview" src={bannerPreview} alt="Hall of Fame hero banner preview"/>:<div className="bs-banner-empty">No custom Hall of Fame banner uploaded</div>}
     <form className="bs-banner-form" onSubmit={saveBanner}>
      <label className="field"><span>Choose banner image</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>void selectBanner(event)}/></label>
