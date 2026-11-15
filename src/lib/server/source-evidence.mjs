@@ -116,7 +116,6 @@ export async function assessSource(input){
   const rollIssues=slots.flatMap(slot=>validateEchoSlot(slot).map(issue=>({...issue,slot:slot.slot})));
   const invalid=rollIssues.find(issue=>issue.code!=='UNSUPPORTED_ROLL');if(invalid)throw Error('Echo '+invalid.slot+': '+invalid.message);
   statsVerified=true;sourceSlots=slots;
-  profileDetails=await readProfileDetails(worker,readResult,decoded);
   sourceHash=createHash('sha256').update(image).digest('hex');
   maxMainStatsVerified=!levelIssue;
   visualReport=await diagnoseSlots(decoded,slots.map(x=>Number(x.cost.value)));
@@ -137,6 +136,27 @@ export async function assessSource(input){
  finally{try{await worker?.terminate();}catch{/* Keep the original diagnostic. */}console.info(JSON.stringify({event:'scanner.verification',outcome:metricOutcome,reason_code:metricCode||'UNCLASSIFIED',stage,duration_ms:Date.now()-startedAt,retries,...stageMetrics,rss_after:process.memoryUsage().rss,rss_delta:process.memoryUsage().rss-stageMetrics.rss_before,stats_verified:statsVerified,max_main_stats_verified:maxMainStatsVerified}));active=false;}
 }
 
+
+// Profile-only details are extracted after the submission response so they
+// cannot delay UID, Echo-stat, equipment, or scoring verification.
+export async function assessProfileDetails(image){
+ let worker;
+ try{
+  const decoded=await decodeFingerprintSource(image);
+  worker=await createWorker('eng',1,{langPath:languagePath,gzip:true,cacheMethod:'none',errorHandler:()=>{}});
+  const readResult=async(region,{scale=3,linear=false,padded=false,preserveLines=false}={})=>{
+   const width=Math.round(region.width*scale),height=Math.round(region.height*scale);
+   let png=await sharp(decoded.data,{raw:{width:decoded.info.width,height:decoded.info.height,channels:decoded.info.channels}})
+    .extract(region).resize(width,height,{kernel:linear?sharp.kernel.linear:sharp.kernel.lanczos3})
+    .greyscale().linear(1.5,-64).png().toBuffer();
+   if(padded){const inverted=await sharp(png).negate({alpha:false}).png().toBuffer();png=await sharp({create:{width:width+32,height:height+32,channels:3,background:'white'}}).composite([{input:inverted,left:16,top:16}]).png().toBuffer();}
+   const {data:result}=await worker.recognize(png);
+   return {text:preserveLines?result.text.trim():result.text.replace(/\s+/g,' ').trim(),confidence:result.confidence};
+  };
+  return await readProfileDetails(worker,readResult,decoded);
+ }catch{return undefined;}
+ finally{try{await worker?.terminate();}catch{/* Profile details are optional. */}}
+}
 
 async function readProfileDetails(worker,readResult,decoded){
  try{
