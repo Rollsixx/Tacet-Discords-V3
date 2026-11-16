@@ -95,15 +95,19 @@ export async function GET(request:Request){
    const profile=await eventHistoryForParticipant((url.searchParams.get("id")||"").slice(0,80),db);
    return Response.json({participant:profile},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
   }
-  const all=await db.execute({sql:`SELECT slug,title,boss,format,status,event_date,updated_at FROM hof_tournaments WHERE status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
+  const all=await db.execute({sql:`SELECT slug,title,boss,format,status,event_date,updated_at,bracket_published FROM hof_tournaments WHERE status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
   const currentRow=all.rows.find((row:any)=>["announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","suspended"].includes(String(row.status)));
-  const current=currentRow?{slug:String(currentRow.slug),title:String(currentRow.title),boss:String(currentRow.boss),format:String(currentRow.format),status:String(currentRow.status),eventDate:currentRow.event_date?String(currentRow.event_date):null,artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(String(currentRow.slug))+"?v="+encodeURIComponent(String(currentRow.updated_at||""))}:null;
+  const matchProgressResult=currentRow&&Boolean(currentRow.bracket_published)?await db.execute({sql:`SELECT COUNT(*) total,SUM(CASE WHEN state IN ('published','no_result') THEN 1 ELSE 0 END) completed,MIN(CASE WHEN state NOT IN ('published','no_result','cancelled') THEN round_number END) next_round FROM hof_matches WHERE tournament_slug=? AND state<>'cancelled'`,args:[String(currentRow.slug)]}):null;
+  const progressRow=matchProgressResult?.rows[0];
+  const current=currentRow?{slug:String(currentRow.slug),title:String(currentRow.title),boss:String(currentRow.boss),format:String(currentRow.format),status:String(currentRow.status),eventDate:currentRow.event_date?String(currentRow.event_date):null,bracketPublished:Boolean(currentRow.bracket_published),matchProgress:progressRow?{total:Number(progressRow.total||0),completed:Number(progressRow.completed||0),nextRound:progressRow.next_round?Number(progressRow.next_round):null}:null,artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(String(currentRow.slug))+"?v="+encodeURIComponent(String(currentRow.updated_at||""))}:null;
   const inviteResult=section==="overview"?await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hall_of_fame_join_contest_url"]}):null;
+  const latestResultsResult=section==="overview"?await db.execute({sql:"SELECT 1 FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 LIMIT 1"}):null;
+  const hasResults=Boolean(latestResultsResult?.rows.length);
   const inviteValue=String(inviteResult?.rows[0]?.value||"");let joinContestUrl="";
   try{const invite=new URL(inviteValue);if(invite.protocol==="https:"&&(invite.hostname==="discord.gg"||invite.hostname==="discord.com"&&invite.pathname.startsWith("/invite/")))joinContestUrl=inviteValue;}catch{}
   const medalists=section==="hologram"?await recentMedalists(db):[];
   const list=section==="hologram"?await participants((url.searchParams.get("q")||"").slice(0,50),pageNumber(url.searchParams.get("page")),url.searchParams.get("sort")||"medals",db):null;
   const cache=section==="overview"?"public, s-maxage=300, stale-while-revalidate=60":"public, s-maxage=30, stale-while-revalidate=60";
-  return Response.json({current,medalists,participants:list,...(section==="overview"?{joinContestUrl}: {})},{headers:{"Cache-Control":cache,"Vercel-CDN-Cache-Control":cache,"X-Content-Type-Options":"nosniff"}});
+  return Response.json({current,medalists,participants:list,...(section==="overview"?{joinContestUrl,hasResults}: {})},{headers:{"Cache-Control":cache,"Vercel-CDN-Cache-Control":cache,"X-Content-Type-Options":"nosniff"}});
  }catch(error){return failure(error);}
 }
