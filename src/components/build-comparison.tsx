@@ -210,7 +210,7 @@ export function BuildComparison({ own, compact = false, ownLabel = "Profile buil
     <button ref={triggerRef} type="button" className={`bc-trigger${compact ? " bc-trigger-compact" : ""}`} onClick={() => setOpen(true)}>
       <span className="bc-trigger-icon" aria-hidden="true">⇄</span>
       <span><strong>Compare builds</strong><small>View other {own.character} Echo builds</small></span>
-      <span className="bc-trigger-arrow" aria-hidden="true">↗</span>
+      <span className="bc-trigger-arrow" aria-hidden="true">→</span>
     </button>
     {open && typeof document !== "undefined" ? createPortal(dialog, document.body) : null}
   </>;
