@@ -12,7 +12,7 @@ type Participant={id:string;name:string;resonatorIcon:string;gold:number;silver:
 const tabs=["overview","hologram","photography"] as const;
 type Tab=typeof tabs[number];
 function href(params:Record<string,string|null>){const u=new URL(location.href);for(const [k,v] of Object.entries(params))v?u.searchParams.set(k,v):u.searchParams.delete(k);return u.pathname+u.search+u.hash}
-function formatEventDate(value?:string|null){if(!value)return "";const match=value.match(/^(\d{4}-\d{2}-\d{2})/);if(!match)return value;const date=new Date(match[1]+"T00:00:00Z");return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",year:"numeric",timeZone:"UTC"}).format(date)}
+function formatEventDate(value?:string|null){if(!value)return "";const match=value.match(/^(\d{4})-(\d{2})-(\d{2})/);if(!match)return value;const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],month=Number(match[2]),day=Number(match[3]);if(month<1||month>12||day<1||day>31)return value;return months[month-1]+" "+day+", "+match[1]}
 function Medal({kind}:{kind:string}){return <span className={"hof-medal "+kind}>{kind==="gold"?"🥇":kind==="silver"?"🥈":"🥉"}</span>}
 export default function HallOfFamePage(){
  const dialogRef=useRef<HTMLElement|null>(null);
