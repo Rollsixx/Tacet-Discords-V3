@@ -185,7 +185,7 @@ export default function HallOfFamePage(){
  .hof-photography-art span{z-index:1;color:#8cece6;font-size:72px;text-shadow:0 0 32px #76e4df99}
  .hof-photography-art small{position:absolute;right:13px;bottom:12px;color:#9bb4be;font-size:10px;font-weight:800;letter-spacing:.14em}
  .hof-page.hof-page-photography{padding-bottom:24px}
- .hof-event-detail{background:#0d151d}
+ .hof-event-detail{background:transparent}
  .hof-event-backdrop{position:relative;inset:auto;height:clamp(150px,20vw,220px);margin:0;overflow:hidden;pointer-events:none;background:#0a1118;opacity:1;filter:none;transform:none}
  .hof-event-detail.is-bracket .hof-event-backdrop{display:none}
  .hof-event-backdrop-image{object-fit:cover}
