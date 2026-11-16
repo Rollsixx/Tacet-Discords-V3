@@ -187,3 +187,39 @@
 @media (prefers-reduced-motion: reduce) {
   .home-top-players li > a, .home-open-slot, .home-row-arrow { transition: none; }
 }
+
+
+/* Home refinement: clearer five-place boards and touch-friendly actions. */
+.home-actions .action{min-height:48px;padding:13px 20px;font-size:15px}
+.home-actions .action svg{width:20px;height:20px}
+.home-player-search button{width:44px;height:44px;flex:0 0 44px;border-radius:9px;font-size:18px;font-weight:750}
+.home-player-search button:hover:not(:disabled){border-color:#68c9c0;background:#28504c;color:#c5fff7}
+.home-player-search button:focus-visible{outline:2px solid #88ece1;outline-offset:2px}
+.home-top-players li>a{min-height:60px}
+.home-open-slot{min-height:60px;padding:10px 16px}
+.home-open-slot > span:nth-child(2){gap:3px}
+.home-ranked-player strong{font-size:14px;line-height:1.3}
+.home-character-heading.has-long-name > div{max-width:min(68%,230px)}
+.home-character-heading.has-long-name h3{display:-webkit-box;overflow:hidden;white-space:normal;text-overflow:clip;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font-size:clamp(18px,1.65vw,21px);line-height:1.15;min-height:2.3em;margin-bottom:9px}
+.home-medal-rank-context{gap:8px}
+.home-medal-rank-context .home-medal-rank{min-width:34px;height:30px;padding:3px 6px;font-size:12px}
+.home-medal-rank-context .home-medal-tenure{padding:6px 9px;font-size:13px}
+.home-medal-points{font-size:32px;line-height:1}
+.home-medal-counts{gap:clamp(8px,1.2vw,16px)}
+.home-medal-counts i{font-size:19px;line-height:1}
+.home-how{margin-top:0}
+.home-how h3{font-size:15px;line-height:1.4}
+.home-how p{font-size:14px;line-height:1.5}
+@media(max-width:900px){
+ .home-character-heading.has-long-name > div{max-width:min(70%,260px)}
+ .home-character-heading.has-long-name h3{font-size:20px}
+ .home-how h3{font-size:14px}
+ .home-how p{font-size:13px}
+}
+@media(max-width:700px){
+ .home-player-search button{width:44px;height:44px;flex-basis:44px}
+ .home-character-heading.has-long-name > div{max-width:68%}
+ .home-character-heading.has-long-name h3{font-size:20px}
+ .home-medal-rank-context{flex-wrap:wrap}
+ .home-medal-counts{gap:clamp(8px,3vw,18px)}
+}
