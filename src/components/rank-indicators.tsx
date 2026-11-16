@@ -1,7 +1,7 @@
 "use client";
+import { RankBadge } from "./rank-badge";
 
 type RankProps={rank:number|null;rankSince?:string|null;rankTrackingSince?:string|null;rankDays?:number|null;rankMovement?:number|null;rankStatus?:string;rankHasHistory?:boolean;showTracking?:boolean};
-function Crown(){return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 7 5 4 4-7 4 7 5-4-2 12H5L3 7Zm2.7 14h12.6" /></svg>;}
 
 export function RankIndicator({rank,rankTrackingSince,rankDays,rankMovement,rankStatus,rankHasHistory,showTracking=true}:RankProps){
  const trackingDate=rankTrackingSince?new Date(rankTrackingSince):null;
@@ -10,7 +10,7 @@ export function RankIndicator({rank,rankTrackingSince,rankDays,rankMovement,rank
  const podium=rank<=3;
  const label=`Rank ${rank}`;
  return <span className={`lb-rank-composite ${podium?`lb-medal-row lb-medal-${rank}`:""}`} aria-label={label}>
-  <span className={`lb-rank ${podium?"lb-podium":""} ${podium?`lb-medal-${rank}`:""}`}>{podium&&<Crown/>}<span>{rank}</span></span>
+  <RankBadge rank={rank} className={`lb-rank ${podium?`lb-medal-${rank}`:""}`}/>
   {rank===1&&rankDays!==null&&rankDays!==undefined&&<span className="lb-rank-days">{rankDays}d</span>}
   {showTracking&&rankTrackingSince&&!rankHasHistory&&<span className="lb-rank-tracking">Tracking</span>}
  </span>;
