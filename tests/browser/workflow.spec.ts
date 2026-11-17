@@ -10,15 +10,15 @@ test("four pages render without overflow or browser errors", async ({ page }, te
     await expect(page.locator("h1")).toBeVisible();
     if (route !== "/import") await expect(page.locator(".build-card, .placeholder, .lb-table, .lb-loading, .lb-empty, .pp-player-list, .home-ranking-card, .home-ranking-loading, .home-ranking-empty").first()).toBeVisible();
     if(route === '/leaderboards') {
-      await expect(page.locator('.lb-patch-picker')).toHaveCount(3);
-      await expect(page.getByRole('button',{name:'Choose a 1.x Resonator'})).toBeVisible();
-      await expect(page.getByRole('button',{name:'Choose a 2.x Resonator'})).toBeVisible();
-      await expect(page.getByRole('button',{name:'Choose a 3.x Resonator'})).toBeVisible();
-      await page.getByRole('button',{name:'Choose a 1.x Resonator'}).click();
-      await expect(page.getByRole('listbox',{name:'Choose a 1.x Resonator'})).toBeVisible();
-      await expect(page.locator('.popover-listbox-menu .lb-patch-option-avatar').first()).toBeVisible();
-      await page.keyboard.press('Escape');
-      await expect(page.getByRole('button',{name:'Choose a 1.x Resonator'})).toHaveAttribute('aria-expanded','false');
+      const eraOne=page.getByRole('button',{name:'1.x',exact:true});
+      await expect(page.locator('.lb-era-tabs')).toBeVisible();
+      await expect(eraOne).toBeVisible();
+      await expect(page.getByRole('button',{name:'2.x',exact:true})).toBeVisible();
+      await expect(page.getByRole('button',{name:'3.x',exact:true})).toBeVisible();
+      await eraOne.click();
+      await expect(eraOne).toHaveAttribute('aria-pressed','true');
+      await page.getByRole('button',{name:/^Jiyan portrait/}).click();
+      await expect.poll(()=>new URL(page.url()).searchParams.get('character')).toBe('Jiyan');
       await expect(page.locator('.placeholder,.lb-table').first()).toBeVisible();
     }
     await expect(page.locator('nav[aria-label="Main navigation"] a')).toHaveCount(5);

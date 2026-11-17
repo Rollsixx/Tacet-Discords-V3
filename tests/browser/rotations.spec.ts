@@ -31,24 +31,19 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
 
 test('expanded leaderboard categories load with local portraits',async({page},info)=>{
  await page.goto('/leaderboards');
+ await page.getByRole('button',{name:'3.x',exact:true}).click();
  for(const name of ['Suoming','Jingran','Hsin','Qingxiao','Suisui','Lucy','Lucilla','Rebecca','Denia','Sigrika']){
-  const response=page.waitForResponse(r=>r.url().includes('/api/public/leaderboards?')&&new URL(r.url()).searchParams.get('character')===name);
- let selected=false;
-  for(const patch of ['1','2','3']){
-   await page.getByRole('button',{name:`Choose a ${patch}.x Resonator`}).click();
-   const option=page.getByRole('option',{name:new RegExp('^'+name+' portrait')});
-   if(await option.count()){await option.click();selected=true;break;}
-   await page.keyboard.press('Escape');
-   await expect(page.locator('.popover-listbox-menu')).toHaveCount(0);
-  }
-  expect(selected, name+' should be available in a patch picker').toBe(true);expect((await response).status()).toBe(200);
-  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
-  const portrait=page.locator('img.lb-board-mark');await expect.poll(()=>portrait.evaluate((img:HTMLImageElement)=>img.complete&&img.naturalWidth>0)).toBe(true);
+  const response=page.waitForResponse(r=>r.url().includes('/api/public/leaderboards')&&new URL(r.url()).searchParams.get('character')===name);
+  const resonator=page.getByRole('button',{name:new RegExp('^'+name+' portrait')});
+  await expect(resonator).toBeVisible();
+  await resonator.click();
+  await response;
+  await expect(page.locator('.lb-board-mark')).toBeVisible();
+  await expect.poll(()=>page.locator('img.lb-board-mark').evaluate(img=>(img as HTMLImageElement).complete&&(img as HTMLImageElement).naturalWidth>0)).toBe(true);
  }
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.screenshot({path:info.outputPath('expanded-roster.png'),fullPage:true});
+ await page.screenshot({path:info.outputPath('leaderboard-categories.png'),fullPage:true});
 });
-
 test('effect editor separates categories, groups every Echo by cost and preserves draft configuration',async({page,request},info)=>{
  await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');
  await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();
