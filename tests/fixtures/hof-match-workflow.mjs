@@ -13,12 +13,12 @@ export async function seedHallOfFameMatches(db) {
     for (const entry of ["bracket", "queue"]) {
       const slug = `qa-${project}-${entry}`;
       await db.execute({
-        sql: "INSERT INTO hof_tournaments(slug,title,boss,headline_boss,format,status,capacity_max,bracket_published,created_at,updated_at) VALUES(?,?,?,?,?,'bracket_revealed',4,1,?,?)",
-        args: [slug, slug, "Dreamless", "Dreamless", "single_elimination", now, now],
+        sql: "INSERT INTO hof_tournaments(slug,title,boss,headline_boss,format,status,capacity_max,bracket_published,bans_per_player,created_at,updated_at) VALUES(?,?,?,?,?,'bracket_revealed',4,1,?,?,?)",
+        args: [slug, slug, "Dreamless", "Dreamless", "single_elimination", entry==="queue"?4:3, now, now],
       });
       await db.execute({
-        sql: "INSERT INTO hof_tournament_bosses(tournament_slug,boss_name,pool_order,added_by,created_at) VALUES(?,'Dreamless',0,'owner',?)",
-        args: [slug, now],
+        sql: "INSERT INTO hof_tournament_bosses(tournament_slug,boss_name,pool_order,added_by,created_at) VALUES(?,'Dreamless',0,'owner',?),(?,'Hecate',1,'owner',?)",
+        args: [slug, now, slug, now],
       });
       for (const [round, label, order, a, b] of [[1,"Round 1",1,"Rover","Yangyang"],[1,"Round 1",2,"Chixia","Baizhi"],[2,"Final",1,null,null]]) {
         await db.execute({
