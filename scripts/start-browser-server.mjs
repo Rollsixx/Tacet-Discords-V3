@@ -34,6 +34,8 @@ if(process.env.CORRECTION_BROWSER_FIXTURE==='true'){
  await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(pending.data),pending.id]});
 
 }
+const {seedHallOfFameMatches}=await import("../tests/fixtures/hof-match-workflow.mjs");
+await seedHallOfFameMatches(db);
 db.close();
 const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", "3100", "--hostname", "127.0.0.1"], {
   stdio: "inherit",

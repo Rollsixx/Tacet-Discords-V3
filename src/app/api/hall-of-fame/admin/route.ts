@@ -26,7 +26,7 @@ async function can(actor:Actor,capability:string,slug:string|null,matchId:string
  if(!slug)return false;
  const rows=await db.execute({sql:"SELECT 1 FROM hof_staff_assignments WHERE staff_id=? AND tournament_slug=? AND (match_id IS NULL OR match_id=?) LIMIT 1",args:[actor.id,slug,matchId]});
  const assigned=rows.rows.length>0;
- if(actor.role==="organizer"&&assigned&&["manage_event","publish_result"].includes(capability))return true;
+ if(actor.role==="organizer"&&assigned&&["manage_event","publish_result","draft_result"].includes(capability))return true;
  if(actor.role==="referee"&&assigned&&matchId&&capability==="draft_result")return true;
  return false;
 }
@@ -210,7 +210,7 @@ const slug=url.searchParams.get("slug");
   let bossPool:any[]=[],draftSteps:any[]=[];
   if(slug&&await can(actor,"manage_event",slug,null,db)){const pool=await db.execute({sql:"SELECT b.boss_name name,c.icon_url,b.pool_order FROM hof_tournament_bosses b JOIN hof_boss_catalog c ON c.name=b.boss_name WHERE b.tournament_slug=? ORDER BY b.pool_order",args:[slug]});bossPool=pool.rows;}
   const requestedMatchId=url.searchParams.get("matchId");
-  if(requestedMatchId&&slug&&await can(actor,"draft_result",slug,requestedMatchId,db)){const steps=await db.execute({sql:"SELECT step_number,actor_slot,action,resonator,created_by,created_at FROM hof_draft_steps WHERE match_id=? ORDER BY step_number",args:[requestedMatchId]});draftSteps=steps.rows;}
+  if(requestedMatchId&&slug&&await can(actor,"draft_result",slug,requestedMatchId,db)){const steps=await db.execute({sql:"SELECT step_number,actor_slot,action,resonator,created_by,created_at FROM hof_draft_steps WHERE match_id IN (SELECT id FROM hof_matches WHERE id=? AND tournament_slug=?) ORDER BY step_number",args:[requestedMatchId,slug]});draftSteps=steps.rows;}
   const phase3SafetyEnabled=await isFeatureEnabled("hof-phase-3-safety",db);
   const matchFlowEnabled=await isFeatureEnabled("hof-match-flow",db),matchFoundationEnabled=await isFeatureEnabled("hof-match-foundation",db);
   const publicMatchViewEnabled=await isFeatureEnabled("hof-public-match-view",db);
@@ -380,11 +380,13 @@ export async function POST(request:Request){
   }
   if(action==="start_match"){
    if(!matchId)throw new HttpError(400,"Match is required.");
-   const current=(await db.execute({sql:"SELECT m.tournament_slug,m.phase_state,m.match_boss,m.started_without_details FROM hof_matches m WHERE m.id=?",args:[matchId]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
-   const eventSlug=String(current.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
-   if(String(current.phase_state)!=="setting_up")throw new HttpError(409,"Open match setup before starting it.");
-   if(!String(current.match_boss||"")&&!Number(current.started_without_details))throw new HttpError(409,"Choose a boss before starting the match, or use Start without details.");
    tx=await db.transaction("write");
+   const current=(await tx.execute({sql:"SELECT m.tournament_slug,m.phase_state,m.match_boss,t.bans_per_player FROM hof_matches m JOIN hof_tournaments t ON t.slug=m.tournament_slug WHERE m.id=?",args:[matchId]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(current.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,tx);
+   if(String(current.phase_state)!=="setting_up")throw new HttpError(409,"Open match setup before starting it.");
+   if(!String(current.match_boss||""))throw new HttpError(409,"Choose a boss before starting the match, or use Start without details.");
+   const draft=(await tx.execute({sql:"SELECT COUNT(*) count FROM hof_draft_steps WHERE match_id=?",args:[matchId]})).rows[0];
+   if(Number(draft?.count)!==draftOrder(Number(current.bans_per_player)).length)throw new HttpError(409,"Complete the draft before going live.");
    const active=await tx.execute({sql:"SELECT id FROM hof_matches WHERE tournament_slug=? AND id<>? AND phase_state IN ('setting_up','live') LIMIT 1",args:[eventSlug,matchId]});if(active.rows.length)throw new HttpError(409,"Another match is already Setting up or Live.");
    const started=await tx.execute({sql:"UPDATE hof_matches SET state='in_progress',phase_state='live',version=version+1,updated_at=? WHERE id=? AND phase_state='setting_up'",args:[now,matchId]});if(!started.rowsAffected)throw new HttpError(409,"Match setup changed before it could start.");
    await audit(tx,actor,"setup_edit",eventSlug,{phaseState:"setting_up"},{phaseState:"live"});await tx.commit();tx=null;return json({ok:true,phaseState:"live"});
