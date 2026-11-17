@@ -1,7 +1,7 @@
 import { parseSubstat } from "../scanner/stat-validation.ts";
 import maxMainStats from "./max-main-stats.json" with { type: "json" };
 export function readableName(value: string) {
- return value.replace(/([a-z\d])([A-Z])/g,'$1 $2').replace(/([A-Z])([A-Z][a-z])/g,'$1 $2').replace(/_/g,' ').trim();
+ return value.replace(/([a-z\d])([A-Z])/g,'$1 $2').replace(/([A-Z])([A-Z][a-z])/g,'$1 $2').replace(/_/g,' ').replace(/\bWishesof\b/g,'Wishes of').trim();
 }
 export function echoCritValue(stats: {value:string}[]) {
  return stats.reduce((total,field)=>{const stat=parseSubstat(field.value);return total+(stat?.percent?(stat.name==='Crit. Rate'?stat.amount*2:stat.name==='Crit. DMG'?stat.amount:0):0);},0);
