@@ -1892,3 +1892,8 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{ou
 
 /* Keep expanded leaderboard content within the tablet viewport. */
 @media(max-width:1100px){.leaderboard-page{min-width:0;width:100%}.lb-mobile-rankings{width:100%;min-width:0;margin:12px 0}.lb-mobile-rank-card,.lb-mobile-rank-card .lb-expanded,.lb-mobile-rank-card .lb-expanded-heading,.lb-mobile-rank-card .lb-expanded-actions{min-width:0;max-width:100%}.lb-mobile-rank-card .lb-expanded-heading>div{min-width:0;max-width:100%;overflow-wrap:anywhere}.lb-mobile-rank-card .lb-expanded-actions{flex-wrap:wrap}}
+
+/* Let the five-link mobile navigation wrap without widening the document. */
+@media(max-width:600px){.nav-inner{grid-template-columns:minmax(0,1fr) auto}.nav-links{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}.nav-links a{min-width:0;padding:9px 3px;font-size:12px}.nav-links a:nth-child(4){grid-column:2}.nav-links a:nth-child(5){grid-column:3}}
+/* Override the desktop-only minimum table width when Profile rows become cards. */
+@media(max-width:1100px){.pp-build-table{min-width:0!important;width:100%;max-width:100%;table-layout:fixed}.pp-build-table tbody{min-width:0;width:100%}.pp-build-table .lb-detail-row,.pp-build-table .lb-detail-row>td{min-width:0;width:100%;max-width:100%}}
