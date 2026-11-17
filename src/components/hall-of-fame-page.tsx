@@ -196,6 +196,86 @@ export default function HallOfFamePage(){
  @media(max-width:650px){.hof-event-backdrop{height:140px}.hof-modal-card.is-event-modal:has(.is-bracket){width:100%;height:90vh;max-height:90vh}}
  @media(max-width:760px){.hof-photo-teaser{align-items:flex-start;flex-direction:column}.hof-photography-card{grid-template-columns:minmax(0,1fr);gap:20px;padding:20px}.hof-photography-art{min-height:155px}.hof-page.hof-page-photography{padding-bottom:10px}}
 
+
+ /* Hall of Fame review refinements */
+ .hof-page{padding-bottom:64px}
+ .hof-hero{isolation:isolate}
+ .hof-hero:before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background:linear-gradient(90deg,rgba(5,11,16,.94) 0%,rgba(5,11,16,.77) 42%,rgba(5,11,16,.12) 100%),linear-gradient(0deg,rgba(5,11,16,.24),transparent 45%)}
+ .hof-hero-image{min-width:100%;object-fit:cover;object-position:center}
+ .hof-hero-content{z-index:2}
+ .hof-hero:after{z-index:1}
+ .hof-tabs{scrollbar-width:thin;scrollbar-color:#526b75 transparent}
+ .hof-tab{min-height:46px;white-space:nowrap}
+ .hof-tab:focus-visible,.hof-event-tabs button:focus-visible,.hof-button:focus-visible,.hof-close:focus-visible,.hof-table button:focus-visible,.hof-medalist-card:focus-visible,.hof-event:focus-visible,.hof-sort-chip:focus-visible,.hof-search:focus-visible{outline:2px solid #8cece6;outline-offset:3px}
+ .hof-button{transition:background-color .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
+ .hof-button:hover:not(:disabled){border-color:#73dcd5;background-color:#20333d}
+ .hof-button.primary:hover:not(:disabled){background:#8aede5;border-color:#8aede5}
+ .hof-current-event-section .hof-current-event-card{border-radius:16px;background:linear-gradient(145deg,#14232d,#0b131a)}
+ .hof-current-event-section .hof-current-event-art-frame{min-width:0}
+ .hof-current-event-section .hof-current-event-body{min-width:0}
+ .hof-current-event-title h3{overflow-wrap:anywhere}
+ .hof-carousel{scrollbar-width:thin;scrollbar-color:#526b75 #0b1118;overscroll-behavior-x:contain}
+ .hof-medalist-card{transition:transform .16s ease,border-color .16s ease}
+ .hof-medalist-card:hover,.hof-medalist-card:focus-visible{transform:translateY(-2px);border-color:#5fc9c3}
+ .hof-carousel-controls{flex-wrap:wrap}
+ .hof-carousel-controls .hof-button:disabled{opacity:.4}
+ .hof-medalist-body h3{overflow-wrap:anywhere}
+ .hof-modal{backdrop-filter:blur(5px)}
+ .hof-modal-card{box-shadow:0 24px 100px #000b}
+ .hof-modal-content{background-color:#0a1118}
+ .hof-event-tabs{scrollbar-width:thin;scrollbar-color:#526b75 transparent}
+ .hof-event-tabs button{min-height:46px;white-space:nowrap}
+ .hof-event-tabs button:hover{color:#dffbf8;background:rgba(118,228,223,.06)}
+ .hof-event-detail.is-bracket{min-width:0}
+ .hof-match-list{min-width:0}
+ .hof-match-row{transition:border-color .14s ease,background-color .14s ease}
+ .hof-match-row:hover{border-color:#49606b;background:rgba(18,31,40,.9)}
+ .hof-match-status{line-height:1.3}
+ .hof-participant-toolbar{min-width:0}
+ .hof-participant-search{min-width:0}
+ .hof-participant-search .hof-search{min-width:0}
+ .hof-table-wrap{scrollbar-width:thin;scrollbar-color:#526b75 #0b1118}
+ .hof-standings-table thead th{position:sticky;top:0;z-index:1}
+ .hof-standings-table td:first-child{min-width:220px}
+ .hof-player-copy strong{overflow-wrap:anywhere}
+ .hof-photography-card{border-color:#304650;background:linear-gradient(135deg,#14222b,#0d151c 70%)}
+ .hof-photography-copy p{color:#c1cdd4}
+ .hof-photo-link-note{line-height:1.5}
+ .hof-error{border:1px solid #713f48;border-radius:10px;background:#251419;color:#ffc1c7}
+ .hof-empty{border-color:#42545d;background:rgba(14,22,29,.78);color:#c0cdd4;line-height:1.55}
+ .site-footer{border-top-color:#34414a;background:#10151b}
+ .site-footer-about p,.site-footer-bottom{color:#b3c0c9}
+ .site-footer-legal a,.site-footer-bottom a{color:#d4e4e9}
+ .site-footer-legal a:hover,.site-footer-bottom a:hover{color:#8cece6}
+ @media(max-width:760px){
+  .hof-page{padding-bottom:38px}
+  .hof-hero{min-height:280px;border-radius:18px}
+  .hof-hero:before{background:linear-gradient(90deg,rgba(5,11,16,.88),rgba(5,11,16,.48)),linear-gradient(0deg,rgba(5,11,16,.4),transparent 60%)}
+  .hof-hero-content{max-width:100%}
+  .hof-current-event-section .hof-current-event-art-frame{aspect-ratio:16/9}
+  .hof-current-event-section .hof-current-event-body{padding:17px}
+  .hof-section-head{gap:14px}
+  .hof-carousel-controls{width:100%}
+  .hof-match-round-heading{top:0}
+  .hof-standings-table thead th{position:static}
+  .hof-photography-section{margin-bottom:24px}
+ }
+ @media(max-width:520px){
+  .hof-hero{min-height:260px}
+  .hof-hero h1{font-size:clamp(38px,12vw,54px)}
+  .hof-hero-content{padding:25px 18px}
+  .hof-match-row-main{grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr)}
+  .hof-match-player strong{font-size:11px}
+  .hof-participant-toolbar{grid-template-columns:minmax(0,1fr)}
+  .hof-participant-count{grid-column:auto}
+  .hof-medalist-card{flex-basis:min(280px,84vw);width:min(280px,84vw)}
+  .hof-pager{justify-content:space-between;flex-wrap:wrap}
+ }
+ @media(prefers-reduced-motion:reduce){
+  .hof-button,.hof-medalist-card,.hof-match-row{transition:none}
+  .hof-event:hover,.hof-medalist-card:hover{transform:none}
+ }
+
 `}</style>
  <section className="hof-hero"><img className="hof-hero-image" src="/api/hall-of-fame/hero-banner" alt="" aria-hidden="true"/><div className="hof-hero-content"><div className="hof-kicker">WUTHERING WAVES · COMMUNITY LEGENDS</div><h1>HALL <span>OF FAME.</span></h1><p>A place for unforgettable Hologram challenges and the players who rise above them. Each contest celebrates skill, sportsmanship, and the community behind every run.</p><div className="hof-actions">{current?.status==="registration_open"?<button className="hof-button primary" disabled={!joinContestUrl} onClick={()=>{if(joinContestUrl)window.open(joinContestUrl,"_blank","noopener,noreferrer")}}>Join Contest</button>:current?.status==="announced"?<button className="hof-button primary" disabled={!joinContestUrl} onClick={()=>{if(joinContestUrl)window.open(joinContestUrl,"_blank","noopener,noreferrer")}}>Get Notified</button>:current?<button className="hof-button primary" onClick={()=>open("event",current.slug)}>{current.bracketPublished?"View Current Bracket":"View Current Event"}</button>:data?.hasResults?<button className="hof-button primary" onClick={()=>changeTab("hologram")}>View Latest Results</button>:<button className="hof-button primary" disabled={!joinContestUrl} onClick={()=>{if(joinContestUrl)window.open(joinContestUrl,"_blank","noopener,noreferrer")}}>Get Notified</button>}</div>{!current&&!data?.hasResults&&!joinContestUrl&&<small className="hof-meta">Tournament updates are not configured yet.</small>}</div></section>
  <div className="hof-tabs" role="tablist" aria-label="Hall of Fame sections">{tabs.map(t=><button key={t} role="tab" aria-selected={tab===t} className="hof-tab" onClick={()=>changeTab(t)}>{t==="hologram"?"Hologram":t==="photography"?<span className="hof-tab-label">Photography<span className="hof-tab-badge">Soon</span></span>:"Overview"}</button>)}</div>
