@@ -81,7 +81,7 @@ test("leaderboard expansion stays readable at 360px, 768px, and 1280px and recov
     expect(bounds.right).toBeLessThanOrEqual(width + 1);
     expect(bounds.width).toBeGreaterThan(240);
     expect(bounds.echoWidth).toBeLessThanOrEqual(bounds.echoClientWidth);
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect.poll(async()=>{const d=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(el=>{const r=el.getBoundingClientRect();return{tag:el.tagName,cls:typeof el.className==='string'?el.className:'',id:el.id,left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),scroll:el.scrollWidth,client:el.clientWidth}}).filter(x=>x.right>innerWidth+1&&x.left<innerWidth).sort((a,b)=>b.right-a.right).slice(0,12)}));console.log('OVERFLOW_DIAG',JSON.stringify(d));return d.scroll<=d.viewport}).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`leaderboard-expanded-${width}.png`), fullPage: true });
   }
 
@@ -98,5 +98,5 @@ test("leaderboard expansion stays readable at 360px, 768px, and 1280px and recov
   await expect(desktopDetail.locator(".profile-build-card, .profile-build-hero")).toHaveCount(0);
   await expect(desktopDetail.locator(".lb-expanded-heading")).toBeVisible();
   await expect(desktopDetail.locator(".lb-echo")).toHaveCount(5);
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect.poll(async()=>{const d=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(el=>{const r=el.getBoundingClientRect();return{tag:el.tagName,cls:typeof el.className==='string'?el.className:'',id:el.id,left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),scroll:el.scrollWidth,client:el.clientWidth}}).filter(x=>x.right>innerWidth+1&&x.left<innerWidth).sort((a,b)=>b.right-a.right).slice(0,12)}));console.log('OVERFLOW_DIAG',JSON.stringify(d));return d.scroll<=d.viewport}).toBe(true);
 });

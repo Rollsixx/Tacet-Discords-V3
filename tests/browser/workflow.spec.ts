@@ -24,7 +24,7 @@ test("four pages render without overflow or browser errors", async ({ page }, te
     await expect(page.locator('nav[aria-label="Main navigation"] a')).toHaveCount(5);
     for (const width of [360, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
-      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await expect.poll(async()=>{const d=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(el=>{const r=el.getBoundingClientRect();return{tag:el.tagName,cls:typeof el.className==='string'?el.className:'',id:el.id,left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),scroll:el.scrollWidth,client:el.clientWidth}}).filter(x=>x.right>innerWidth+1&&x.left<innerWidth).sort((a,b)=>b.right-a.right).slice(0,12)}));console.log('OVERFLOW_DIAG',JSON.stringify(d));return d.scroll<=d.viewport}).toBe(true);
     }
     await page.screenshot({ path: testInfo.outputPath(route.slice(1) || "home") + ".png", fullPage: true });
   }
@@ -180,7 +180,7 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
   await page.getByLabel('Search audit history',{exact:true}).fill(saved.id);
   await page.getByRole('button',{name:'Search history',exact:true}).click();
   await expect(page.locator('.bs-activity strong').filter({hasText:'deleted'})).toHaveCount(1);
-  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await expect.poll(async()=>{const d=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(el=>{const r=el.getBoundingClientRect();return{tag:el.tagName,cls:typeof el.className==='string'?el.className:'',id:el.id,left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),scroll:el.scrollWidth,client:el.clientWidth}}).filter(x=>x.right>innerWidth+1&&x.left<innerWidth).sort((a,b)=>b.right-a.right).slice(0,12)}));console.log('OVERFLOW_DIAG',JSON.stringify(d));return d.scroll<=d.viewport}).toBe(true);
   await page.screenshot({path:testInfo.outputPath('admin-audit-history.png'),fullPage:true});
   await clickAdminNavigation(page,'System status');
   await expect(page.getByRole('heading',{name:'Service health',exact:true})).toBeVisible();
@@ -189,7 +189,7 @@ test("derived five-slot fixture completes automatic scan, deletion and approval 
 
   await page.goto('/profiles');
 
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect.poll(async()=>{const d=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(el=>{const r=el.getBoundingClientRect();return{tag:el.tagName,cls:typeof el.className==='string'?el.className:'',id:el.id,left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),scroll:el.scrollWidth,client:el.clientWidth}}).filter(x=>x.right>innerWidth+1&&x.left<innerWidth).sort((a,b)=>b.right-a.right).slice(0,12)}));console.log('OVERFLOW_DIAG',JSON.stringify(d));return d.scroll<=d.viewport}).toBe(true);
   await page.evaluate(() => new Promise<void>(resolve => { window.scrollTo(0, 0); requestAnimationFrame(() => requestAnimationFrame(() => resolve())); }));
   await page.screenshot({ path: testInfo.outputPath("approved-build.png"), fullPage: true });
 });
@@ -220,5 +220,5 @@ test('Black Shores gates the queue, stays off Profiles, and clears access on rel
  await page.reload();
  await expect(page.getByLabel('Black Shores access token',{exact:true})).toHaveValue('');
  await expect(page.getByLabel('Review queue',{exact:true})).toHaveCount(0);
- await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await expect.poll(async()=>{const d=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(el=>{const r=el.getBoundingClientRect();return{tag:el.tagName,cls:typeof el.className==='string'?el.className:'',id:el.id,left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),scroll:el.scrollWidth,client:el.clientWidth}}).filter(x=>x.right>innerWidth+1&&x.left<innerWidth).sort((a,b)=>b.right-a.right).slice(0,12)}));console.log('OVERFLOW_DIAG',JSON.stringify(d));return d.scroll<=d.viewport}).toBe(true);
 });
