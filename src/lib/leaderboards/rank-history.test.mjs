@@ -2,14 +2,32 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {nextRankHistory,rankHistoryEvents} from "./rank-history.mjs";
 
-test("rank movement signs match upward and downward leaderboard changes",()=>{
- const previous={playerA:{rank:4,previousRank:5,movement:1,rankSince:null},playerB:{rank:2,previousRank:1,movement:-1,rankSince:null}};
- const next=nextRankHistory([{uid:"playerA",global_rank:2},{uid:"playerB",global_rank:4}],previous,"2026-11-01T00:00:00.000Z");
- assert.equal(next.playerA.movement,2);assert.equal(next.playerB.movement,-2);
+test("rank movement reflects changes among incumbents",()=>{
+ const previous={playerA:{rank:1,active:true},playerB:{rank:2,active:true},playerC:{rank:3,active:true}};
+ const rows=[{uid:"playerB",global_rank:1},{uid:"playerA",global_rank:2},{uid:"playerC",global_rank:3}];
+ const next=nextRankHistory(rows,previous,"2026-11-02T00:00:00.000Z","2026-11-01T00:00:00.000Z",true);
+ assert.equal(next.playerA.movement,-1);assert.equal(next.playerB.movement,1);assert.equal(next.playerC.movement,null);
+ assert.equal(next.playerA.movementSince,"2026-11-01T00:00:00.000Z");
+});
+test("a new entrant does not create insertion-only down movement",()=>{
+ const previous={a:{rank:1,active:true},b:{rank:2,active:true},c:{rank:3,active:true}};
+ const rows=[{uid:"new",global_rank:1},{uid:"a",global_rank:2},{uid:"b",global_rank:3},{uid:"c",global_rank:4}];
+ const next=nextRankHistory(rows,previous,"2026-11-02T00:00:00.000Z","2026-11-01T00:00:00.000Z",true);
+ assert.equal(next.a.movement,null);assert.equal(next.b.movement,null);assert.equal(next.c.movement,null);
+ assert.equal(next.new.movement,null);assert.equal(next.new.newSince,"2026-11-02T00:00:00.000Z");
+ const events=rankHistoryEvents(rows,previous,true,"2026-11-02T00:00:00.000Z");
+ assert.deepEqual(events.map(event=>[event.uid,event.type]),[["new","entered"]]);
+});
+test("departures can improve incumbent rank while entrants are excluded",()=>{
+ const previous={left:{rank:1,active:true},a:{rank:2,active:true},b:{rank:3,active:true}};
+ const rows=[{uid:"new",global_rank:1},{uid:"a",global_rank:2},{uid:"b",global_rank:3}];
+ const next=nextRankHistory(rows,previous,"2026-11-02T00:00:00.000Z","2026-11-01T00:00:00.000Z",true);
+ assert.equal(next.a.movement,1);assert.equal(next.b.movement,1);assert.equal(next.new.newSince,"2026-11-02T00:00:00.000Z");
 });
 test("unchanged positions have no movement indicator",()=>{
- const next=nextRankHistory([{uid:"playerA",global_rank:3}],{playerA:{rank:3,previousRank:3,movement:null,rankSince:null}},"2026-11-01T00:00:00.000Z");
- assert.equal(next.playerA.movement,null);
+ const previous={playerA:{rank:1,active:true},playerB:{rank:2,active:true},playerC:{rank:3,active:true}};
+ const next=nextRankHistory([{uid:"playerA",global_rank:1},{uid:"playerB",global_rank:2},{uid:"playerC",global_rank:3}],previous,"2026-11-01T00:00:00.000Z");
+ assert.equal(next.playerC.movement,null);
 });
 test("rank one tenure is preserved until a different player takes first",()=>{
  const prior={playerA:{rank:1,previousRank:2,movement:1,rankSince:"2026-10-01T00:00:00.000Z"}};

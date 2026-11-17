@@ -12,7 +12,7 @@ import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-ve
 import {scoringReadiness} from './scoring-info.ts';
 import {rotationPolicyReady} from '../game-data/scoring-policies.mjs';
 import {HOME_FEATURED_ROTATION_MS,resolveHomeRotation} from './home-featured.mjs';
-type RankHistoryEntry={rank:number;previousRank:number|null;movement:number|null;rankSince:string|null;trackingSince?:string;bestRank?:number;bestTop1Days?:number;buildId?:string;score?:number;ign?:string;active?:boolean};
+type RankHistoryEntry={rank:number;previousRank:number|null;movement:number|null;movementSince?:string|null;newSince?:string|null;snapshotAt?:string;rankSince:string|null;trackingSince?:string;bestRank?:number;bestTop1Days?:number;buildId?:string;score?:number;ign?:string;active?:boolean};
 export async function listBuilds(options: { search?: string; character?: string; id?: string; uid?: string; includePending?: boolean; page?: number; pending?: boolean; patchMajor?: string } = {}, db: Client = database()) {
   const page = Number.isFinite(options.page) ? Math.min(10000, Math.max(1, Math.floor(options.page || 1))) : 1;
   const query = (options.search || "").slice(0, 64).trim();
@@ -79,14 +79,14 @@ function parseRankState(raw:unknown):Record<string,RankHistoryEntry>{
  try{const parsed=JSON.parse(String(raw||"{}"));return parsed&&typeof parsed==="object"?parsed as Record<string,RankHistoryEntry>:{}}catch{return {};}
 }
 async function synchronizeRankHistory(character:string,rows:Row[],db:Client,recordEvents=true,sourceRevision?:number):Promise<Record<string,RankHistoryEntry>|null>{
- const generation="rank-v6:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.ign),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
+ const generation="rank-v7:"+createHash("sha256").update(rows.map(row=>[String(row.id),String(row.uid),String(row.ign),String(row.global_rank),Number(row.verified_score).toPrecision(15)].join(":")).join("\n")).digest("hex");
  const materialize=(saved:Row|undefined)=>parseRankState(saved?.state);
  const saveChanged=async(tx:Awaited<ReturnType<Client["transaction"]>>,saved:Row|undefined)=>{
   if(String(saved?.generation_hash||"")===generation)return materialize(saved);
-  const priorGeneration=String(saved?.generation_hash||""),hasBaseline=["rank-v2:","rank-v3:","rank-v4:","rank-v5:","rank-v6:"].some(prefix=>priorGeneration.startsWith(prefix));
+  const priorGeneration=String(saved?.generation_hash||""),hasBaseline=["rank-v2:","rank-v3:","rank-v4:","rank-v5:","rank-v6:","rank-v7:"].some(prefix=>priorGeneration.startsWith(prefix));
   const previous=hasBaseline?parseRankState(saved?.state):{},now=new Date().toISOString();
   const historyRows=rows.map(row=>({uid:String(row.uid),ign:String(row.ign),global_rank:Number(row.global_rank),id:String(row.id),score:Number(row.verified_score)}));
-  const next=nextRankHistory(historyRows,previous,now);
+  const next=nextRankHistory(historyRows,previous,now,saved?.updated_at==null?null:String(saved.updated_at),hasBaseline);
   const events=rankHistoryEvents(historyRows,previous,hasBaseline,now);
   if(recordEvents)for(const event of events)await tx.execute({sql:"INSERT INTO leaderboard_rank_events(character,uid,event_type,old_rank,new_rank,old_score,new_score,old_build_id,new_build_id,changed_at) VALUES(?,?,?,?,?,?,?,?,?,?)",args:[character,event.uid,event.type,event.oldRank,event.newRank,event.oldScore,event.newScore,event.oldBuildId,event.newBuildId,event.changedAt]});
   return next;
@@ -96,7 +96,7 @@ async function synchronizeRankHistory(character:string,rows:Row[],db:Client,reco
   try{
    const clock=(await tx.execute({sql:"SELECT revision FROM leaderboard_rank_clock WHERE character=?",args:[character]})).rows[0];
    if(Number(clock?.revision)!==sourceRevision)return null;
-   const saved=(await tx.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
+   const saved=(await tx.execute({sql:"SELECT generation_hash,state,updated_at FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
    const next=await saveChanged(tx,saved);
    const now=new Date().toISOString();
    await tx.execute({sql:"INSERT INTO leaderboard_rank_history(character,generation_hash,state,updated_at,source_revision) VALUES(?,?,?,?,?) ON CONFLICT(character) DO UPDATE SET generation_hash=excluded.generation_hash,state=excluded.state,updated_at=excluded.updated_at,source_revision=excluded.source_revision",args:[character,generation,JSON.stringify(next),now,sourceRevision]});
@@ -105,11 +105,11 @@ async function synchronizeRankHistory(character:string,rows:Row[],db:Client,reco
    return next;
   }finally{tx.close();}
  }
- let saved=(await db.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
+ let saved=(await db.execute({sql:"SELECT generation_hash,state,updated_at FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
  if(String(saved?.generation_hash||"")!==generation){
   const tx=await db.transaction("write");
   try{
-   saved=(await tx.execute({sql:"SELECT generation_hash,state FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
+   saved=(await tx.execute({sql:"SELECT generation_hash,state,updated_at FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
    if(String(saved?.generation_hash||"")!==generation){
     const next=await saveChanged(tx,saved),now=new Date().toISOString();
     await tx.execute({sql:"INSERT INTO leaderboard_rank_history(character,generation_hash,state,updated_at) VALUES(?,?,?,?) ON CONFLICT(character) DO UPDATE SET generation_hash=excluded.generation_hash,state=excluded.state,updated_at=excluded.updated_at",args:[character,generation,JSON.stringify(next),now]});
@@ -138,7 +138,7 @@ async function ensureFreshRankHistory(character:string,db:Client,force=false):Pr
  for(let attempt=0;attempt<5;attempt++){
   const clock=(await db.execute({sql:"SELECT revision,dirty FROM leaderboard_rank_clock WHERE character=?",args:[character]})).rows[0];
   const revision=Number(clock?.revision||0);
-  const saved=(await db.execute({sql:"SELECT state,source_revision FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
+  const saved=(await db.execute({sql:"SELECT state,source_revision,updated_at FROM leaderboard_rank_history WHERE character=?",args:[character]})).rows[0];
   const dirty=force||Number(clock?.dirty)!==0||Number(saved?.source_revision)!==revision;
   if(!dirty)return {state:parseRankState(saved?.state),refreshed:false};
   const rows=await readRankedBoardRows(character,db);
@@ -188,7 +188,7 @@ export async function refreshLeaderboardRankHistory(db:Client=database(),options
 function rankedBuild(row:Row,history:RankHistoryEntry){
  const build=publicBuild({...row,global_rank:history.rank,verified_score:history.score} as Row);
  return {...build,
-  rankMovement:history.movement??null,rankSince:history.rankSince??null,rankTrackingSince:history.trackingSince??null,
+  rankMovement:history.movement??null,rankMovementSince:history.movementSince??null,rankNewSince:history.newSince??null,rankSince:history.rankSince??null,rankTrackingSince:history.trackingSince??null,
   rankDays:history.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(history.rankSince))/86400000)):null,
   bestRank:history.bestRank??build.rank,bestTop1Days:history.bestTop1Days??null,
   rankHasHistory:history.previousRank!==null&&history.previousRank!==undefined};
@@ -234,7 +234,7 @@ export async function medalStandings(db:Client=database(),options:{refresh?:bool
   const saved=await db.execute({sql:"SELECT updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
   updatedAt=String(saved.rows[0]?.updated_at||new Date(now).toISOString());
  }
- return {updatedAt,players:standings.map(player=>{const saved=history?.[player.uid];return {...player,rankMovement:saved?.movement??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
+ return {updatedAt,players:standings.map(player=>{const saved=history?.[player.uid];return {...player,rankMovement:saved?.movement??null,rankMovementSince:saved?.movementSince??null,rankNewSince:saved?.newSince??null,rankSince:saved?.rankSince??null,rankTrackingSince:saved?.trackingSince??null,rankDays:saved?.rankSince?Math.max(0,Math.floor((now-Date.parse(saved.rankSince))/86400000)):null,bestRank:saved?.bestRank??player.rank,bestTop1Days:saved?.bestTop1Days??0,rankHasHistory:saved?.previousRank!==null&&saved?.previousRank!==undefined};})};
 }
 
 export async function listLeaderboard(options:{character?:string;search?:string;page?:number;rotationPolicyId?:string|null}={},db:Client=database()){

@@ -1090,6 +1090,7 @@ input[readonly] { opacity: .75; cursor: default; }
 @media(max-width:600px){.lb-rank-cell{gap:3px;min-width:54px}.lb-rank-days{font-size:12px}.lb-rank-composite .lb-rank{min-width:26px;height:27px}}
 
 /* Rank tracking context and mobile layout */
+.lb-rank-new{display:inline-flex;align-items:center;min-height:19px;padding:2px 5px;border:1px solid #367e79;border-radius:5px;background:#12312f;color:#9bece1;font-size:9px;font-weight:850;line-height:1;letter-spacing:.045em;white-space:nowrap}
 .lb-rank-tracking{font-size:12px;line-height:1;color:var(--muted);white-space:nowrap}
 .lb-rank-unavailable{display:flex;align-items:center;gap:5px;min-width:0;color:var(--muted)}
 .lb-rank-unavailable small{font-size:12px;line-height:1.2;white-space:normal}
