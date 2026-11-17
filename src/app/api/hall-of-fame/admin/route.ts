@@ -357,7 +357,10 @@ export async function POST(request:Request){
    tx=await db.transaction("write");
    const locked=(await tx.execute({sql:"SELECT phase_state,state FROM hof_matches WHERE id=?",args:[matchId]})).rows[0];
    const active=await tx.execute({sql:"SELECT id FROM hof_matches WHERE tournament_slug=? AND id<>? AND phase_state IN ('setting_up','live') LIMIT 1",args:[eventSlug,matchId]});if(active.rows.length)throw new HttpError(409,"Finish or resume the other Setting up or Live match first.");
-   if(!locked||!["ready","on_hold","setting_up"].includes(String(locked.phase_state))||!(["ready","scheduled"].includes(String(locked.state))))throw new HttpError(409,"Match changed while setup was opening.");
+   if(locked?.phase_state==="setting_up"&&locked.state==="in_progress"){
+    await tx.commit();tx=null;return json({ok:true,phaseState:"setting_up"});
+   }
+   if(!locked||!["ready","on_hold"].includes(String(locked.phase_state))||!["ready","scheduled"].includes(String(locked.state)))throw new HttpError(409,"Match changed while setup was opening.");
    await tx.execute({sql:"UPDATE hof_matches SET state='in_progress',phase_state='setting_up',hold_note='',version=version+1,updated_at=? WHERE id=?",args:[now,matchId]});
    await audit(tx,actor,"setup_edit",eventSlug,{phaseState:String(locked.phase_state)},{phaseState:"setting_up"});await tx.commit();tx=null;return json({ok:true,phaseState:"setting_up"});
   }

@@ -43,6 +43,13 @@ function MatchControl({match, renderControls,onMatchInfo}: {match: Match; render
  const trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), headingId = useId();
  const label = canReport(match) ? "Report winner" : match.state === "pending_publication" ? "Verify winner" : "Match details";
  useEffect(() => {
+  const openMatch = (event: Event) => {
+   if (String((event as CustomEvent).detail) === match.id) setOpen(true);
+  };
+  window.addEventListener("open-bracket-match-dialog", openMatch);
+  return () => window.removeEventListener("open-bracket-match-dialog", openMatch);
+ }, [match.id]);
+ useEffect(() => {
   if (!open) return;
   const previous = document.activeElement as HTMLElement | null;
   panel.current?.focus();
