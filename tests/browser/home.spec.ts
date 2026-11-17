@@ -35,8 +35,8 @@ test('Home Top 5 panels, player links, beta navigation and local portraits',asyn
  const eraOne=page.getByRole('button',{name:'1.x',exact:true});
  await expect(page.locator('.lb-era-tabs')).toBeVisible();
  await expect(eraOne).toBeVisible();
- await page.getByRole('button',{name:'2.x',exact:true}).toBeVisible();
- await page.getByRole('button',{name:'3.x',exact:true}).toBeVisible();
+ await expect(page.getByRole('button',{name:'2.x',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'3.x',exact:true})).toBeVisible();
  await eraOne.click();
  await expect(eraOne).toHaveAttribute('aria-pressed','true');
  await page.getByRole('button',{name:/^Jiyan portrait/}).click();
