@@ -17,12 +17,12 @@ function normalize(match: MatchInput): Match {
  return {id: String(match.id), round: Number(match.round ?? match.round_number ?? 1), roundLabel: String(match.roundLabel ?? match.round_label ?? ""), order: Number(match.order ?? match.match_order ?? 1), position: position != null && Number.isFinite(Number(position)) && Number(position) >= 0 ? Number(position) : Number(match.order ?? match.match_order ?? 1) - 1, side: String(match.side ?? match.bracket_side ?? "main"), state: String(match.state || "awaiting_competitors"),phaseState:String(match.phaseState||match.phase_state||""), aId: match.participantA?.id ?? match.participant_a ?? null, aName: match.participantA?.name ?? match.name_a ?? "", aIcon: String(match.participantA?.resonatorIcon ?? match.icon_a ?? ""), bId: match.participantB?.id ?? match.participant_b ?? null, bName: match.participantB?.name ?? match.name_b ?? "", bIcon: String(match.participantB?.resonatorIcon ?? match.icon_b ?? ""), winnerId: match.winner?.id ?? match.winner_id ?? null, outcome: String(match.outcome || ""), dependencies: Array.isArray(match.dependencies) ? match.dependencies : [], raw: match};
 }
 function status(match: Match) {
+ if(match.state==="pending_publication")return "Awaiting verification";
  if(match.phaseState==="on_hold")return "On hold";
  if(match.phaseState==="setting_up")return "Setting up";
  if(match.phaseState==="live")return "Live";
  if(match.phaseState==="complete"||match.state==="no_result")return "Complete";
  if (isFinished(match)) return "Complete";
- if (match.state === "pending_publication") return "To verify";
  if (match.state === "in_progress") return "Live";
  if (canReport(match)) return "Ready";
  return "Upcoming";
@@ -70,7 +70,7 @@ function MatchControl({match, renderControls,matchFlow}: {matchFlow?:boolean;mat
  return <>
   <button ref={trigger} type="button" className="tb-match-action" aria-label={`${label}: ${match.roundLabel || "round " + match.round}, match ${match.order}`} title={label} onClick={() => setOpen(true)}><Icon name={canReport(match) ? "edit" : match.state === "pending_publication" ? "check" : "info"}/></button>
   {open && createPortal(<div className="tb-dialog-overlay" onPointerDown={e => {if (e.target === e.currentTarget) setOpen(false);}}>
-   <div ref={panel} className={`tb-manage-panel${matchFlow&&["setting_up","live"].includes(match.phaseState)?" tb-match-workspace":""}`} role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1}>
+   <div ref={panel} className={`tb-manage-panel${(match.state==="pending_publication"||(matchFlow&&["setting_up","live"].includes(match.phaseState)))?" tb-match-workspace":""}`} role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1}>
     <div className="tb-dialog-heading"><div><span className="tb-dialog-eyebrow">{match.side === "third_place" ? "Third-place playoff" : `${match.roundLabel || "Round " + match.round} · Match ${match.order}`}</span><h2 id={headingId}>{label}</h2></div><button type="button" className="tb-dialog-close" aria-label="Close match details" onClick={() => setOpen(false)}><Icon name="close"/></button></div>
     {!phaseLabel && canReport(match) && <p className="tb-dialog-help">Select the winning player, then submit to confirm the result.</p>}
     {!phaseLabel && !canReport(match) && match.state !== "pending_publication" && <p className="tb-dialog-help">{isFinished(match) ? `${match.winnerId === match.aId ? match.aName : match.bName || "The winner"} won this match.` : "This match will be ready when both players have advanced."}</p>}
@@ -293,6 +293,24 @@ const STYLES = `
  .hof-setup-panel .hof-setup-section{padding:10px}
 }
 @media(prefers-reduced-motion:reduce){.hof-setup-panel .hof-reel-track.is-spinning{animation-duration:.01ms}}
+.tb-manage-panel .hof-result-review{display:grid;gap:18px;margin-block:14px}
+.hof-result-review :is(h3,p,ul){margin:0}
+.hof-result-review h3{font-size:15px}
+.hof-review-status{justify-self:start;padding:5px 9px;border-radius:6px;background:#3a3229;color:#f0ce90;font-size:13px;font-weight:700}
+.hof-result-players{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px}
+.hof-result-player{display:grid;align-content:start;gap:6px;padding:14px;border-radius:10px;border:1px solid #3b5462;background:#142530;overflow-wrap:anywhere}
+.hof-result-player[data-winner=true]{border-color:#84decc;background:#1e383d}
+.hof-result-player strong{font-size:18px}
+.hof-result-player small,.hof-result-destinations li span{color:#b4c9d5}
+.hof-result-player span{color:#9cebdc;font-size:13px;font-weight:700}
+.hof-result-destinations{display:grid;gap:8px}
+.hof-result-destinations ul{display:grid;gap:6px;padding:0;list-style:none}
+.hof-result-destinations li{display:grid;gap:4px;padding:10px 12px;border-left:2px solid #6abcb5;background:#14252f;overflow-wrap:anywhere}
+.hof-result-destinations li small{color:#f3b7af}
+.hof-review-actions{display:grid;gap:10px;justify-items:end;padding-top:12px;border-top:1px solid #344a57}
+.tb-manage-panel .hof-review-actions .actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.tb-manage-panel .hof-review-actions .actions button:first-child{background:#1b303d;color:#e3eff5;border-color:#4b6b7a}
+@media(max-width:380px){.hof-result-players{grid-template-columns:minmax(0,1fr)}}
 .tb-dialog-overlay{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:#030a10c9;backdrop-filter:blur(5px)}
 .tb-manage-panel{box-sizing:border-box;position:relative;z-index:1;width:min(500px,100%);max-height:calc(100dvh - 40px);overflow:auto;padding:24px;border:1px solid #3a5665;border-radius:14px;background:#12212b;color:#e6eff2;box-shadow:0 24px 80px #0009;font-family:inherit;outline:none}
 .tb-manage-panel *{box-sizing:border-box}

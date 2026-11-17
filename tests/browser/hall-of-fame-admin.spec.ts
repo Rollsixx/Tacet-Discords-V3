@@ -117,11 +117,29 @@ for (const entry of ["bracket", "queue"] as const) {
       expect(response.ok()).toBeTruthy();
       return (await response.json()).matches;
     };
+    const reported = dialog.getByRole("region", { name: "Reported result" });
+    await expect(reported).toContainText("Rover");
+    await expect(reported).toContainText("Yangyang");
+    await expect(reported.locator('[data-winner="true"]')).toContainText("Rover");
+    const advancement = dialog.getByRole("region", { name: "Bracket advancement" });
+    await expect(advancement.getByText("Final · Match 1 · Player A slot")).toBeVisible();
+    if(entry==="queue") await expect(advancement.getByText("Third-place match · Match 1 · Player B slot")).toBeVisible();
+    await expect(page.locator(`#hof-bracket-match-${slug}-1-1 .tb-state`)).toHaveText("Awaiting verification");
+
+    await action("Verify result").click();
+    await expect(action("Cancel")).toBeFocused();
+    await action("Cancel").click();
+    await expect(action("Verify result")).toBeFocused();
     expect((await readMatches()).find((match: { id:string }) => match.id === slug+"-2-1").participant_a).toBeNull();
-    page.once("dialog", confirmation => confirmation.accept());
-    await dialog.getByRole("button", { name: /Verify winner/ }).click();
+    const stale = await mutation({ action: "publish_match_result", matchId: slug+"-1-1", version: "0" });
+    expect(stale.status()).toBe(409);
+    expect((await stale.json()).error).toContain("reported result changed");
+
+    await action("Verify result").click();
+    await action("Confirm result").click();
     await expect(dialog).toHaveCount(0);
     const matches = await readMatches();
+    if(entry==="queue")expect(matches.find((match: { id:string }) => match.id === slug+"-third").participant_b).toBe("qa-Yangyang");
     expect(matches.find((match: { id:string }) => match.id === slug+"-1-1").state).toBe("published");
     expect(matches.find((match: { id:string }) => match.id === slug+"-2-1").participant_a).toBe("qa-Rover");
   });

@@ -72,3 +72,10 @@ export function validateDraftStep({
   }
   return { stepNumber: next, actorSlot, action, resonator: name };
 }
+
+
+/** @param {unknown} targetSlot @param {unknown} sourceOrder @returns {"participant_a" | "participant_b"} */
+export function advancementSlot(targetSlot, sourceOrder) {
+  if (targetSlot === "participant_a" || targetSlot === "participant_b") return targetSlot;
+  return Number(sourceOrder) % 2 === 1 ? "participant_a" : "participant_b";
+}
