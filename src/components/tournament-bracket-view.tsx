@@ -7,16 +7,20 @@ import {createPortal} from "react-dom";
 
 type Dependency = {dependsOnMatchId?: string; depends_on_match_id?: string; dependencyType?: string; dependency_type?: string; targetSlot?: string; target_slot?: string};
 type MatchInput = any;
-type Match = {id: string; round: number; roundLabel: string; order: number; position: number; side: string; state: string; aId: string | null; aName: string; aIcon: string; bId: string | null; bName: string; bIcon: string; winnerId: string | null; outcome: string; dependencies: Dependency[]; raw: MatchInput};
-type Props = {matches: MatchInput[]; renderControls?: (match: MatchInput) => ReactNode};
+type Match = {id: string; round: number; roundLabel: string; order: number; position: number; side: string; state: string; phaseState:string; aId: string | null; aName: string; aIcon: string; bId: string | null; bName: string; bIcon: string; winnerId: string | null; outcome: string; dependencies: Dependency[]; raw: MatchInput};
+type Props = {matches: MatchInput[]; renderControls?: (match: MatchInput) => ReactNode;onMatchInfo?:(match:MatchInput)=>void};
 const CARD_WIDTH = 248, CARD_HEIGHT = 80, COLUMN_GAP = 56, HEADING_HEIGHT = 44;
-const isFinished = (match: Match) => ["published", "completed"].includes(match.state);
+const isFinished = (match: Match) => ["published", "completed", "no_result"].includes(match.state);
 const canReport = (match: Match) => ["ready", "scheduled", "in_progress"].includes(match.state) && Boolean(match.aId && match.bId);
 function normalize(match: MatchInput): Match {
  const position = match.bracketPosition ?? match.bracket_position;
- return {id: String(match.id), round: Number(match.round ?? match.round_number ?? 1), roundLabel: String(match.roundLabel ?? match.round_label ?? ""), order: Number(match.order ?? match.match_order ?? 1), position: position != null && Number.isFinite(Number(position)) && Number(position) >= 0 ? Number(position) : Number(match.order ?? match.match_order ?? 1) - 1, side: String(match.side ?? match.bracket_side ?? "main"), state: String(match.state || "awaiting_competitors"), aId: match.participantA?.id ?? match.participant_a ?? null, aName: match.participantA?.name ?? match.name_a ?? "", aIcon: String(match.participantA?.resonatorIcon ?? match.icon_a ?? ""), bId: match.participantB?.id ?? match.participant_b ?? null, bName: match.participantB?.name ?? match.name_b ?? "", bIcon: String(match.participantB?.resonatorIcon ?? match.icon_b ?? ""), winnerId: match.winner?.id ?? match.winner_id ?? null, outcome: String(match.outcome || ""), dependencies: Array.isArray(match.dependencies) ? match.dependencies : [], raw: match};
+ return {id: String(match.id), round: Number(match.round ?? match.round_number ?? 1), roundLabel: String(match.roundLabel ?? match.round_label ?? ""), order: Number(match.order ?? match.match_order ?? 1), position: position != null && Number.isFinite(Number(position)) && Number(position) >= 0 ? Number(position) : Number(match.order ?? match.match_order ?? 1) - 1, side: String(match.side ?? match.bracket_side ?? "main"), state: String(match.state || "awaiting_competitors"),phaseState:String(match.phaseState||match.phase_state||""), aId: match.participantA?.id ?? match.participant_a ?? null, aName: match.participantA?.name ?? match.name_a ?? "", aIcon: String(match.participantA?.resonatorIcon ?? match.icon_a ?? ""), bId: match.participantB?.id ?? match.participant_b ?? null, bName: match.participantB?.name ?? match.name_b ?? "", bIcon: String(match.participantB?.resonatorIcon ?? match.icon_b ?? ""), winnerId: match.winner?.id ?? match.winner_id ?? null, outcome: String(match.outcome || ""), dependencies: Array.isArray(match.dependencies) ? match.dependencies : [], raw: match};
 }
 function status(match: Match) {
+ if(match.phaseState==="on_hold")return "On hold";
+ if(match.phaseState==="setting_up")return "Setting up";
+ if(match.phaseState==="live")return "Live";
+ if(match.phaseState==="complete"||match.state==="no_result")return "Complete";
  if (isFinished(match)) return "Complete";
  if (match.state === "pending_publication") return "To verify";
  if (match.state === "in_progress") return "Live";
@@ -34,7 +38,7 @@ function Icon({name}: {name: "edit" | "close" | "left" | "right" | "minus" | "pl
  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function MatchControl({match, renderControls}: {match: Match; renderControls: NonNullable<Props["renderControls"]>}) {
+function MatchControl({match, renderControls,onMatchInfo}: {match: Match; renderControls: NonNullable<Props["renderControls"]>;onMatchInfo?:Props["onMatchInfo"]}) {
  const [open, setOpen] = useState(false);
  const trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), headingId = useId();
  const label = canReport(match) ? "Report winner" : match.state === "pending_publication" ? "Verify winner" : "Match details";
@@ -68,7 +72,7 @@ function MatchControl({match, renderControls}: {match: Match; renderControls: No
  </>;
 }
 
-function BracketLane({title, matches, renderControls}: {title: string; matches: Match[]; renderControls?: Props["renderControls"]}) {
+function BracketLane({title, matches, renderControls,onMatchInfo}: {title: string; matches: Match[]; renderControls?: Props["renderControls"];onMatchInfo?:Props["onMatchInfo"]}) {
  const scroll = useRef<HTMLDivElement>(null), drag = useRef<{id: number; x: number; left: number} | null>(null);
  const [size, setSize] = useState({width: 1000, height: 560}), [zoom, setZoom] = useState<number | null>(null), [scrollState, setScrollState] = useState({left: false, right: false});
  const initialFocusDone = useRef(false);
@@ -131,10 +135,10 @@ function BracketLane({title, matches, renderControls}: {title: string; matches: 
    <div className="tb-stage" style={{width: width * scale, height: height * scale}}><div className="tb-board" style={{width, height, transform: `scale(${scale})`}}>
     <svg className="tb-lines" width={width} height={height} aria-hidden="true">{edges.map(({source, target}) => {const x1 = xFor(source) + CARD_WIDTH, x2 = xFor(target), mid = x1 + (x2 - x1) / 2; return <path key={`${source.id}-${target.id}`} className={isFinished(source) ? "is-advanced" : ""} d={`M ${x1} ${yFor(source)} H ${mid} V ${yFor(target)} H ${x2}`}/>;})}</svg>
     {rounds.map(round => <div className="tb-round-label" key={round} style={{left: (round - firstRound) * column, width: CARD_WIDTH}}><span>{roundName(round)}</span><span>{main.filter(m => m.round === round).length} {main.filter(m => m.round === round).length === 1 ? "match" : "matches"}</span></div>)}
-    {matches.map(m => <article key={m.id} id={`hof-bracket-match-${m.id}`} className={`tb-match-card${renderControls ? " has-controls" : ""}${m.side === "third_place" ? " is-bronze" : m.round === lastRound ? " is-final" : ""}${isFinished(m) ? " is-complete" : ""}`} style={{left: xFor(m), top: yFor(m) - CARD_HEIGHT / 2, width: CARD_WIDTH, height: CARD_HEIGHT}} aria-label={`${m.side === "third_place" ? "Third-place playoff" : roundName(m.round)}, match ${m.order}`}>
+    {matches.map(m => <article key={m.id} id={`hof-bracket-match-${m.id}`} className={`tb-match-card${renderControls||onMatchInfo ? " has-controls" : ""}${m.side === "third_place" ? " is-bronze" : m.round === lastRound ? " is-final" : ""}${isFinished(m) ? " is-complete" : ""}`} style={{left: xFor(m), top: yFor(m) - CARD_HEIGHT / 2, width: CARD_WIDTH, height: CARD_HEIGHT}} aria-label={`${m.side === "third_place" ? "Third-place playoff" : roundName(m.round)}, match ${m.order}`}>
      <div className="tb-match-head"><span>{m.side === "third_place" ? "3rd place" : `Match ${m.order}`}</span><span className={`tb-state state-${m.state}`} title={m.state.replaceAll("_", " ")}>{status(m)}</span></div>
      {(["a", "b"] as const).map(slot => {const id = slot === "a" ? m.aId : m.bId, name = (slot === "a" ? m.aName : m.bName) || slotName(m, `participant_${slot}`), icon = slot === "a" ? m.aIcon : m.bIcon, winner = Boolean(m.winnerId && m.winnerId === id); return <div key={slot} className={`tb-entrant${winner ? " is-winner" : ""}${!id ? " is-pending" : ""}`} title={name}><span className="tb-slot-mark">{winner ? <Icon name="check"/> : slot.toUpperCase()}</span>{id&&icon&&<ResonatorPortrait name={icon} className="tb-entrant-avatar" decorative/>}<span className="tb-player-name">{name}</span></div>;})}
-     {renderControls && <MatchControl match={m} renderControls={renderControls}/>}
+     {renderControls ? <MatchControl match={m} renderControls={renderControls} onMatchInfo={onMatchInfo}/> : onMatchInfo&&<button type="button" className="tb-match-action" aria-label={`Match details: ${m.roundLabel||"Round "+m.round}, match ${m.order}`} title="Match details" onClick={()=>onMatchInfo(m.raw)}><Icon name="info"/></button>}
     </article>)}
    </div></div>
   </div>
@@ -142,15 +146,15 @@ function BracketLane({title, matches, renderControls}: {title: string; matches: 
  </div>;
 }
 
-export default function TournamentBracketView({matches, renderControls}: Props) {
+export default function TournamentBracketView({matches, renderControls,onMatchInfo}: Props) {
  const all = matches.map(normalize).filter(m => Number.isFinite(m.round) && Number.isFinite(m.order));
  const main = all.filter(m => m.side === "main" || m.side === "third_place");
  const sides = [...new Set(all.filter(m => !["main", "third_place"].includes(m.side)).map(m => m.side))];
  return <div className="tournament-bracket-view">
   <style>{STYLES}</style>
   {!all.length && <div className="tb-empty">The bracket will appear here once matches are prepared.</div>}
-  {main.length > 0 && <BracketLane title="Tournament bracket" matches={main} renderControls={renderControls}/>}
-  {sides.map(side => <BracketLane key={side} title={`${side.replaceAll("_", " ")} bracket`} matches={all.filter(m => m.side === side)} renderControls={renderControls}/>)}
+  {main.length > 0 && <BracketLane title="Tournament bracket" matches={main} renderControls={renderControls} onMatchInfo={onMatchInfo}/>}
+  {sides.map(side => <BracketLane key={side} title={`${side.replaceAll("_", " ")} bracket`} matches={all.filter(m => m.side === side)} renderControls={renderControls} onMatchInfo={onMatchInfo}/>)}
  </div>;
 }
 
