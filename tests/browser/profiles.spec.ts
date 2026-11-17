@@ -25,6 +25,37 @@ test('player search, multi-player tabs, resonator stats, reload and empty/error 
  expect(errors).toEqual([]);
 });
 
+test('closing a restored profile cancels its pending request and persists the closure', async ({page})=>{
+ const uid='812345678';
+ const savedTabs=[{uid,ign:'QA Rover'},{uid:'899999999',ign:'Second QA'}];
+ await page.addInitScript(tabs=>{
+  const key='tacet-player-tabs-v1';
+  if(localStorage.getItem(key)===null)localStorage.setItem(key,JSON.stringify(tabs));
+ },savedTabs);
+ const profileRequest='**/api/public/players?uid='+uid+'&*';
+ let releaseResponse!:()=>void;
+ const pending=new Promise<void>(resolve=>{releaseResponse=resolve;});
+ await page.route('**/api/public/players?*', route=>route.fulfill({json:{players:[],hasMore:false}}));
+ await page.route(profileRequest, async route=>{
+  await pending;
+  await route.fulfill({json:{builds:[],page:1,hasMore:false}});
+ });
+ try{
+  const started=page.waitForRequest(profileRequest);
+  await page.goto('/profiles?uid='+uid);
+  await started;
+  const failed=page.waitForEvent('requestfailed', request=>new URL(request.url()).searchParams.get('uid')===uid);
+  await page.getByRole('button',{name:'Close QA Rover profile',exact:true}).click();
+  await failed;
+  await expect(page.getByRole('heading',{name:'Find a player',level:1,exact:true})).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button',{name:'Close Second QA profile',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Close QA Rover profile',exact:true})).toHaveCount(0);
+ }finally{
+  releaseResponse();
+ }
+});
+
 test('Top Players medals remain readable as stacked cards on mobile',async({page},info)=>{
  const players=[
   {uid:'812345678',ign:'Gold Leader',avatarCharacter:'Carlotta',character:'Carlotta',buildId:'gold',gold:3,silver:1,bronze:0,points:11,total:4,rank:1,rankMovement:null,rankSince:null,rankTrackingSince:'2026-10-01',rankDays:3,bestRank:1,bestTop1Days:0,rankHasHistory:false},

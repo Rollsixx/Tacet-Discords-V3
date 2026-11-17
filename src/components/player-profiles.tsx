@@ -1,7 +1,7 @@
 "use client";
 import { ResonatorPortrait } from "./resonator-portrait";
 import { MedalStandingsTable } from "./medal-standings";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -79,13 +79,20 @@ function ProfileWorkspace(){
  }
  const [retry,setRetry]=useState(0),[morePlayers,setMorePlayers]=useState(false),[myUid,setMyUid]=useState("");
  const [profileAttributeMetric,setProfileAttributeMetric]=useState<LeaderboardMetric|null>(null),[profileDamageMetric,setProfileDamageMetric]=useState<LeaderboardMetric|null>(null);
+ const profileRequest=useRef<AbortController|null>(null);
+ const closingProfile=useRef<string|null>(null);
  const selected=/^\d{8,12}$/.test(uid)?uid:'';
  // Hydrate browser-local history after SSR; the stored value is an external source.
  useEffect(()=>{const frame=requestAnimationFrame(()=>{try{setMyUid(localStorage.getItem('tacet-my-uid')||'');const data=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isArray(data))setTabs(data.filter(item=>typeof item?.ign==='string'&&/^\d{8,12}$/.test(item.uid)).slice(0,8));}catch{}});return()=>cancelAnimationFrame(frame);},[]);
  useEffect(()=>{if(selected||buildId)return;const timer=setTimeout(()=>router.replace(query.trim()?'/profiles?'+new URLSearchParams({search:query.trim()}):'/profiles',{scroll:false}),250);return()=>clearTimeout(timer);},[query,selected,buildId,router]);
  useEffect(()=>{
+  // A route transition can leave the old UID selected for another render.
+  if(selected && closingProfile.current===selected)return;
+  closingProfile.current=null;
   const controller=new AbortController();
+  profileRequest.current=controller;
   const timer=setTimeout(()=>{
+   if(controller.signal.aborted)return;
    setLoading(true);setError('');
    const url=selected?'/api/public/players?'+new URLSearchParams({uid:selected,page:String(page),...(patchFilter==='all'?{}:{patch:patchFilter})}):buildId?'/api/public/builds?'+new URLSearchParams({id:buildId}):'/api/public/players?'+new URLSearchParams({search:query||uid});
    fetch(url,{signal:controller.signal,cache:'default'}).then(async response=>{const data=await response.json();if(!response.ok)throw Error(data.error||'Profiles unavailable.');return data;}).then(data=>{
@@ -94,11 +101,26 @@ function ProfileWorkspace(){
     else{setPlayers(data.players);setTopPlayers(data.topPlayers||[]);setTopPlayersUpdatedAt(data.topPlayersUpdatedAt||null);setMorePlayers(data.hasMore);setResult(null);}
    }).catch(cause=>{if(cause.name!=='AbortError')setError(cause.message);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
   },180);
-  return()=>{clearTimeout(timer);controller.abort();};
+  return()=>{
+   clearTimeout(timer);
+   controller.abort();
+   profileRequest.current=null;
+  };
  },[selected,uid,query,page,buildId,retry,router,patchFilter]);
  function openPlayer(next:string){if(next===selected)return;setLoading(true);setPage(1);setFilter('');setPatchFilter('all');setExpanded(null);router.push('/profiles?'+new URLSearchParams({uid:next}),{scroll:false});}
  function newSearch(){if(selected||buildId||query||uid)setLoading(true);setPlayers([]);setQuery('');setResult(null);setPage(1);setPatchFilter('all');router.push('/profiles',{scroll:false});}
- function closeTab(next:string){setTabs(previous=>{const updated=previous.filter(item=>item.uid!==next);try{localStorage.setItem(storageKey,JSON.stringify(updated));}catch{}return updated;});if(next===selected)newSearch();}
+ function closeTab(next:string){
+  if(next===selected){
+   closingProfile.current=next;
+   profileRequest.current?.abort();
+   newSearch();
+  }
+  setTabs(previous=>{
+   const updated=previous.filter(item=>item.uid!==next);
+   try{localStorage.setItem(storageKey,JSON.stringify(updated));}catch{}
+   return updated;
+  });
+ }
  const builds=result?.builds||[],first=builds[0];
  const patchMajors=[...new Set(featuredResonators.map(item=>item.patchVersion.split('.')[0]))].sort((a,b)=>Number(a)-Number(b));
  const visible=builds.filter(build=>{
