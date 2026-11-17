@@ -35,6 +35,7 @@ for (const entry of ["bracket", "queue"] as const) {
 
     await page.goto("/BlackShores/hall-of-fame");
     await page.getByLabel("Black Shores access token").fill("browser-test-only-token-00000000000000000000");
+    await page.getByRole("button", { name: "Open tournament", exact: true }).click();
     if (entry === "queue") {
       await page.getByRole("button", { name: "Open match queue", exact: true }).click();
     } else {
