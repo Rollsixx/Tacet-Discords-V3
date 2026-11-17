@@ -10,6 +10,12 @@ const archive=join(vendor,'scoring-source.tar.gz');
 if(createHash('sha256').update(await readFile(archive)).digest('hex')!==manifest.sha256)throw new Error('Scoring source archive integrity failure.');
 await mkdir(root,{recursive:true});
 await extract({file:archive,cwd:root,strict:true});
+if(manifest.catalogOverlay){
+ const overlay=join(vendor,manifest.catalogOverlay.file);
+ if(createHash('sha256').update(await readFile(overlay)).digest('hex')!==manifest.catalogOverlay.sha256)throw new Error('Scoring catalog overlay integrity failure.');
+ await extract({file:overlay,cwd:root,strict:true});
+}
+
 const chars=(await readdir(join(root,'src/characters'),{withFileTypes:true})).filter(e=>e.isDirectory()).map(e=>e.name);
 const weapons={};
 for(const type of ['Swords','Broadblades','Gauntlets','Pistols','Rectifiers']){

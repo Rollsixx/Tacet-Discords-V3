@@ -1,7 +1,7 @@
 // Release gate for every supported Resonator and all pinned Echo/Sonata data.
 import effectGaps from '../game-data/echo-effect-gaps.json' with {type:'json'};
 import * as engine from '../../../vendor/wuthering-tools/dist/index.mjs';
-import {SCORING_CHARACTERS,OWNER_ROTATION_REQUIRED,scoringPreset} from '../game-data/scoring-policies.mjs';
+import {SCORING_CHARACTERS,OWNER_ROTATION_REQUIRED,benchmarkWeapon,scoringPreset} from '../game-data/scoring-policies.mjs';
 import {MECHANICS_MODELS} from '../game-data/rotation-mechanics.mjs';
 import {featuredResonators} from '../resonators.ts';
 import exported from '../game-data/official-scoring.json' with {type:'json'};
@@ -13,8 +13,8 @@ export async function catalogCompleteness({roster=SCORING_CHARACTERS,features=fe
  check(features.length===roster.length&&features.every(c=>roster.includes(c.name)),'Import roster and scoring roster disagree.');
  for(const key of roster){try{
   const c=await engine.getCharByName(key);check(Boolean(c?.basic?.name),key+': missing character kit.');
-  const w=await engine.getWeaponByName(c.basic.weapon,c.basic.signatureWeapon);
-  check(Boolean(w?.getWeaponDataByLevel('90')),key+': missing level-90 signature weapon.');
+  const w=await engine.getWeaponByName(c.basic.weapon,benchmarkWeapon(c.basic));
+  check(Boolean(w?.getWeaponDataByLevel('90')),key+': missing level-90 benchmark weapon.');
   const stats=c.getCharacterStatsByLevel('90');check(Boolean(stats)&&Object.values(stats).every(v=>typeof v!=='number'||Number.isFinite(v)),key+': invalid base stats.');
   const tablesForChar=['basicAttacks','skillAttacks','forteCircuitAttacks','liberationAttacks','introAttacks','outroAttacks','tuneBreakAttacks'].map(t=>c[t]);
   const attacks=tablesForChar.flatMap(t=>t?.attacks||[]);check(attacks.some(a=>a.key),key+': missing moveset catalog.');

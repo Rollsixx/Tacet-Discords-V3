@@ -27,7 +27,7 @@ export const TACET_WINDOWS={
 const EXPANDED_ROSTER=new Set(['Suoming','Jingran','Hsin','Qingxiao','Suisui','LuukHerssen','Denia','Sigrika','YangyangXuanling','Mornye','Lynae','Qiuyuan','Galbrena','Iuno','Augusta','Phrolova','Lupa','Zani','Ciaccona','Cantarella','Phoebe','Brant','Roccia','Shorekeeper','Zhezhi','Changli','XiangliYao','Jinhsi','Yinlin','Camellya','Jiyan']);
 export function scoringPreset(character,data){
  if(OWNER_ROTATION_REQUIRED.includes(character))return undefined;
- const preset=data.rotations[0]||TACET_WINDOWS[character];
+ const preset=data.rotations?.[0]||TACET_WINDOWS[character];
  if(!preset||!EXPANDED_ROSTER.has(character))return preset;
  // Preserve pinned action order and counts. Fixed Echo damage and healing are
  // not a universal resonator-damage benchmark. Split large counts for editing.
@@ -38,7 +38,15 @@ export function scoringPreset(character,data){
  return {...preset,name:'Standardized '+preset.name,data:{...preset.data,actions},provenance:'Tacet adaptation of pinned upstream preset by '+preset.author+'. Fixed Echo attacks, healing, shielding and status-proc damage excluded; original remaining action order and repeat counts retained.',startState:'Resource availability assumed by the pinned upstream preset. Level 90, S0, signature R1, permanent passives only; no team buffs. This is a damage benchmark, not an automatic combat simulation.'};
 }
 
-// Kits are integrated, but no upstream rotation preset exists.
-export const OWNER_ROTATION_REQUIRED=['Lucy','Lucilla','Rebecca','LuukHerssen'];
+// New imports require a reviewed leaderboard benchmark before their rankings open.
+export const OWNER_ROTATION_REQUIRED=['Lucy','Lucilla','Rebecca','LuukHerssen','Aalto','Baizhi','Buling','Calcharo','Chixia','Danjin','Encore','Jianxin','Lily','Lingyang','Lumi','Mortefi','RoverAeroFemale','RoverAeroMale','Roverelectrofemale','Roverelectromale','RoverHavocFemale','RoverHavocMale','RoverSpectroFemale','RoverSpectroMale','Sanhua','Taoqi','Verina','Yangyang','Youhu','Yuanwu'];
 export const AWAITING_ROTATION_POLICY='awaiting-owner-rotation/1';
 export function rotationPolicyReady(policyId){return Boolean(policyId&&policyId!==AWAITING_ROTATION_POLICY);}
+
+
+// Standard Convene five-stars provide a fixed R1 benchmark for characters
+// whose reference kit does not declare a signature. Existing signatures win.
+const STANDARD_WEAPONS={Swords:'EmeraldOfGenesis',Broadblades:'LustrousRazor',Pistols:'StaticMist',Rectifiers:'CosmicRipples',Gauntlets:'AbyssSurges'};
+export function benchmarkWeapon(basic){
+ return basic.signatureWeapon||STANDARD_WEAPONS[basic.weapon];
+}

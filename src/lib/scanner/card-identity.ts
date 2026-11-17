@@ -39,11 +39,14 @@ export function parseCardIdentity(character: string, player: string, uidLine: st
     zanmw: "Zani",
   };
   const aliasMatch = Object.entries(ocrAliases).find(([alias]) => rawNormalizedHeader.includes(alias));
-  const rosterMatches = featuredResonators.flatMap(resonator => {
-    const aliases = [resonator.name, resonator.displayName].filter((value): value is string => Boolean(value));
-    return aliases.filter(alias => normalizedHeader.includes(normalizeCharacterOcr(alias))).map(() => resonator);
-  });
-  const uniqueMatches = [...new Map(rosterMatches.map(resonator => [resonator.name, resonator])).values()];
+  const rosterMatches = featuredResonators.flatMap(resonator =>
+    [resonator.name, resonator.displayName].filter((value): value is string => Boolean(value))
+      .map(normalizeCharacterOcr).filter(alias => normalizedHeader.includes(alias))
+      .map(alias => ({ name: resonator.name, alias })));
+  // Base names can also be prefixes of a variant name, such as Yangyang.
+  const distinctMatches = rosterMatches.filter(match => !rosterMatches.some(other =>
+    other.name !== match.name && other.alias.length > match.alias.length && other.alias.includes(match.alias)));
+  const uniqueMatches = [...new Set(distinctMatches.map(match => match.name))];
   const fuzzyMatches = normalizedHeader.length >= 5
     ? featuredResonators.filter(resonator => {
         const aliases = [resonator.name, resonator.displayName].filter((value): value is string => Boolean(value));
@@ -54,7 +57,7 @@ export function parseCardIdentity(character: string, player: string, uidLine: st
   const resolved = aliasMatch
     ? aliasMatch[1]
     : uniqueMatches.length === 1
-      ? uniqueMatches[0].name
+      ? uniqueMatches[0]
       : uniqueMatches.length === 0 && uniqueFuzzyMatches.length === 1
         ? uniqueFuzzyMatches[0].name
         : null;

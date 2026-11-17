@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Definitions come exclusively from the pinned upstream engine. No raw stat inputs.
 import * as engine from '../../../../vendor/wuthering-tools/dist/index.mjs';
+import {benchmarkWeapon} from "../../game-data/scoring-policies.mjs";
 import effectGaps from '../../game-data/echo-effect-gaps.json' with {type:'json'};
 import {HttpError} from '../validation.ts';
 export const REVIEWED_MODE='admin-reviewed';
@@ -16,7 +17,7 @@ export function echoBuffDefinitions(echo){
  return mods.every(m=>m.key)?mods.map(m=>({...m,details:m.details||echo.details,alwaysEnabled:m.alwaysEnabled??echo.alwaysEnabled??false})):[{key:echo.key,details:echo.details,alwaysEnabled:echo.alwaysEnabled,hasStacks:echo.hasStacks,minStacks:echo.minStacks,maxStacks:echo.maxStacks}];
 }
 export async function modifierCatalog(character,includeReferences=false){
- const c=await engine.getCharByName(character),w=await engine.getWeaponByName(c.basic.weapon,c.basic.signatureWeapon);const result=[];
+ const c=await engine.getCharByName(character),w=await engine.getWeaponByName(c.basic.weapon,benchmarkWeapon(c.basic));const result=[];
  const add=(category,d,label,scope)=>{
   const automatic=Boolean(d.alwaysEnabled||d.key.startsWith('StatBonus'));
   const min=d.hasStacks?Number(d.minStacks||0):0,max=d.hasStacks?Number(d.maxStacks):0;

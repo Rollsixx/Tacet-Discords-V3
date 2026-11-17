@@ -5,6 +5,7 @@ import {featuredResonators} from "../resonators.ts";
 export type WeaponType="Sword"|"Broadblade"|"Rectifier"|"Pistols"|"Gauntlets";
 export type WeaponOption={key:string;name:string;type:WeaponType;rarity:1|2|3|4|5};
 export const weaponCatalog:WeaponOption[]=[
+  {key:"Lullaby",name:"Lullaby",type:"Pistols",rarity:5},
   {
     "key": "AzureOath",
     "name": "Azure Oath",
@@ -757,4 +758,4 @@ export function weaponTypeForCharacter(character:string):WeaponType|null{
  return weapon?weaponTypeAliases[weapon]||null:null;
 }
 export function weaponsForType(type:WeaponType):WeaponOption[]{return weaponCatalog.filter(weapon=>weapon.type===type).sort((a,b)=>b.rarity-a.rarity||a.name.localeCompare(b.name));}
-export function weaponImageUrl(key:string):string{return `https://ryanbenson.github.io/wuthering-waves-assets/images/weapons/${encodeURIComponent(key)}.png`;}
+export function weaponImageUrl(key:string):string{return key==="Lullaby"?"/weapons/Lullaby.png":`https://ryanbenson.github.io/wuthering-waves-assets/images/weapons/${encodeURIComponent(key)}.png`;}

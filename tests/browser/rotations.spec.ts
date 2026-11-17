@@ -6,7 +6,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  expect((await request.get('/api/admin/rotations')).status()).toBe(401);
  await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');
  await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();await expect(page.getByText('Optimizer connected · Owner-reviewed benchmark',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(39);
+ await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(65);
  await page.getByLabel('Evaluation mode').selectOption('admin-reviewed');await page.getByLabel('Starting conditions & combat review notes').fill('');
  await page.getByLabel('Rotation name',{exact:true}).fill('Browser draft '+info.project.name);
  await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});
@@ -51,7 +51,7 @@ test('effect editor separates categories, groups every Echo by cost and preserve
  const effects=page.locator('.rotation-effects').first();await effects.locator('summary').click();
  const categories=page.getByRole('group',{name:'Effect category for action 1',exact:true});
  await expect(categories.getByRole('button')).toHaveCount(4);
- await categories.getByRole('button',{name:/Signature weapon/}).click();await expect(page.getByLabel('Optimizer effect for action 1',{exact:true}).locator('optgroup')).toHaveCount(0);
+ await categories.getByRole('button',{name:/Benchmark weapon/}).click();await expect(page.getByLabel('Optimizer effect for action 1',{exact:true}).locator('optgroup')).toHaveCount(0);
  await categories.getByRole('button',{name:/Sonata/}).click();await expect(page.getByLabel('Sonata set for action 1',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Sonata set for action 1',{exact:true}).locator('option')).toHaveCount(38);
  await page.getByLabel('Sonata set for action 1',{exact:true}).selectOption('HeartofEvilsPurge');

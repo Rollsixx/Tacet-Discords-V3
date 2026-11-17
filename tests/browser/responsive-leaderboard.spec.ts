@@ -100,3 +100,28 @@ test("leaderboard expansion stays readable at 360px, 768px, and 1280px and recov
   await expect(desktopDetail.locator(".lb-echo")).toHaveCount(5);
   await expect.poll(async()=>{const d=await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(el=>{const r=el.getBoundingClientRect();return{tag:el.tagName,cls:typeof el.className==='string'?el.className:'',id:el.id,left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width),scroll:el.scrollWidth,client:el.clientWidth}}).filter(x=>x.right>innerWidth+1&&x.left<innerWidth).sort((a,b)=>b.right-a.right).slice(0,12)}));console.log('OVERFLOW_DIAG',JSON.stringify(d));return d.scroll<=d.viewport}).toBe(true);
 });
+
+test("imported Resonators use patch filters and wait for a reviewed rotation", async ({ page }) => {
+  await page.goto("/leaderboards?character=Lily");
+  const picker = page.getByRole("region", { name: "Choose a Resonator leaderboard" });
+  const search = picker.getByRole("searchbox", { name: "Search Resonators" });
+  const visible = picker.locator(".lb-character-option");
+  await expect(visible).toHaveCount(65);
+  const versions = await visible.locator("small").allTextContents();
+  const order = versions.map(label => label.split(" · ")[1].split(".").map(Number)).map(([major, minor]) => major*100+minor);
+  expect(order).toHaveLength(65);
+  expect(order).toEqual([...order].sort((a,b)=>a-b));
+
+  await picker.getByRole("button", { name:"3.x", exact:true }).click();
+  await search.fill("Lily");
+  const lily = visible.getByText("Lily", { exact:true });
+  await expect(lily).toBeVisible();
+  await expect(visible).toContainText("Spectro · 3.8");
+  await expect(page.getByRole("status").filter({ hasText: /Rankings are awaiting the owner/ })).toBeVisible();
+
+  await picker.getByRole("button", { name:"1.x", exact:true }).click();
+  await search.fill("Baizhi");
+  await expect(visible).toContainText("Glacio · 1.0");
+  await visible.click();
+  await expect(page.getByRole("heading", { name:"Baizhi", exact:true })).toBeVisible();
+});

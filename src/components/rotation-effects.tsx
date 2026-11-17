@@ -6,7 +6,7 @@ export type SonataOption={key:string;name:string;tiers:{label:string;pieces:numb
 export type EchoOption={key:string;name:string;cost:number;effectCount:number;description?:string;sets?:{key:string;name:string}[];attacks?:string[];sourceGap?:{status:string;checkedCommit:string;sourceUrl:string};};
 const categories=[
  {id:'buffs',name:'Resonator',help:'Conditional effects for this resonator. Permanent bonuses are shown separately below.'},
- {id:'weaponPassives',name:'Signature weapon',help:'Effects from the standardized signature weapon. Permanent passives apply automatically.'},
+ {id:'weaponPassives',name:'Benchmark weapon',help:'Effects from the standardized benchmark weapon. Permanent passives apply automatically.'},
  {id:'echoSetPassives',name:'Sonata · equipped sets',help:'Configure set conditions here. Each effect applies only to builds wearing the required Sonata set.'},
  {id:'mainEchoBuff',name:'Main Echo · equipped only',help:'Browse the complete pinned Echo catalog by cost. An effect applies only when that Echo occupies the build’s main slot.'},
 ];
