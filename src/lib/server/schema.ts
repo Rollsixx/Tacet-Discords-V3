@@ -275,5 +275,9 @@ export const migrations = [
   {version:28,statements:[
     "ALTER TABLE hof_tournaments ADD COLUMN soft_deleted_at TEXT",
   ]},
+  {version:29,statements:[
+    "INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES('feature:hof-match-flow','false',datetime('now'))",
+  ]},
 ];
+
 
