@@ -76,7 +76,7 @@ for (const entry of ["bracket", "queue"] as const) {
     }
     await action("Go live").click();
     await expect(dialog).toHaveAccessibleName("Live match");
-    await dialog.getByText("Rover", { exact: true }).click();
+    await dialog.getByRole("group", { name: "Select the winning entrant" }).getByText("Rover", { exact: true }).click();
     await expect(dialog.getByRole("radio", { name: "Rover" })).toBeChecked();
     page.once("dialog", confirmation => confirmation.accept());
     await action("Report winner for verification").click();
