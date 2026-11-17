@@ -30,6 +30,16 @@ export async function seedHallOfFameMatches(db) {
         sql: "INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_a')",
         args: [slug+"-2-1",slug+"-1-1"],
       });
+      if (entry === "queue") {
+        await db.execute({
+          sql: "INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,bracket_position,updated_at) VALUES(?,?,2,'Third-place match',1,'third_place',0,?)",
+          args: [slug+"-third",slug,now],
+        });
+        await db.execute({
+          sql: "INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'loser','participant_b')",
+          args: [slug+"-third",slug+"-1-1"],
+        });
+      }
     }
   }
 }

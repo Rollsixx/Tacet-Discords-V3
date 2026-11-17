@@ -4,7 +4,7 @@ import {database,migrateOnce} from "@/lib/server/database";
 import {failure,json,readJson} from "@/lib/server/http";
 import {HttpError} from "@/lib/server/validation";
 import {isFeatureEnabled} from "@/lib/server/feature-flags.mjs";
-import {draftOrder,initialMatchPhaseState,validateDraftStep} from "@/lib/server/hof-match-foundation.mjs";
+import {advancementSlot,draftOrder,initialMatchPhaseState,validateDraftStep} from "@/lib/server/hof-match-foundation.mjs";
 import {featuredResonators} from "@/lib/resonators";
 
 const statuses=["draft","announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","finalized","archived","suspended","cancelled"];
@@ -588,13 +588,14 @@ export async function POST(request:Request){
    const locked=await tx.execute({sql:"SELECT * FROM hof_matches WHERE id=?",args:[matchId]});
    const match=locked.rows[0];
    if(!match||match.state!=="pending_publication"||!match.winner_id)throw new HttpError(409,"Only a recorded result can be published.");
+   if(body.version!==undefined&&Number(body.version)!==Number(match.version))throw new HttpError(409,"The reported result changed. Review the updated result before verifying.");
    const dispute=await tx.execute({sql:"SELECT 1 FROM hof_disputes WHERE match_id=? AND state='open' LIMIT 1",args:[matchId]});
    if(dispute.rows.length)throw new HttpError(409,"Resolve the open dispute before publication.");
    const deps=await tx.execute({sql:"SELECT d.match_id,d.dependency_type,d.target_slot,target.participant_a,target.participant_b,source.match_order source_order FROM hof_match_dependencies d JOIN hof_matches target ON target.id=d.match_id JOIN hof_matches source ON source.id=d.depends_on_match_id WHERE d.depends_on_match_id=? ORDER BY d.match_id",args:[matchId]});
    for(const dep of deps.rows){
     const advancing=dep.dependency_type==="loser"?(match.winner_id===match.participant_a?match.participant_b:match.participant_a):match.winner_id;
     if(!advancing)throw new HttpError(409,"The advancing participant is missing.");
-    const slot=dep.target_slot==="participant_a"||dep.target_slot==="participant_b"?String(dep.target_slot):Number(dep.source_order)%2===1?"participant_a":"participant_b";
+    const slot=advancementSlot(dep.target_slot,dep.source_order);
     const occupied=dep[slot];
     if(occupied&&occupied!==advancing)throw new HttpError(409,"The next match slot is already occupied by another participant.");
     const other=slot==="participant_a"?dep.participant_b:dep.participant_a;
