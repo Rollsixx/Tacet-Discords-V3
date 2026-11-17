@@ -206,9 +206,9 @@ const slug=url.searchParams.get("slug");
   }
   let roster:any[]=[];if(slug&&await can(actor,"manage_event",slug,null,db)){const r=await db.execute({sql:"SELECT p.id,p.display_name,p.resonator_icon,r.state,r.published,r.seed_position,r.reserve_order FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? ORDER BY CASE r.state WHEN 'confirmed' THEN 0 WHEN 'reserve' THEN 1 ELSE 2 END,COALESCE(r.seed_position,r.reserve_order,9999),p.display_name COLLATE NOCASE",args:[slug]});roster=r.rows;}
   const reserves=roster.filter((row:any)=>row.state==="reserve");
-  const bossCatalog=await db.execute({sql:"SELECT name,icon_url FROM hof_boss_catalog WHERE enabled=1 ORDER BY name COLLATE NOCASE",args:[]});
+  const bossCatalog=await db.execute({sql:"SELECT c.name,c.icon_url FROM hof_boss_catalog c WHERE c.enabled=1 OR (lower(c.name) IN ('denia & myriad snare','nightmare: kelpie') AND (EXISTS(SELECT 1 FROM hof_tournament_bosses b WHERE b.tournament_slug=? AND b.boss_name=c.name) OR EXISTS(SELECT 1 FROM hof_tournaments t WHERE t.slug=? AND t.headline_boss=c.name))) ORDER BY c.name COLLATE NOCASE",args:[slug||"",slug||""]});
   let bossPool:any[]=[],draftSteps:any[]=[];
-  if(slug&&await can(actor,"manage_event",slug,null,db)){const pool=await db.execute({sql:"SELECT b.boss_name name,c.icon_url,b.pool_order FROM hof_tournament_bosses b JOIN hof_boss_catalog c ON c.name=b.boss_name WHERE b.tournament_slug=? AND c.enabled=1 ORDER BY b.pool_order",args:[slug]});bossPool=pool.rows;}
+  if(slug&&await can(actor,"manage_event",slug,null,db)){const pool=await db.execute({sql:"SELECT b.boss_name name,c.icon_url,b.pool_order FROM hof_tournament_bosses b JOIN hof_boss_catalog c ON c.name=b.boss_name WHERE b.tournament_slug=? ORDER BY b.pool_order",args:[slug]});bossPool=pool.rows;}
   const requestedMatchId=url.searchParams.get("matchId");
   if(requestedMatchId&&slug&&await can(actor,"draft_result",slug,requestedMatchId,db)){const steps=await db.execute({sql:"SELECT step_number,actor_slot,action,resonator,created_by,created_at FROM hof_draft_steps WHERE match_id=? ORDER BY step_number",args:[requestedMatchId]});draftSteps=steps.rows;}
   const phase3SafetyEnabled=await isFeatureEnabled("hof-phase-3-safety",db);
@@ -317,7 +317,7 @@ export async function POST(request:Request){
   if(foundationActions.has(action)&&!(await isFeatureEnabled("hof-match-foundation",db)))throw new HttpError(404,"This Hall of Fame feature is not enabled.");
   if(action==="upsert_boss_catalog"){
    await requireCan(actor,"global_admin",null,null,db);
-   const name=text(body.name,"Boss name",80),iconUrl=String(body.iconUrl||"").trim();
+   const name=text(body.name,"Boss name",80),iconUrl=String(body.iconUrl||"").trim();if(["denia & myriad snare","nightmare: kelpie"].includes(name.toLowerCase()))throw new HttpError(400,"This legacy alias is retired. Use Denia, Myriad Snare: Rustfire Chassis, or Kelpie instead.");
    if(iconUrl.length>500||iconUrl.startsWith("//")||iconUrl&&!iconUrl.startsWith("/")&&!/^https:\/\//i.test(iconUrl))throw new HttpError(400,"Boss artwork must use a site path or HTTPS URL.");
    await db.execute({sql:"INSERT INTO hof_boss_catalog(name,icon_url,enabled,created_at,updated_at) VALUES(?,?,1,?,?) ON CONFLICT(name) DO UPDATE SET icon_url=excluded.icon_url,enabled=1,updated_at=excluded.updated_at",args:[name,iconUrl,now,now]});
    await audit(db,actor,"boss_catalog_update",null,{}, {name,iconUrl});return json({ok:true,name});
@@ -328,7 +328,7 @@ export async function POST(request:Request){
    if(![3,4].includes(bansPerPlayer))throw new HttpError(400,"Choose three or four bans per player.");
    const event=(await db.execute({sql:"SELECT headline_boss,bans_per_player,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event)throw new HttpError(404,"Tournament not found.");
    if(!["draft","announced","registration_open","registration_closed"].includes(String(event.status)))throw new HttpError(409,"Event match rules are locked after bracket preparation.");
-   const boss=(await db.execute({sql:"SELECT name FROM hof_boss_catalog WHERE name=? COLLATE NOCASE AND enabled=1",args:[headlineBoss]})).rows[0];if(!boss)throw new HttpError(400,"Choose a boss from the enabled catalog.");
+   const boss=(await db.execute({sql:"SELECT name FROM hof_boss_catalog WHERE name=? COLLATE NOCASE AND (enabled=1 OR name=? COLLATE NOCASE)",args:[headlineBoss,event.headline_boss||event.boss]})).rows[0];if(!boss)throw new HttpError(400,"Choose a boss from the enabled catalog.");
    await db.execute({sql:"UPDATE hof_tournaments SET boss=?,headline_boss=?,bans_per_player=?,updated_at=?,version=version+1 WHERE slug=?",args:[String(boss.name),String(boss.name),bansPerPlayer,now,slug]});
    await audit(db,actor,"setup_edit",slug,event,{headlineBoss:String(boss.name),bansPerPlayer});return json({ok:true,headlineBoss:String(boss.name),bansPerPlayer,draftSteps:draftOrder(bansPerPlayer).length});
   }
@@ -340,7 +340,7 @@ export async function POST(request:Request){
    const event=(await db.execute({sql:"SELECT status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event)throw new HttpError(404,"Tournament not found.");
    if(!["draft","announced","registration_open","registration_closed"].includes(String(event.status)))throw new HttpError(409,"The boss pool is locked after bracket preparation.");
    const used=(await db.execute({sql:"SELECT 1 FROM hof_matches WHERE tournament_slug=? AND phase_state IN ('setting_up','live','complete') LIMIT 1",args:[slug]})).rows.length>0;if(used)throw new HttpError(409,"The boss pool cannot change after a match has started.");
-   for(const name of names){const row=(await db.execute({sql:"SELECT name FROM hof_boss_catalog WHERE name=? COLLATE NOCASE AND enabled=1",args:[name]})).rows[0];if(!row)throw new HttpError(400,"Every pool boss must be present in the enabled catalog.");}
+   for(const name of names){const row=(await db.execute({sql:"SELECT c.name FROM hof_boss_catalog c WHERE c.name=? COLLATE NOCASE AND (c.enabled=1 OR EXISTS(SELECT 1 FROM hof_tournament_bosses b WHERE b.tournament_slug=? AND b.boss_name=c.name))",args:[name,slug]})).rows[0];if(!row)throw new HttpError(400,"New pool bosses must be present in the enabled catalog; legacy entries can only be retained or removed.");}
    tx=await db.transaction("write");
    const before=(await tx.execute({sql:"SELECT boss_name FROM hof_tournament_bosses WHERE tournament_slug=? ORDER BY pool_order",args:[slug]})).rows.map((row:any)=>String(row.boss_name));
    await tx.execute({sql:"DELETE FROM hof_tournament_bosses WHERE tournament_slug=?",args:[slug]});
