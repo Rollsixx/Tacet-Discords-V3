@@ -56,7 +56,7 @@ function MatchControl({match, renderControls,matchFlow}: {matchFlow?:boolean;mat
   panel.current?.focus();
   const close = (event: Event) => {if (String((event as CustomEvent).detail) === match.id) setOpen(false);};
   const key = (event: KeyboardEvent) => {
-   if (event.key === "Escape") {event.preventDefault(); event.stopImmediatePropagation(); setOpen(false);}
+   if (event.key === "Escape") {event.preventDefault(); event.stopImmediatePropagation(); const pickerClose=panel.current?.querySelector<HTMLButtonElement>("[data-hof-picker-close]"); if(pickerClose)pickerClose.click(); else setOpen(false);}
    if (event.key !== "Tab") return;
    const controls = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]') ?? [])].filter(el => el.getClientRects().length);
    const first = controls[0], last = controls[controls.length - 1];
@@ -70,7 +70,7 @@ function MatchControl({match, renderControls,matchFlow}: {matchFlow?:boolean;mat
  return <>
   <button ref={trigger} type="button" className="tb-match-action" aria-label={`${label}: ${match.roundLabel || "round " + match.round}, match ${match.order}`} title={label} onClick={() => setOpen(true)}><Icon name={canReport(match) ? "edit" : match.state === "pending_publication" ? "check" : "info"}/></button>
   {open && createPortal(<div className="tb-dialog-overlay" onPointerDown={e => {if (e.target === e.currentTarget) setOpen(false);}}>
-   <div ref={panel} className="tb-manage-panel" role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1}>
+   <div ref={panel} className={`tb-manage-panel${matchFlow&&["setting_up","live"].includes(match.phaseState)?" tb-match-workspace":""}`} role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1}>
     <div className="tb-dialog-heading"><div><span className="tb-dialog-eyebrow">{match.side === "third_place" ? "Third-place playoff" : `${match.roundLabel || "Round " + match.round} · Match ${match.order}`}</span><h2 id={headingId}>{label}</h2></div><button type="button" className="tb-dialog-close" aria-label="Close match details" onClick={() => setOpen(false)}><Icon name="close"/></button></div>
     {!phaseLabel && canReport(match) && <p className="tb-dialog-help">Select the winning player, then submit to confirm the result.</p>}
     {!phaseLabel && !canReport(match) && match.state !== "pending_publication" && <p className="tb-dialog-help">{isFinished(match) ? `${match.winnerId === match.aId ? match.aName : match.bName || "The winner"} won this match.` : "This match will be ready when both players have advanced."}</p>}
@@ -237,14 +237,62 @@ const STYLES = `
 .hof-admin .bracket-fullscreen:fullscreen>.tournament-bracket-view{flex:1;min-height:0;display:flex;flex-direction:column}
 .hof-admin .bracket-fullscreen:fullscreen .tb-lane{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
 .hof-admin .bracket-fullscreen:fullscreen .tb-scroll{flex:1;height:auto;min-height:0}
-.tb-manage-panel .hof-setup-panel{display:grid;gap:12px;margin-block:16px}
-.tb-manage-panel .hof-setup-panel :is(h3,h4,p){margin:0}
-.tb-manage-panel .hof-draft-teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.tb-manage-panel .hof-draft-teams section{padding:10px;border:1px solid #3b5462;border-radius:8px;overflow-wrap:anywhere}
-.tb-manage-panel .hof-draft-entry{display:grid;gap:8px}
-.tb-manage-panel .hof-resonator-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;max-height:260px;overflow:auto}
-.tb-manage-panel .hof-resonator-grid img{display:block;max-width:48px;height:auto;margin:auto}
-.tb-manage-panel .hof-admin-match button:focus-visible{outline:2px solid #aeeae4;outline-offset:2px}
+.tb-manage-panel.tb-match-workspace{width:min(1080px,100%);color:#e2edf1;scrollbar-gutter:stable}
+.tb-match-workspace .tb-dialog-heading{position:sticky;top:-24px;z-index:2;background:#12212b;padding-block:12px;border-bottom:1px solid #30434f}
+.tb-match-workspace .hof-admin-match>strong{font-size:18px}
+.tb-manage-panel .hof-setup-panel{display:grid;gap:16px;margin-block:16px}
+.tb-manage-panel .hof-setup-panel :is(h3,h4,h5,p){margin:0}
+.hof-setup-panel .hof-setup-stages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
+.hof-setup-stages li{padding:10px 8px;border-bottom:2px solid #38505d;color:#a9bfcb;text-align:center;font-size:13px;font-weight:700}
+.hof-setup-stages li[aria-current=step]{border-color:#84decc;color:#a0f2e3;background:#203b41}
+.hof-setup-panel .hof-setup-section{display:grid;gap:12px;padding:16px;border:1px solid #324c5c;border-radius:12px;background:#0e1b24;min-width:0}
+.hof-setup-panel .hof-section-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.hof-setup-panel .hof-section-heading small,.hof-setup-hint{color:#a9c0cc;font-size:13px}
+.hof-setup-panel .hof-setup-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hof-setup-panel .hof-setup-footer{position:sticky;bottom:-1px;z-index:1;justify-content:flex-end;padding:10px 0;background:#12212b;border-top:1px solid #30434f}
+.tb-manage-panel .hof-setup-actions button,.tb-manage-panel .hof-section-heading button{min-height:44px;padding:8px 14px;border:1px solid #4b6b7a;border-radius:8px;background:#1b303d;color:#e3eff5;font-weight:650}
+.tb-manage-panel .hof-setup-actions .hof-primary{background:#84decc;color:#092620;border-color:#84decc}
+.tb-manage-panel .hof-setup-panel button:disabled{cursor:default}
+.hof-setup-panel .hof-boss-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:8px;max-height:235px;overflow:auto}
+.hof-setup-panel .hof-boss-options button,.hof-setup-panel .hof-saved-boss,.hof-setup-panel .hof-reel-item{display:flex;align-items:center;gap:10px;min-width:0;text-align:left;overflow-wrap:anywhere}
+.hof-setup-panel .hof-boss-options button{padding:8px;border:1px solid #38505f;border-radius:8px;background:#172936;color:#e6f0f5}
+.hof-setup-panel .hof-boss-options button[aria-pressed=true]{border-color:#84decc;background:#204642}
+.hof-setup-panel .hof-boss-icon{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;border:1px solid #3a5665;border-radius:8px;background:#10212b}
+.hof-setup-panel .hof-boss-icon img{width:100%;height:100%;object-fit:contain}
+.hof-setup-panel .hof-saved-boss{font-weight:700}
+.hof-setup-panel .hof-saved-boss small{margin-left:auto;color:#9ae6d7;font-weight:600}
+.hof-setup-panel .hof-roll{display:grid;gap:6px;max-width:380px;color:#a9ded5}
+.hof-setup-panel .hof-reel-window{--reel-row:58px;height:var(--reel-row);overflow:hidden;border:1px solid #5e8d8e;border-radius:8px;background:#142a32;box-sizing:content-box}
+.hof-setup-panel .hof-reel-item{height:var(--reel-row);padding-inline:10px;color:#dff7f1;font-weight:700}
+.hof-setup-panel .hof-reel-track.is-spinning{animation:hof-boss-reel 1.65s cubic-bezier(.14,.65,.14,1) both}
+@keyframes hof-boss-reel{to{transform:translateY(calc(-100% + var(--reel-row)))}}
+.hof-setup-panel .hof-current-turn{background:#243c47;color:#b6f4e9;padding:5px 9px;border-radius:6px;font-size:13px;font-weight:700;overflow-wrap:anywhere}
+.hof-setup-panel .hof-draft-progress{width:100%;height:7px;accent-color:#84decc}
+.hof-setup-panel .hof-draft-teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.hof-setup-panel .hof-draft-team{display:grid;align-content:start;gap:12px;min-width:0;padding:12px;border:1px solid #3b5462;border-radius:10px;background:#132530;overflow-wrap:anywhere}
+.hof-setup-panel .hof-draft-team[data-turn=true]{border-color:#68b1aa}
+.hof-setup-panel .hof-slot-row{display:grid;gap:6px}
+.hof-setup-panel .hof-slot-row h5{font-size:12px;color:#bdd0da}
+.hof-setup-panel .hof-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.hof-setup-panel .hof-slots[data-count="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}
+.hof-setup-panel .hof-draft-slot,.hof-setup-panel .hof-resonator-grid button{display:grid;place-items:center;align-content:center;gap:4px;min-width:0;min-height:74px;padding:5px;border:1px dashed #496472;border-radius:8px;background:#0f1d26;color:#b7cbd5;text-align:center;font-size:11px;overflow-wrap:anywhere}
+.hof-setup-panel .hof-draft-slot:disabled:not([data-filled=true]){opacity:.8}
+.hof-setup-panel .hof-draft-slot[data-filled=true]{opacity:1;border-style:solid;background:#1b3340;color:#e7f3f7}
+.hof-setup-panel .hof-draft-slot[data-action=ban][data-filled=true]{border-color:#a47679;background:#352832}
+.hof-setup-panel .hof-draft-slot[data-current=true]:enabled{border:1px solid #84decc;background:#1d3c42;color:#b1f4e9;cursor:pointer}
+.hof-setup-panel .hof-slot-placeholder{font-size:20px;line-height:1}
+.hof-setup-panel .hof-draft-slot img,.hof-setup-panel .hof-resonator-grid img{display:block;width:38px;max-width:100%;height:auto}
+.hof-setup-panel .hof-resonator-picker{display:grid;gap:10px;padding:12px;border:1px solid #68b1aa;border-radius:10px;background:#182d38}
+.hof-setup-panel .hof-resonator-picker input{display:block;width:100%;box-sizing:border-box;min-height:40px;margin-top:4px;padding:6px 10px;color:#e2edf1;background:#0b1923;border:1px solid #537281;border-radius:6px}
+.hof-setup-panel .hof-resonator-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(85px,100%),1fr));gap:6px;max-height:250px;overflow:auto}
+.hof-setup-panel .hof-resonator-grid button{border-style:solid;cursor:pointer}
+.hof-setup-panel button:focus-visible{outline:2px solid #aeeae4;outline-offset:2px}
+@media(max-width:650px){
+ .tb-match-workspace .tb-dialog-heading{top:-20px}
+ .hof-setup-panel .hof-draft-teams{grid-template-columns:minmax(0,1fr)}
+ .hof-setup-panel .hof-setup-section{padding:10px}
+}
+@media(prefers-reduced-motion:reduce){.hof-setup-panel .hof-reel-track.is-spinning{animation-duration:.01ms}}
 .tb-dialog-overlay{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:#030a10c9;backdrop-filter:blur(5px)}
 .tb-manage-panel{box-sizing:border-box;position:relative;z-index:1;width:min(500px,100%);max-height:calc(100dvh - 40px);overflow:auto;padding:24px;border:1px solid #3a5665;border-radius:14px;background:#12212b;color:#e6eff2;box-shadow:0 24px 80px #0009;font-family:inherit;outline:none}
 .tb-manage-panel *{box-sizing:border-box}

@@ -33,10 +33,20 @@ for (const entry of ["bracket", "queue"] as const) {
     expect(blocked.status()).toBe(409);
     expect((await mutation({ action: "start_match", matchId: slug+"-1-1" })).status()).toBe(409);
 
-    const boss = dialog.getByRole("combobox", { name: "Choose boss" });
+    const stepCount = entry==="queue"?14:12;
+    const boss = action("Choose boss");
+    const firstSlot = action("Rover ban 1");
+    const width = (await dialog.boundingBox())!.width;
+    const viewport = page.viewportSize()!.width;
+    expect(width).toBeLessThanOrEqual(viewport);
+    if (info.project.name === "desktop") expect(width).toBeGreaterThan(900);
+    let expectedBoss = "Dreamless";
     if (entry === "bracket") {
-      await boss.selectOption("Dreamless");
-      await expect(action("Choose a Resonator")).toBeDisabled();
+      await boss.click();
+      const dreamless = action("Dreamless");
+      await expect(dreamless.locator("img")).toBeVisible();
+      await dreamless.click();
+      await expect(firstSlot).toBeDisabled();
       await page.route("**/api/hall-of-fame/admin", async route => {
         if (route.request().method() === "POST" && route.request().postDataJSON().action === "save_match_details") {
           await route.fulfill({ status: 503, json: { error: "Boss save unavailable. Try again." } });
@@ -46,13 +56,22 @@ for (const entry of ["bracket", "queue"] as const) {
       }, { times: 1 });
       await action("Save boss").click();
       await expect(dialog.getByRole("alert")).toHaveText("Boss save unavailable. Try again.");
-      await expect(boss).toHaveValue("Dreamless");
+      await expect(dreamless).toHaveAttribute("aria-pressed", "true");
       await action("Save boss").click();
     } else {
+      if (info.project.name === "mobile") await page.emulateMedia({ reducedMotion: "reduce" });
       await action("Roll from pool").click();
+      if (info.project.name === "desktop") await expect(dialog.locator(".hof-reel-track.is-spinning")).toBeVisible();
+      const rolled = dialog.getByText(/^Pool roll selected (Dreamless|Hecate)$/);
+      await expect(rolled).toBeVisible();
+      expectedBoss = (await rolled.innerText()).replace("Pool roll selected ", "");
+      await expect(dialog.locator(".hof-reel-item")).toHaveText(expectedBoss);
+      const saved = await request.get(`/api/hall-of-fame/admin?slug=${slug}`, { headers: { Authorization: `Bearer ${token}` } });
+      expect((await saved.json()).matches.find((match: {id:string})=>match.id===slug+"-1-1").match_boss).toBe(expectedBoss);
     }
-    await expect(dialog.getByText("Saved boss:", { exact: false })).toContainText("Dreamless");
-    await expect(action("Choose a Resonator")).toBeEnabled();
+    await expect(dialog.locator(".hof-saved-boss")).toContainText(expectedBoss);
+    await expect(firstSlot).toBeEnabled();
+    await expect(dialog.getByRole("button", { name: /Rover pick [1-3]/ })).toHaveCount(3);
     await expect(action("Go live")).toBeDisabled();
 
     const earlyStart = await mutation({ action: "start_match", matchId: slug+"-1-1" });
@@ -60,18 +79,29 @@ for (const entry of ["bracket", "queue"] as const) {
     expect((await earlyStart.json()).error).toContain("Complete the draft");
 
     const names = ["Carlotta","Cartethyia","Aemeath","Hiyuki","Chisa","Jingran","Lucy","Lucilla","Rebecca","Denia","Sigrika","Shorekeeper"];
+    if(stepCount===14){
+      names.push("Brant","Jiyan");
+      await expect(action("Rover ban 4")).toBeVisible();
+    }
+    await firstSlot.click();
+    await expect(dialog.getByLabel("Search Resonators")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(firstSlot).toBeFocused();
+    await expect(dialog).toBeVisible();
     for (const [index, name] of names.entries()) {
-      await action("Choose a Resonator").click();
+      await dialog.locator('.hof-draft-slot[data-current="true"]').click();
       await dialog.getByLabel("Search Resonators").fill(name);
+      await expect(action(name).locator("img")).toBeVisible();
       await action(name).click();
       await action("Save draft step").click();
-      await expect(dialog.getByRole("heading", { name: `Draft · ${index+1}/12` })).toBeVisible();
+      await expect(dialog.getByRole("heading", { name: `Draft · ${index+1}/${stepCount}` })).toBeVisible();
       if (index === 0) {
         await page.reload();
         await signIn();
         await page.getByRole("button", { name: "Continue setup", exact: true }).click();
-        await expect(dialog.getByRole("heading", { name: "Draft · 1/12" })).toBeVisible();
+        await expect(dialog.getByRole("heading", { name: `Draft · 1/${stepCount}` })).toBeVisible();
         await expect(boss).toBeDisabled();
+        await expect(action("Rover ban 1: Carlotta").locator("img")).toBeVisible();
       }
     }
     await action("Go live").click();
