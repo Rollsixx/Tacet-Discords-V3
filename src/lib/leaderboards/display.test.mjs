@@ -8,6 +8,7 @@ test('leaderboard displays source stats without adding base or main stats to Ech
  assert.equal(mainStatAmount('1','DEF'),'18%');
  assert.equal(mainStatAmount('1','unknown'),'');
  assert.equal(readableName('WishesOfQuietSnowfall'),'Wishes Of Quiet Snowfall');
+ assert.equal(readableName('WishesofQuietSnowfall'),'Wishes of Quiet Snowfall');
  assert.deepEqual(shortStat('Resonance Liberation 8.6%'),{label:'Liberation DMG',amount:'8.6%',critical:false});
  assert.equal(compactNumber(undefined),'—');
 });

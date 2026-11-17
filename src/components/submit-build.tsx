@@ -18,7 +18,7 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
   const [avatarCharacter,setAvatarCharacter] = useState("");
   const [busy, setBusy] = useState(false);
   const [id, setId] = useState("");
-  const [submissionStatus,setSubmissionStatus]=useState<"under_review"|"approved_ranked">("under_review");
+  const [submissionStatus,setSubmissionStatus]=useState<"under_review"|"approved_ranked"|"approved_unranked">("under_review");
   const [finalReadiness,setFinalReadiness]=useState<ScoringReadiness|null>(null);
   const [rankResult,setRankResult]=useState<{rank:number;score:number}|null>(null);
   const [error, setError] = useState("");
@@ -45,9 +45,9 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Submission failed.");
-      const approved=data.status==="approved";
-      setSubmissionStatus(approved?"approved_ranked":"under_review");
+      const approved=data.status==="approved"&&data.readiness?.ready===true;
       setFinalReadiness(data.readiness||null);
+      setSubmissionStatus(approved?"approved_ranked":data.status==="approved"?"approved_unranked":"under_review");
       setId(data.id);
       try{localStorage.setItem("tacet-my-uid",uid);}catch{}
       onSubmitted?.();
@@ -63,16 +63,17 @@ export function SubmitBuild({ file, result, readiness, checking=false, onSubmitt
     catch { setCopyStatus("Select and copy the submission ID."); }
   }
   const approved=submissionStatus==="approved_ranked";
-  const statusLabel=approved?"Approved and ranked":"Under review";
-  if (id) return <section className={`submission-receipt ${approved ? "receipt-approved" : "receipt-pending"}`} role="status" aria-label="Submission confirmation">
-    <div className="receipt-icon" aria-hidden="true">{approved?"✓":"…"}</div>
-    <div className="receipt-content"><div className="receipt-status-row"><span className={`receipt-state-badge${approved?" is-approved":" is-pending"}`}>{statusLabel}</span>{approved&&<span className="receipt-identity-proof" title="Your UID and original screenshot were verified during submission.">Identity verified ⓘ</span>}</div><h2>{approved?"Your build is approved and ranked":"Your build is under review"}</h2>
-      <p className="muted">{approved?`Your ${characterLabel} build passed verification and scoring checks.`:`Your ${characterLabel} build was received. It will appear publicly after the required identity, equipment, and scoring checks are complete.`}</p>
+  const publishedUnranked=submissionStatus==="approved_unranked";
+  const statusLabel=approved?"Approved and ranked":publishedUnranked?"Approved · not rank-ready":"Under review";
+  if (id) return <section className={`submission-receipt ${approved ? "receipt-approved" : publishedUnranked ? "receipt-unranked" : "receipt-pending"}`} role="status" aria-label="Submission confirmation">
+    <div className="receipt-icon" aria-hidden="true">{approved||publishedUnranked?"✓":"…"}</div>
+    <div className="receipt-content"><div className="receipt-status-row"><span className={`receipt-state-badge${approved?" is-approved":publishedUnranked?" is-unranked":" is-pending"}`}>{statusLabel}</span>{(approved||publishedUnranked)&&<span className="receipt-identity-proof" title="Your UID and original screenshot were verified during submission.">Identity verified ⓘ</span>}</div><h2>{approved?"Your build is approved and ranked":publishedUnranked?"Your build is approved but not rank-ready":"Your build is under review"}</h2>
+      <p className="muted">{approved?`Your ${characterLabel} build passed verification and scoring checks.`:publishedUnranked?`Your ${characterLabel} build is approved but currently has no eligible leaderboard score. See the scoring details below for the reason.`:`Your ${characterLabel} build was received. It will appear publicly after the required identity, equipment, and scoring checks are complete.`}</p>
       {approved&&<div className="receipt-placement" aria-live="polite">{rankResult?<><span>Leaderboard placement</span><strong>Rank #{rankResult.rank}</strong><strong>{rankResult.score.toLocaleString(undefined,{maximumFractionDigits:0})} <small>benchmark damage</small></strong></>:<span>Rank and benchmark damage are syncing…</span>}</div>}
       <dl className="receipt-player"><div><dt>Player</dt><dd>{ign}</dd></div><div><dt>Resonator</dt><dd>{characterLabel}</dd></div><div><dt>UID</dt><dd>{uid}</dd></div></dl>
       <div className="receipt-reference"><div><span>Submission ID</span><code>{id}</code></div><div className="receipt-reference-actions"><button type="button" className="outline-button" onClick={copyId}>{copyStatus==="Copied"?"Copied":"Copy ID"}</button><a className="outline-button" href={`/submission-status?id=${encodeURIComponent(id)}`}>Check status</a></div></div>
       {copyStatus && copyStatus!=="Copied"&&<p className="muted">{copyStatus}</p>}
-      <details className="receipt-verification"><summary>View verification details</summary><dl><div><dt>Submission status</dt><dd>{statusLabel}</dd></div><div><dt>Screenshot and UID</dt><dd>{approved?"Verified":"Pending server check"}</dd></div><div><dt>Echo stats</dt><dd>{finalReadiness?.stats?"Verified":finalReadiness?"Needs attention":"Pending server check"}</dd></div><div><dt>Scoring eligibility</dt><dd>{approved?"Verified":finalReadiness?.ready?"Pending server check":"Needs attention"}</dd></div></dl>{finalReadiness?.reason&&<p>{finalReadiness.reason}</p>}</details>
+      <details className="receipt-verification"><summary>View verification details</summary><dl><div><dt>Submission status</dt><dd>{statusLabel}</dd></div><div><dt>Screenshot and UID</dt><dd>{approved||publishedUnranked?"Verified":"Pending server check"}</dd></div><div><dt>Echo stats</dt><dd>{finalReadiness?.stats?"Verified":finalReadiness?"Needs attention":"Pending server check"}</dd></div><div><dt>Scoring eligibility</dt><dd>{approved?"Verified":finalReadiness?.ready?"Pending server check":"Needs attention"}</dd></div></dl>{finalReadiness?.reason&&<p>{finalReadiness.reason}</p>}</details>
       <div className="receipt-actions">{approved&&<><a className="action" href={`/leaderboards?character=${encodeURIComponent(character)}`}>View on leaderboard <span aria-hidden="true">→</span></a><a className="outline-button" href={`/profiles?uid=${encodeURIComponent(uid)}`}>View my profile</a></>}{onReset&&<button type="button" className="text-link receipt-import-another" onClick={onReset}>Import another build</button>}</div>
       <p className="receipt-note">Status: {statusLabel}. Keep the Submission ID to check for updates.</p>
     </div>
