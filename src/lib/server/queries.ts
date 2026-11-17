@@ -8,7 +8,7 @@ import {orderProfileBuildsByRank} from '../leaderboards/profile-rank-order.mjs';
 import {buildDataConsistencyReport} from '../leaderboards/consistency-report.mjs';
 import {database} from './database.ts';
 import {HttpError} from './validation.ts';
-import {featuredResonators} from '../resonators.ts';
+import {featuredResonators,leaderboardCharacterKey,leaderboardCharacterMembers,leaderboardResonators} from '../resonators.ts';
 import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 import {scoringReadiness} from './scoring-info.ts';
 import {rotationPolicyReady} from '../game-data/scoring-policies.mjs';
@@ -39,15 +39,16 @@ export async function listBuilds(options: { search?: string; character?: string;
     // This client may be an in-memory SQLite database with a single connection;
     // rank-history writes must not race one another inside Promise.all.
     const resonators=[...new Set(builds.map(build=>build.character))];
-    const snapshots=await ensureFreshRankHistories(resonators,db);
+    const snapshots=await ensureFreshBoardHistories(resonators,db);
     const histories=new Map<string,RankHistoryEntry>();
     for(const resonator of resonators){
       const uid=options.uid||builds.find(build=>build.character===resonator)!.uid;
-      const history=snapshots.get(resonator)?.[uid];
+      const history=snapshots.get(leaderboardCharacterKey(resonator))?.[uid];
       if(history)histories.set(resonator,history);
     }
     builds=builds.map(build=>{
-      const ranked=histories.get(build.character);
+      const history=histories.get(build.character);
+      const ranked=leaderboardCharacterMembers(build.character).length>1&&history?.buildId!==build.id?undefined:history;
       return {...build,rank:ranked?.rank??null,rankMovement:ranked?.movement??null,rankSince:ranked?.rankSince??null,rankTrackingSince:ranked?.trackingSince??null,rankDays:ranked?.rankSince?Math.max(0,Math.floor((Date.now()-Date.parse(ranked.rankSince))/86400000)):null,bestRank:ranked?.bestRank??null,bestTop1Days:ranked?.bestTop1Days??null,rankHasHistory:ranked?.previousRank!==null&&ranked?.previousRank!==undefined};
     });
   }
@@ -168,6 +169,29 @@ async function ensureFreshRankHistories(characters:string[],db:Client):Promise<M
  return states;
 }
 
+// Combine the best active build for each UID across the member snapshots.
+function boardHistory(character:string,snapshots:Map<string,Record<string,RankHistoryEntry>>):Record<string,RankHistoryEntry>{
+ const members=leaderboardCharacterMembers(character);
+ if(members.length===1)return snapshots.get(members[0])||{};
+ const ordered=members.flatMap(member=>Object.entries(snapshots.get(member)||{}))
+  .filter(([,entry])=>entry.active!==false&&entry.buildId&&Number.isFinite(entry.score))
+  .sort(([,a],[,b])=>Number(b.score)-Number(a.score)||String(a.buildId).localeCompare(String(b.buildId)));
+ const merged:Record<string,RankHistoryEntry>={};
+ let rank=0;
+ for(const [uid,entry] of ordered){
+  if(Object.hasOwn(merged,uid))continue;
+  // The underlying variant's historical rank is not a combined board rank.
+  merged[uid]={rank:++rank,previousRank:null,movement:null,rankSince:null,buildId:entry.buildId,ign:entry.ign,score:entry.score};
+ }
+ return merged;
+}
+
+async function ensureFreshBoardHistories(characters:string[],db:Client){
+ const boards=[...new Set(characters.map(leaderboardCharacterKey))];
+ const snapshots=await ensureFreshRankHistories(boards.flatMap(leaderboardCharacterMembers),db);
+ return new Map(boards.map(board=>[board,boardHistory(board,snapshots)]));
+}
+
 export async function refreshLeaderboardRankHistory(db:Client=database(),options:{force?:boolean;characters?:string[]}={}){
  const requested=options.characters?.filter(character=>SUPPORTED.includes(character))||[];
  let characters:string[];
@@ -213,11 +237,13 @@ export async function medalStandings(db:Client=database(),options:{refresh?:bool
 
 async function medalStandingsFor(db:Client,characters:string[],refresh:boolean){
  if(refresh)await refreshLeaderboardRankHistory(db);
- const marks=characters.map(()=>"?").join(",");
- const snapshots=characters.length?(await db.execute({sql:`SELECT character,state FROM leaderboard_rank_history WHERE character IN (${marks})`,args:characters})).rows:[];
+ const members=characters.flatMap(leaderboardCharacterMembers);
+ const marks=members.map(()=>"?").join(",");
+ const snapshots=members.length?(await db.execute({sql:`SELECT character,state FROM leaderboard_rank_history WHERE character IN (${marks})`,args:members})).rows:[];
  const candidates:Array<{id:string;uid:string;ign:string;character:string;rank:number;score:number}>=[];
- for(const snapshot of snapshots){
-  const character=String(snapshot.character),state=parseRankState(snapshot.state);
+ const byCharacter=new Map(snapshots.map(snapshot=>[String(snapshot.character),parseRankState(snapshot.state)]));
+ for(const character of characters){
+  const state=boardHistory(character,byCharacter);
   for(const [uid,entry] of Object.entries(state))if(entry.active!==false&&Number(entry.rank)<=3&&entry.buildId)candidates.push({id:entry.buildId,uid,ign:entry.ign||uid,character,rank:Number(entry.rank),score:Number(entry.score)||0});
  }
  const uids=[...new Set(candidates.map(candidate=>candidate.uid))];
@@ -243,16 +269,18 @@ async function medalStandingsFor(db:Client,characters:string[],refresh:boolean){
 }
 
 export async function listLeaderboard(options:{character?:string;search?:string;page?:number;rotationPolicyId?:string|null}={},db:Client=database()){
- const character=options.character||SUPPORTED[0],page=Number.isFinite(options.page)?Math.min(10000,Math.max(1,Math.floor(options.page||1))):1;
- if(!SUPPORTED.includes(character))return {builds:[],page,hasMore:false,totalBuilds:0,scoring:scoringReadiness,rotationReady:false};
+ const character=leaderboardCharacterKey(options.character||SUPPORTED[0]),page=Number.isFinite(options.page)?Math.min(10000,Math.max(1,Math.floor(options.page||1))):1;
+ const members=leaderboardCharacterMembers(character);
+ const medalEligibility=await eligibleMedalCharacters(db);
+ if(!members.every(member=>SUPPORTED.includes(member)))return {builds:[],page,hasMore:false,totalBuilds:0,scoring:scoringReadiness,rotationReady:false,medalEligibility};
  const search=(options.search||"").slice(0,64).trim().toLowerCase();
- const policy=Object.prototype.hasOwnProperty.call(options,"rotationPolicyId")?{policy_id:options.rotationPolicyId}:(await db.execute({sql:"SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=?",args:[character]})).rows[0];
- const rotationReady=rotationPolicyReady(policy?.policy_id);
- const {state}=await ensureFreshRankHistory(character,db);
+ const policies=members.length===1&&Object.hasOwn(options,"rotationPolicyId")?[{policy_id:options.rotationPolicyId}]:(await db.execute({sql:`SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character IN (${members.map(()=>"?").join(",")})`,args:members})).rows;
+ const rotationReady=policies.some(policy=>rotationPolicyReady(policy.policy_id));
+ const state=(await ensureFreshBoardHistories([character],db)).get(character)||{};
  const matching=Object.entries(state).filter(([uid,entry])=>entry.active!==false&&Number.isInteger(Number(entry.rank))&&(!search||uid.toLowerCase().includes(search)||(entry.ign||"").toLowerCase().includes(search))).sort((a,b)=>Number(a[1].rank)-Number(b[1].rank)||a[0].localeCompare(b[0]));
  const pageEntries=matching.slice((page-1)*20,page*20);
  const builds=await loadRankedBuilds(pageEntries.map(([uid,history])=>({character,uid,history})),db);
- return {builds,page,hasMore:matching.length>page*20,totalBuilds:matching.length,scoring:scoringReadiness,rotationReady};
+ return {builds,page,hasMore:matching.length>page*20,totalBuilds:matching.length,scoring:scoringReadiness,rotationReady,medalEligibility};
 }
 
 export async function listLeaderboardRankChanges(limit=100,db:Client=database(),filters:{character?:string;player?:string;from?:string;to?:string}={}){
@@ -284,14 +312,17 @@ export async function leaderboardConsistencyReport(db:Client=database()){
   ORDER BY s.created_at DESC,s.id LIMIT 100`,args:[ENGINE_VERSION,DATA_VERSION,...SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
  const duplicateResult=await db.execute({sql:`SELECT uid,character,COUNT(*) AS count FROM submissions WHERE status='approved' AND replaced_by IS NULL GROUP BY uid,character HAVING COUNT(*)>1 ORDER BY count DESC,character,uid LIMIT 100`,args:[]});
  const medalCharacters=await eligibleMedalCharacters(db);
- const medalMarks=medalCharacters.map(()=>"?").join(",")||"NULL";
- const medalResult=await db.execute({sql:`WITH candidates AS (
-   SELECT s.id,s.uid,s.character,c.score,row_number() OVER(PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
+ const medalMembers=medalCharacters.flatMap(leaderboardCharacterMembers);
+ const medalMarks=medalMembers.map(()=>"?").join(",")||"NULL";
+ const combined=medalMembers.filter(member=>leaderboardCharacterKey(member)!==member);
+ const boardKey=combined.length?`CASE s.character ${combined.map(()=> "WHEN ? THEN ?").join(" ")} ELSE s.character END`:"s.character";
+ const medalResult=await db.execute({sql:`WITH scored AS (
+   SELECT s.id,s.uid,${boardKey} AS character,c.score
    FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
    WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character IN (${medalMarks})
     AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
-  ), ranked AS (SELECT uid,character,row_number() OVER(PARTITION BY character ORDER BY score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1)
-  SELECT uid,SUM(CASE WHEN global_rank=1 THEN 1 ELSE 0 END) AS gold,SUM(CASE WHEN global_rank=2 THEN 1 ELSE 0 END) AS silver,SUM(CASE WHEN global_rank=3 THEN 1 ELSE 0 END) AS bronze FROM ranked WHERE global_rank<=3 GROUP BY uid`,args:[...medalCharacters,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
+  ), candidates AS (SELECT *,row_number() OVER(PARTITION BY uid,character ORDER BY score DESC,id ASC) AS player_best FROM scored), ranked AS (SELECT uid,character,row_number() OVER(PARTITION BY character ORDER BY score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1)
+  SELECT uid,SUM(CASE WHEN global_rank=1 THEN 1 ELSE 0 END) AS gold,SUM(CASE WHEN global_rank=2 THEN 1 ELSE 0 END) AS silver,SUM(CASE WHEN global_rank=3 THEN 1 ELSE 0 END) AS bronze FROM ranked WHERE global_rank<=3 GROUP BY uid`,args:[...combined.flatMap(member=>[member,leaderboardCharacterKey(member)]),...medalMembers,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
  const expected=(await medalStandingsFor(db,medalCharacters,true)).players,profiles=new Map(medalResult.rows.map(row=>[String(row.uid),{gold:Number(row.gold),silver:Number(row.silver),bronze:Number(row.bronze)}]));
  const expectedByUid=new Map(expected.map(player=>[player.uid,{gold:player.gold,silver:player.silver,bronze:player.bronze}]));
  const medalMismatches=[...new Set([...profiles.keys(),...expectedByUid.keys()])].flatMap(uid=>{
@@ -346,9 +377,7 @@ export async function findPlayers(search = "", db: Client = database()) {
 export async function homeRankings(db: Client = database()) {
  const configuration=await homeFeaturedSettings(db);
  const names=configuration.featured.map(item=>item.name);
- await refreshLeaderboardRankHistory(db,{characters:names});
- const snapshots=names.length?await db.execute({sql:`SELECT character,state FROM leaderboard_rank_history WHERE character IN (${names.map(()=>"?").join(",")})`,args:names}):{rows:[] as Row[]};
- const byCharacter=new Map(snapshots.rows.map(row=>[String(row.character),parseRankState(row.state)]));
+ const byCharacter=await ensureFreshBoardHistories(names,db);
  const entries=names.flatMap(character=>Object.entries(byCharacter.get(character)||{}).filter(([,entry])=>entry.active!==false).sort((a,b)=>Number(a[1].rank)-Number(b[1].rank)).slice(0,5).map(([uid,history])=>({character,uid,history})));
  const ranked=await loadRankedBuilds(entries,db);
  const byBuild=new Map(ranked.map(build=>[build.id,build]));
@@ -358,11 +387,17 @@ export async function homeRankings(db: Client = database()) {
 }
 
 export async function homeFeaturedSettings(db:Client=database()) {
- const supported=featuredResonators.map(character=>character.name);
- const byName=new Map(featuredResonators.map(character=>[character.name,character]));
+ const supported=leaderboardResonators.map(character=>character.name);
+ const byName=new Map(leaderboardResonators.map(character=>[character.name,character]));
  const readSaved=async(client:Client):Promise<unknown>=>{
   const result=await client.execute({sql:"SELECT value FROM app_settings WHERE key='home_featured_rotation_v1'",args:[]});
-  try{return JSON.parse(String(result.rows[0]?.value||'null'));}catch{return null;}
+  try{
+   const saved=JSON.parse(String(result.rows[0]?.value||'null'));
+   if(!saved||!["pool","played","remaining","featured"].every(key=>Array.isArray(saved[key])))return saved;
+   const normalize=(list:string[])=>[...new Set(list.map(leaderboardCharacterKey))];
+   const played=normalize(saved.played);
+   return {...saved,pool:normalize(saved.pool),played,remaining:normalize(saved.remaining).filter(key=>!played.includes(key)),featured:normalize(saved.featured)};
+  }catch{return null;}
  };
  let saved=await readSaved(db);
  let resolved=resolveHomeRotation(saved,supported,Date.now());
@@ -382,7 +417,7 @@ export async function homeFeaturedSettings(db:Client=database()) {
  return {
   selected:names,
   featured:names.map(name=>byName.get(name)!).filter(Boolean),
-  options:featuredResonators.map(character=>({name:character.name,label:character.displayName||character.name,element:character.element})),
+  options:leaderboardResonators.map(character=>({name:character.name,label:character.displayName||character.name,element:character.element})),
   nextShuffleAt:state?new Date(state.nextShuffleAt).toISOString():null,
   cycle:state?.cycle||1,
   featuredThisCycle:state?.played.length||0,

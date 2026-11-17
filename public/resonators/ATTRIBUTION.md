@@ -32,3 +32,5 @@ Sigrika.png: 57288daa19dc5670e5605370768e93ddb889c6cc
 Additional supported Resonator portraits in this change are sourced from the same upstream asset project listed above: YangyangXuanling, LuukHerssen, Mornye, Lynae, Qiuyuan, Galbrena, Iuno, Augusta, Phrolova, Lupa, Zani, Ciaccona, Cantarella, Phoebe, Brant, Roccia, Shorekeeper, Zhezhi, Changli, XiangliYao, Jinhsi, Yinlin, Camellya, and Jiyan. These images are game artwork © KURO GAMES; upstream asset repository: https://github.com/ryanbenson/wuthering-waves-assets.
 
 The launch roster additions, Buling, Lumi, Youhu, Lily, and the Rover variants use portraits from the same companion asset repository. Lullaby's icon in `public/weapons` is from that repository's `images/weapons/Lullaby.png` and is game artwork © KURO GAMES.
+
+The combined Rover portrait (`Rover.png`) was supplied by the project owner. Game artwork © KURO GAMES.
