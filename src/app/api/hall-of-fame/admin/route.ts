@@ -303,7 +303,6 @@ export async function POST(request:Request){
    if(new Set(ids).size!==3)throw new HttpError(400,"Each podium place must be a different confirmed participant.");
    tx=await db.transaction("write");
    const event=(await tx.execute({sql:"SELECT title,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event)throw new HttpError(404,"Tournament not found.");if(String(event.status)==="cancelled")throw new HttpError(409,"A cancelled tournament cannot publish a podium.");
-   if(String(event.status)==="cancelled")throw new HttpError(409,"A cancelled tournament cannot publish a podium.");
    const incomplete=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=? AND state NOT IN ('published','no_result','cancelled','forfeited')",args:[slug]});if(Number(incomplete.rows[0]?.total||0))throw new HttpError(409,"Finish or resolve every match before publishing the podium.");
    for(const id of ids){const valid=await tx.execute({sql:"SELECT 1 FROM hof_roster WHERE tournament_slug=? AND participant_id=? AND state='confirmed'",args:[slug,id]});if(!valid.rows.length)throw new HttpError(409,"Only confirmed participants can be on the podium.");}
    const prior=(await tx.execute({sql:"SELECT * FROM hof_medals WHERE tournament_slug=?",args:[slug]})).rows;
