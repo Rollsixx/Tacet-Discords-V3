@@ -80,11 +80,17 @@ export async function GET(request:Request){
   if(section==="participants")return Response.json(await participants((url.searchParams.get("q")||"").slice(0,50),pageNumber(url.searchParams.get("page")),url.searchParams.get("sort")||"medals",db),{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
   if(section==="archive"){
    const search=(url.searchParams.get("q")||"").slice(0,50),page=pageNumber(url.searchParams.get("page"));
-   const result=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(boss),lower(?))>0) ORDER BY COALESCE(event_date,updated_at) DESC,slug DESC LIMIT 11 OFFSET ?`,args:[search,search,search,(page-1)*10]});
-   const count=await db.execute({sql:`SELECT COUNT(*) total FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(boss),lower(?))>0)`,args:[search,search,search]});
+   const requestedYear=(url.searchParams.get("year")||"").slice(0,4),year=/^\d{4}$/.test(requestedYear)?requestedYear:"";
+   const requestedBoss=(url.searchParams.get("boss")||"").slice(0,80),direction=url.searchParams.get("sort")==="oldest"?"ASC":"DESC";
+   const [result,count,yearRows,bossRows]=await Promise.all([
+    db.execute({sql:`SELECT * FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(boss),lower(?))>0) AND (?='' OR substr(COALESCE(event_date,updated_at),1,4)=?) AND (?='' OR boss=?) ORDER BY COALESCE(event_date,updated_at) ${direction},slug ${direction} LIMIT 11 OFFSET ?`,args:[search,search,search,year,year,requestedBoss,requestedBoss,(page-1)*10]}),
+    db.execute({sql:`SELECT COUNT(*) total FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(boss),lower(?))>0) AND (?='' OR substr(COALESCE(event_date,updated_at),1,4)=?) AND (?='' OR boss=?)`,args:[search,search,search,year,year,requestedBoss,requestedBoss]}),
+    db.execute({sql:`SELECT DISTINCT substr(COALESCE(event_date,updated_at),1,4) year FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 ORDER BY year DESC`,args:[]}),
+    db.execute({sql:`SELECT DISTINCT boss FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 ORDER BY boss COLLATE NOCASE`,args:[]})
+   ]);
    const events=await Promise.all(result.rows.slice(0,10).map(async(row:any)=>{const event=publicTournament(row);return {...event,medals:await officialMedals(event.slug,db)}}));
    const total=Number(count.rows[0]?.total||0);
-   return Response.json({items:events,total,page,perPage:10,hasMore:page*10<total},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
+   return Response.json({items:events,total,page,perPage:10,hasMore:page*10<total,years:yearRows.rows.map((row:any)=>String(row.year)).filter((value:string)=>/^\d{4}$/.test(value)),bosses:bossRows.rows.map((row:any)=>String(row.boss))},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
   }
   if(section==="event"){
    const event=await tournamentBySlug((url.searchParams.get("slug")||"").slice(0,80),db);

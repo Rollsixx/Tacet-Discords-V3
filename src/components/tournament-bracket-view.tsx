@@ -2,18 +2,19 @@
 
 import {useEffect, useId, useRef, useState} from "react";
 import type {PointerEvent, ReactNode} from "react";
+import {ResonatorPortrait} from "@/components/resonator-portrait";
 import {createPortal} from "react-dom";
 
 type Dependency = {dependsOnMatchId?: string; depends_on_match_id?: string; dependencyType?: string; dependency_type?: string; targetSlot?: string; target_slot?: string};
 type MatchInput = any;
-type Match = {id: string; round: number; roundLabel: string; order: number; position: number; side: string; state: string; aId: string | null; aName: string; bId: string | null; bName: string; winnerId: string | null; outcome: string; dependencies: Dependency[]; raw: MatchInput};
+type Match = {id: string; round: number; roundLabel: string; order: number; position: number; side: string; state: string; aId: string | null; aName: string; aIcon: string; bId: string | null; bName: string; bIcon: string; winnerId: string | null; outcome: string; dependencies: Dependency[]; raw: MatchInput};
 type Props = {matches: MatchInput[]; renderControls?: (match: MatchInput) => ReactNode};
 const CARD_WIDTH = 248, CARD_HEIGHT = 80, COLUMN_GAP = 56, HEADING_HEIGHT = 44;
 const isFinished = (match: Match) => ["published", "completed"].includes(match.state);
 const canReport = (match: Match) => ["ready", "scheduled", "in_progress"].includes(match.state) && Boolean(match.aId && match.bId);
 function normalize(match: MatchInput): Match {
  const position = match.bracketPosition ?? match.bracket_position;
- return {id: String(match.id), round: Number(match.round ?? match.round_number ?? 1), roundLabel: String(match.roundLabel ?? match.round_label ?? ""), order: Number(match.order ?? match.match_order ?? 1), position: position != null && Number.isFinite(Number(position)) && Number(position) >= 0 ? Number(position) : Number(match.order ?? match.match_order ?? 1) - 1, side: String(match.side ?? match.bracket_side ?? "main"), state: String(match.state || "awaiting_competitors"), aId: match.participantA?.id ?? match.participant_a ?? null, aName: match.participantA?.name ?? match.name_a ?? "", bId: match.participantB?.id ?? match.participant_b ?? null, bName: match.participantB?.name ?? match.name_b ?? "", winnerId: match.winner?.id ?? match.winner_id ?? null, outcome: String(match.outcome || ""), dependencies: Array.isArray(match.dependencies) ? match.dependencies : [], raw: match};
+ return {id: String(match.id), round: Number(match.round ?? match.round_number ?? 1), roundLabel: String(match.roundLabel ?? match.round_label ?? ""), order: Number(match.order ?? match.match_order ?? 1), position: position != null && Number.isFinite(Number(position)) && Number(position) >= 0 ? Number(position) : Number(match.order ?? match.match_order ?? 1) - 1, side: String(match.side ?? match.bracket_side ?? "main"), state: String(match.state || "awaiting_competitors"), aId: match.participantA?.id ?? match.participant_a ?? null, aName: match.participantA?.name ?? match.name_a ?? "", aIcon: String(match.participantA?.resonatorIcon ?? match.icon_a ?? ""), bId: match.participantB?.id ?? match.participant_b ?? null, bName: match.participantB?.name ?? match.name_b ?? "", bIcon: String(match.participantB?.resonatorIcon ?? match.icon_b ?? ""), winnerId: match.winner?.id ?? match.winner_id ?? null, outcome: String(match.outcome || ""), dependencies: Array.isArray(match.dependencies) ? match.dependencies : [], raw: match};
 }
 function status(match: Match) {
  if (isFinished(match)) return "Complete";
@@ -70,6 +71,7 @@ function MatchControl({match, renderControls}: {match: Match; renderControls: No
 function BracketLane({title, matches, renderControls}: {title: string; matches: Match[]; renderControls?: Props["renderControls"]}) {
  const scroll = useRef<HTMLDivElement>(null), drag = useRef<{id: number; x: number; left: number} | null>(null);
  const [size, setSize] = useState({width: 1000, height: 560}), [zoom, setZoom] = useState<number | null>(null), [scrollState, setScrollState] = useState({left: false, right: false});
+ const initialFocusDone = useRef(false);
  const main = matches.filter(m => m.side !== "third_place"), bronze = matches.filter(m => m.side === "third_place");
  const rounds = [...new Set(main.map(m => m.round))].sort((a, b) => a - b);
  const firstRound = rounds[0] ?? 1, lastRound = rounds[rounds.length - 1] ?? firstRound;
@@ -89,7 +91,8 @@ function BracketLane({title, matches, renderControls}: {title: string; matches: 
  const width = Math.max(1, rounds.length) * column - COLUMN_GAP;
  const height = Math.max(HEADING_HEIGHT + mainHeight + 16, bronze.length ? bronzeStart + (bronze.length - 1) * (CARD_HEIGHT + 48) + CARD_HEIGHT / 2 + 20 : 0);
  const fitScale = Math.min(1, Math.max(0.15, (size.height - 36) / height));
- const scale = zoom ?? fitScale;
+ const scale = zoom ?? 1;
+ const focusRound = rounds.find(round => main.some(match => match.round === round && !isFinished(match))) ?? lastRound;
  const byId = new Map(matches.map(m => [m.id, m]));
  const roundName = (round: number) => {
   if (main[0]?.side === "main") {if (round === lastRound) return "Final"; if (round === lastRound - 1) return "Semifinals"; if (round === lastRound - 2 && rounds.length > 2) return "Quarterfinals";}
@@ -105,6 +108,7 @@ function BracketLane({title, matches, renderControls}: {title: string; matches: 
  const updateScroll = () => {const el = scroll.current; if (el) setScrollState({left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2});};
  useEffect(() => {const el = scroll.current; if (!el) return; const observer = new ResizeObserver(() => setSize({width: el.clientWidth, height: el.clientHeight})); observer.observe(el); return () => observer.disconnect();}, []);
  useEffect(updateScroll, [size.width, scale, width]);
+ useEffect(() => {const el = scroll.current;if (!el || !size.width || initialFocusDone.current) return;initialFocusDone.current = true;const roundIndex = Math.max(0, focusRound - firstRound);el.scrollLeft = Math.max(0, roundIndex * column * scale - (el.clientWidth - CARD_WIDTH * scale) / 2);updateScroll();}, [size.width, focusRound, firstRound, column, scale]);
  const startDrag = (e: PointerEvent<HTMLDivElement>) => {
   const target = e.target as Element, interactive = target.closest("button,a,input,select,textarea,label");
   // The enclosing tournament modal is intentionally not an exclusion: its bracket must pan too.
@@ -118,7 +122,7 @@ function BracketLane({title, matches, renderControls}: {title: string; matches: 
  const focusFinal = () => scroll.current?.scrollTo({left: scroll.current.scrollWidth, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
  const finished = matches.filter(isFinished).length;
  return <div className="tb-lane" role="group" aria-label={title}>
-  <div className="tb-toolbar"><div className="tb-title"><Icon name="trophy"/><div><h3>{title}</h3><span>{finished} of {matches.length} matches complete</span></div></div><div className="tb-tools">
+  <div className="tb-toolbar"><div className="tb-title"><Icon name="trophy"/><div><h3>{title}</h3><span>{roundName(focusRound)} in focus · {finished} of {matches.length} matches complete</span></div></div><div className="tb-tools">
    {bronze.length > 0 && <button type="button" className="tb-final-jump" onClick={focusFinal}>Final &amp; 3rd place<Icon name="right"/></button>}
    <div className="tb-zoom"><button type="button" aria-label="Zoom out" disabled={scale <= .2} onClick={() => setZoom(Math.max(.2, scale - .1))}><Icon name="minus"/></button><button type="button" className="tb-fit" title="Fit the entire bracket height" onClick={() => {setZoom(null); if (scroll.current) scroll.current.scrollTop = 0;}}>Fit <span>{Math.round(scale * 100)}%</span></button><button type="button" aria-label="Zoom in" disabled={scale >= 1.5} onClick={() => setZoom(Math.min(1.5, scale + .1))}><Icon name="plus"/></button></div>
    <div className="tb-pan-buttons"><button type="button" aria-label="Previous rounds" disabled={!scrollState.left} onClick={() => pan(-1)}><Icon name="left"/></button><button type="button" aria-label="Next rounds" disabled={!scrollState.right} onClick={() => pan(1)}><Icon name="right"/></button></div>
@@ -129,7 +133,7 @@ function BracketLane({title, matches, renderControls}: {title: string; matches: 
     {rounds.map(round => <div className="tb-round-label" key={round} style={{left: (round - firstRound) * column, width: CARD_WIDTH}}><span>{roundName(round)}</span><span>{main.filter(m => m.round === round).length} {main.filter(m => m.round === round).length === 1 ? "match" : "matches"}</span></div>)}
     {matches.map(m => <article key={m.id} id={`hof-bracket-match-${m.id}`} className={`tb-match-card${renderControls ? " has-controls" : ""}${m.side === "third_place" ? " is-bronze" : m.round === lastRound ? " is-final" : ""}${isFinished(m) ? " is-complete" : ""}`} style={{left: xFor(m), top: yFor(m) - CARD_HEIGHT / 2, width: CARD_WIDTH, height: CARD_HEIGHT}} aria-label={`${m.side === "third_place" ? "Third-place playoff" : roundName(m.round)}, match ${m.order}`}>
      <div className="tb-match-head"><span>{m.side === "third_place" ? "3rd place" : `Match ${m.order}`}</span><span className={`tb-state state-${m.state}`} title={m.state.replaceAll("_", " ")}>{status(m)}</span></div>
-     {(["a", "b"] as const).map(slot => {const id = slot === "a" ? m.aId : m.bId, name = (slot === "a" ? m.aName : m.bName) || slotName(m, `participant_${slot}`), winner = Boolean(m.winnerId && m.winnerId === id); return <div key={slot} className={`tb-entrant${winner ? " is-winner" : ""}${!id ? " is-pending" : ""}`} title={name}><span className="tb-slot-mark">{winner ? <Icon name="check"/> : slot.toUpperCase()}</span><span className="tb-player-name">{name}</span></div>;})}
+     {(["a", "b"] as const).map(slot => {const id = slot === "a" ? m.aId : m.bId, name = (slot === "a" ? m.aName : m.bName) || slotName(m, `participant_${slot}`), icon = slot === "a" ? m.aIcon : m.bIcon, winner = Boolean(m.winnerId && m.winnerId === id); return <div key={slot} className={`tb-entrant${winner ? " is-winner" : ""}${!id ? " is-pending" : ""}`} title={name}><span className="tb-slot-mark">{winner ? <Icon name="check"/> : slot.toUpperCase()}</span>{id&&icon&&<ResonatorPortrait name={icon} className="tb-entrant-avatar" decorative/>}<span className="tb-player-name">{name}</span></div>;})}
      {renderControls && <MatchControl match={m} renderControls={renderControls}/>}
     </article>)}
    </div></div>
@@ -190,7 +194,8 @@ const STYLES = `
 .tournament-bracket-view .state-ready,.tournament-bracket-view .state-published,.tournament-bracket-view .state-completed{color:#8edbc8}
 .tournament-bracket-view .state-pending_publication{color:#e9ca88}
 .tournament-bracket-view .state-in_progress{color:#e7b38d}
-.tournament-bracket-view .tb-entrant{display:flex;align-items:center;gap:7px;height:23px;min-width:0;margin:0;padding:2px 4px;border-radius:4px;color:#e0e9ee;font-size:12px;line-height:19px}
+.tournament-bracket-view .tb-entrant{display:flex;align-items:center;gap:6px;height:23px;min-width:0;margin:0;padding:2px 4px;border-radius:4px;color:#e0e9ee;font-size:12px;line-height:19px}
+.tournament-bracket-view .tb-entrant-avatar{width:20px!important;height:20px!important;flex:none;border:1px solid #38535f;border-radius:6px!important;object-fit:cover}
 .tournament-bracket-view .tb-entrant+.tb-entrant{border-top:1px solid #2c414d}
 .tournament-bracket-view .tb-entrant.is-pending{color:#a2b6c2}
 .tournament-bracket-view .tb-entrant.is-winner{background:#285047;color:#c9f5e8;font-weight:650}
