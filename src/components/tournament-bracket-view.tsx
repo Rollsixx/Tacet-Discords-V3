@@ -307,6 +307,7 @@ const STYLES = `
 .hof-result-destinations ul{display:grid;gap:6px;padding:0;list-style:none}
 .hof-result-destinations li{display:grid;gap:4px;padding:10px 12px;border-left:2px solid #6abcb5;background:#14252f;overflow-wrap:anywhere}
 .hof-result-destinations li small{color:#f3b7af}
+.hof-result-corrections{margin-block:12px;color:#b4c9d5}.hof-result-corrections .actions{margin-top:10px}
 .hof-review-actions{display:grid;gap:10px;justify-items:end;padding-top:12px;border-top:1px solid #344a57}
 .tb-manage-panel .hof-review-actions .actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 .tb-manage-panel .hof-review-actions .actions button:first-child{background:#1b303d;color:#e3eff5;border-color:#4b6b7a}
