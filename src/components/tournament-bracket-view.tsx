@@ -8,7 +8,7 @@ import {createPortal} from "react-dom";
 type Dependency = {dependsOnMatchId?: string; depends_on_match_id?: string; dependencyType?: string; dependency_type?: string; targetSlot?: string; target_slot?: string};
 type MatchInput = any;
 type Match = {id: string; round: number; roundLabel: string; order: number; position: number; side: string; state: string; phaseState:string; aId: string | null; aName: string; aIcon: string; bId: string | null; bName: string; bIcon: string; winnerId: string | null; outcome: string; dependencies: Dependency[]; raw: MatchInput};
-type Props = {matches: MatchInput[]; renderControls?: (match: MatchInput) => ReactNode;onMatchInfo?:(match:MatchInput)=>void};
+type Props = {matchFlow?:boolean;matches: MatchInput[]; renderControls?: (match: MatchInput) => ReactNode;onMatchInfo?:(match:MatchInput)=>void};
 const CARD_WIDTH = 248, CARD_HEIGHT = 80, COLUMN_GAP = 56, HEADING_HEIGHT = 44;
 const isFinished = (match: Match) => ["published", "completed", "no_result"].includes(match.state);
 const canReport = (match: Match) => ["ready", "scheduled", "in_progress"].includes(match.state) && Boolean(match.aId && match.bId);
@@ -38,10 +38,11 @@ function Icon({name}: {name: "edit" | "close" | "left" | "right" | "minus" | "pl
  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function MatchControl({match, renderControls,onMatchInfo}: {match: Match; renderControls: NonNullable<Props["renderControls"]>;onMatchInfo?:Props["onMatchInfo"]}) {
+function MatchControl({match, renderControls,matchFlow}: {matchFlow?:boolean;match: Match; renderControls: NonNullable<Props["renderControls"]>;}) {
  const [open, setOpen] = useState(false);
  const trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), headingId = useId();
- const label = canReport(match) ? "Report winner" : match.state === "pending_publication" ? "Verify winner" : "Match details";
+ const phaseLabel = !matchFlow?null:match.phaseState==="setting_up"?"Match setup":match.phaseState==="live"?"Live match":match.state==="pending_publication"?"Verify result":match.phaseState?"Match details":null;
+ const label = phaseLabel ?? (canReport(match) ? "Report winner" : match.state === "pending_publication" ? "Verify winner" : "Match details");
  useEffect(() => {
   const openMatch = (event: Event) => {
    if (String((event as CustomEvent).detail) === match.id) setOpen(true);
@@ -57,29 +58,29 @@ function MatchControl({match, renderControls,onMatchInfo}: {match: Match; render
   const key = (event: KeyboardEvent) => {
    if (event.key === "Escape") {event.preventDefault(); event.stopImmediatePropagation(); setOpen(false);}
    if (event.key !== "Tab") return;
-   const controls = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? [])].filter(el => el.getClientRects().length);
+   const controls = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]') ?? [])].filter(el => el.getClientRects().length);
    const first = controls[0], last = controls[controls.length - 1];
    if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) {event.preventDefault(); last?.focus();}
    else if (!event.shiftKey && document.activeElement === last) {event.preventDefault(); first?.focus();}
   };
   window.addEventListener("close-bracket-match-dialog", close);
   window.addEventListener("keydown", key, true);
-  return () => {window.removeEventListener("close-bracket-match-dialog", close); window.removeEventListener("keydown", key, true); previous?.focus();};
+  return () => {window.removeEventListener("close-bracket-match-dialog", close); window.removeEventListener("keydown", key, true); (previous?.isConnected?previous:trigger.current)?.focus();};
  }, [open, match.id]);
  return <>
   <button ref={trigger} type="button" className="tb-match-action" aria-label={`${label}: ${match.roundLabel || "round " + match.round}, match ${match.order}`} title={label} onClick={() => setOpen(true)}><Icon name={canReport(match) ? "edit" : match.state === "pending_publication" ? "check" : "info"}/></button>
   {open && createPortal(<div className="tb-dialog-overlay" onPointerDown={e => {if (e.target === e.currentTarget) setOpen(false);}}>
    <div ref={panel} className="tb-manage-panel" role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1}>
     <div className="tb-dialog-heading"><div><span className="tb-dialog-eyebrow">{match.side === "third_place" ? "Third-place playoff" : `${match.roundLabel || "Round " + match.round} · Match ${match.order}`}</span><h2 id={headingId}>{label}</h2></div><button type="button" className="tb-dialog-close" aria-label="Close match details" onClick={() => setOpen(false)}><Icon name="close"/></button></div>
-    {canReport(match) && <p className="tb-dialog-help">Select the winning player, then submit to confirm the result.</p>}
-    {!canReport(match) && match.state !== "pending_publication" && <p className="tb-dialog-help">{isFinished(match) ? `${match.winnerId === match.aId ? match.aName : match.bName || "The winner"} won this match.` : "This match will be ready when both players have advanced."}</p>}
+    {!phaseLabel && canReport(match) && <p className="tb-dialog-help">Select the winning player, then submit to confirm the result.</p>}
+    {!phaseLabel && !canReport(match) && match.state !== "pending_publication" && <p className="tb-dialog-help">{isFinished(match) ? `${match.winnerId === match.aId ? match.aName : match.bName || "The winner"} won this match.` : "This match will be ready when both players have advanced."}</p>}
     {renderControls(match.raw)}
    </div>
   </div>, document.fullscreenElement || document.body)}
  </>;
 }
 
-function BracketLane({title, matches, renderControls,onMatchInfo}: {title: string; matches: Match[]; renderControls?: Props["renderControls"];onMatchInfo?:Props["onMatchInfo"]}) {
+function BracketLane({title, matches, renderControls,onMatchInfo,matchFlow}: {matchFlow?:boolean;title: string; matches: Match[]; renderControls?: Props["renderControls"];onMatchInfo?:Props["onMatchInfo"]}) {
  const scroll = useRef<HTMLDivElement>(null), drag = useRef<{id: number; x: number; left: number} | null>(null);
  const [size, setSize] = useState({width: 1000, height: 560}), [zoom, setZoom] = useState<number | null>(null), [scrollState, setScrollState] = useState({left: false, right: false});
  const initialFocusDone = useRef(false);
@@ -145,7 +146,7 @@ function BracketLane({title, matches, renderControls,onMatchInfo}: {title: strin
     {matches.map(m => <article key={m.id} id={`hof-bracket-match-${m.id}`} className={`tb-match-card${renderControls||onMatchInfo ? " has-controls" : ""}${m.side === "third_place" ? " is-bronze" : m.round === lastRound ? " is-final" : ""}${isFinished(m) ? " is-complete" : ""}`} style={{left: xFor(m), top: yFor(m) - CARD_HEIGHT / 2, width: CARD_WIDTH, height: CARD_HEIGHT}} aria-label={`${m.side === "third_place" ? "Third-place playoff" : roundName(m.round)}, match ${m.order}`}>
      <div className="tb-match-head"><span>{m.side === "third_place" ? "3rd place" : `Match ${m.order}`}</span><span className={`tb-state state-${m.state}`} title={m.state.replaceAll("_", " ")}>{status(m)}</span></div>
      {(["a", "b"] as const).map(slot => {const id = slot === "a" ? m.aId : m.bId, name = (slot === "a" ? m.aName : m.bName) || slotName(m, `participant_${slot}`), icon = slot === "a" ? m.aIcon : m.bIcon, winner = Boolean(m.winnerId && m.winnerId === id); return <div key={slot} className={`tb-entrant${winner ? " is-winner" : ""}${!id ? " is-pending" : ""}`} title={name}><span className="tb-slot-mark">{winner ? <Icon name="check"/> : slot.toUpperCase()}</span>{id&&icon&&<ResonatorPortrait name={icon} className="tb-entrant-avatar" decorative/>}<span className="tb-player-name">{name}</span></div>;})}
-     {renderControls ? <MatchControl match={m} renderControls={renderControls} onMatchInfo={onMatchInfo}/> : onMatchInfo&&<button type="button" className="tb-match-action" aria-label={`Match details: ${m.roundLabel||"Round "+m.round}, match ${m.order}`} title="Match details" onClick={()=>onMatchInfo(m.raw)}><Icon name="info"/></button>}
+     {renderControls ? <MatchControl match={m} renderControls={renderControls} matchFlow={matchFlow}/> : onMatchInfo&&<button type="button" className="tb-match-action" aria-label={`Match details: ${m.roundLabel||"Round "+m.round}, match ${m.order}`} title="Match details" onClick={()=>onMatchInfo(m.raw)}><Icon name="info"/></button>}
     </article>)}
    </div></div>
   </div>
@@ -153,15 +154,15 @@ function BracketLane({title, matches, renderControls,onMatchInfo}: {title: strin
  </div>;
 }
 
-export default function TournamentBracketView({matches, renderControls,onMatchInfo}: Props) {
+export default function TournamentBracketView({matches, renderControls,onMatchInfo,matchFlow}: Props) {
  const all = matches.map(normalize).filter(m => Number.isFinite(m.round) && Number.isFinite(m.order));
  const main = all.filter(m => m.side === "main" || m.side === "third_place");
  const sides = [...new Set(all.filter(m => !["main", "third_place"].includes(m.side)).map(m => m.side))];
  return <div className="tournament-bracket-view">
   <style>{STYLES}</style>
   {!all.length && <div className="tb-empty">The bracket will appear here once matches are prepared.</div>}
-  {main.length > 0 && <BracketLane title="Tournament bracket" matches={main} renderControls={renderControls} onMatchInfo={onMatchInfo}/>}
-  {sides.map(side => <BracketLane key={side} title={`${side.replaceAll("_", " ")} bracket`} matches={all.filter(m => m.side === side)} renderControls={renderControls} onMatchInfo={onMatchInfo}/>)}
+  {main.length > 0 && <BracketLane title="Tournament bracket" matches={main} renderControls={renderControls} onMatchInfo={onMatchInfo} matchFlow={matchFlow}/>}
+  {sides.map(side => <BracketLane key={side} title={`${side.replaceAll("_", " ")} bracket`} matches={all.filter(m => m.side === side)} renderControls={renderControls} onMatchInfo={onMatchInfo} matchFlow={matchFlow}/>)}
  </div>;
 }
 
@@ -236,6 +237,14 @@ const STYLES = `
 .hof-admin .bracket-fullscreen:fullscreen>.tournament-bracket-view{flex:1;min-height:0;display:flex;flex-direction:column}
 .hof-admin .bracket-fullscreen:fullscreen .tb-lane{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
 .hof-admin .bracket-fullscreen:fullscreen .tb-scroll{flex:1;height:auto;min-height:0}
+.tb-manage-panel .hof-setup-panel{display:grid;gap:12px;margin-block:16px}
+.tb-manage-panel .hof-setup-panel :is(h3,h4,p){margin:0}
+.tb-manage-panel .hof-draft-teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tb-manage-panel .hof-draft-teams section{padding:10px;border:1px solid #3b5462;border-radius:8px;overflow-wrap:anywhere}
+.tb-manage-panel .hof-draft-entry{display:grid;gap:8px}
+.tb-manage-panel .hof-resonator-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;max-height:260px;overflow:auto}
+.tb-manage-panel .hof-resonator-grid img{display:block;max-width:48px;height:auto;margin:auto}
+.tb-manage-panel .hof-admin-match button:focus-visible{outline:2px solid #aeeae4;outline-offset:2px}
 .tb-dialog-overlay{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:#030a10c9;backdrop-filter:blur(5px)}
 .tb-manage-panel{box-sizing:border-box;position:relative;z-index:1;width:min(500px,100%);max-height:calc(100dvh - 40px);overflow:auto;padding:24px;border:1px solid #3a5665;border-radius:14px;background:#12212b;color:#e6eff2;box-shadow:0 24px 80px #0009;font-family:inherit;outline:none}
 .tb-manage-panel *{box-sizing:border-box}
@@ -248,7 +257,7 @@ const STYLES = `
 .tb-manage-panel form:has(+.tb-report-winner-form){padding-bottom:20px;border-bottom:1px solid #344a57}
 .tb-manage-panel form>label{display:grid;gap:7px;color:#bfd0da;font-size:12px}
 .tb-manage-panel select{width:100%;min-height:42px;padding:9px 10px;border:1px solid #3a5564;border-radius:7px;background:#0c1a23;color:#d9e8ef;font:inherit}
-.tb-manage-panel form button,.tb-manage-panel .actions button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:11px 18px;border:1px solid #84decc;border-radius:8px;background:#84decc;color:#092620;font:inherit;font-size:14px;font-weight:700;line-height:1.3;cursor:pointer;box-shadow:none}
+.tb-manage-panel form button,.tb-manage-panel .actions button,.tb-manage-panel .hof-primary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:11px 18px;border:1px solid #84decc;border-radius:8px;background:#84decc;color:#092620;font:inherit;font-size:14px;font-weight:700;line-height:1.3;cursor:pointer;box-shadow:none}
 .tb-manage-panel form button:hover:not(:disabled),.tb-manage-panel .actions button:hover:not(:disabled){background:#a0ecdd}
 .tb-manage-panel button:disabled{opacity:.5;cursor:wait}
 .tb-manage-panel .tb-winner-choice{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:0;margin:0;padding:0;border:0}
