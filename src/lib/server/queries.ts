@@ -2,6 +2,7 @@
 import type {Client,Row} from '@libsql/client';
 import {createHash} from 'node:crypto';
 import {nextRankHistory,rankHistoryEvents} from '../leaderboards/rank-history.mjs';
+import {eligibleMedalCharacters} from './medal-eligibility.ts';
 import {aggregateMedalStandings} from '../leaderboards/medal-standings.mjs';
 import {orderProfileBuildsByRank} from '../leaderboards/profile-rank-order.mjs';
 import {buildDataConsistencyReport} from '../leaderboards/consistency-report.mjs';
@@ -207,11 +208,15 @@ async function loadRankedBuilds(entries:Array<{character:string;uid:string;histo
 }
 
 export async function medalStandings(db:Client=database(),options:{refresh?:boolean}={}){
- if(options.refresh!==false)await refreshLeaderboardRankHistory(db);
- const marks=SUPPORTED.map(()=>"?").join(",");
- const snapshots=await db.execute({sql:`SELECT character,state FROM leaderboard_rank_history WHERE character IN (${marks})`,args:SUPPORTED});
+ return medalStandingsFor(db,await eligibleMedalCharacters(db),options.refresh!==false);
+}
+
+async function medalStandingsFor(db:Client,characters:string[],refresh:boolean){
+ if(refresh)await refreshLeaderboardRankHistory(db);
+ const marks=characters.map(()=>"?").join(",");
+ const snapshots=characters.length?(await db.execute({sql:`SELECT character,state FROM leaderboard_rank_history WHERE character IN (${marks})`,args:characters})).rows:[];
  const candidates:Array<{id:string;uid:string;ign:string;character:string;rank:number;score:number}>=[];
- for(const snapshot of snapshots.rows){
+ for(const snapshot of snapshots){
   const character=String(snapshot.character),state=parseRankState(snapshot.state);
   for(const [uid,entry] of Object.entries(state))if(entry.active!==false&&Number(entry.rank)<=3&&entry.buildId)candidates.push({id:entry.buildId,uid,ign:entry.ign||uid,character,rank:Number(entry.rank),score:Number(entry.score)||0});
  }
@@ -225,7 +230,7 @@ export async function medalStandings(db:Client=database(),options:{refresh?:bool
  const historyRows=standings.map(player=>({uid:player.uid,ign:player.ign,global_rank:player.rank,id:player.buildId,score:player.points,verified_score:player.points} as unknown as Row));
  const now=Date.now();
  let history:Record<string,RankHistoryEntry>|null,updatedAt:string;
- if(options.refresh===false){
+ if(!refresh){
   const saved=await db.execute({sql:"SELECT state,updated_at FROM leaderboard_rank_history WHERE character='__medal_standings__'",args:[]});
   history=parseRankState(saved.rows[0]?.state);
   updatedAt=String(saved.rows[0]?.updated_at||new Date(now).toISOString());
@@ -278,14 +283,16 @@ export async function leaderboardConsistencyReport(db:Client=database()){
    AND (c.submission_id IS NULL OR c.engine_version<>? OR c.data_version<>? OR c.policy_id<>COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?))
   ORDER BY s.created_at DESC,s.id LIMIT 100`,args:[ENGINE_VERSION,DATA_VERSION,...SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
  const duplicateResult=await db.execute({sql:`SELECT uid,character,COUNT(*) AS count FROM submissions WHERE status='approved' AND replaced_by IS NULL GROUP BY uid,character HAVING COUNT(*)>1 ORDER BY count DESC,character,uid LIMIT 100`,args:[]});
+ const medalCharacters=await eligibleMedalCharacters(db);
+ const medalMarks=medalCharacters.map(()=>"?").join(",")||"NULL";
  const medalResult=await db.execute({sql:`WITH candidates AS (
    SELECT s.id,s.uid,s.character,c.score,row_number() OVER(PARTITION BY s.uid,s.character ORDER BY c.score DESC,s.id ASC) AS player_best
    FROM submissions s JOIN calculation_results c ON c.submission_id=s.id
-   WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character IN (${marks})
+   WHERE s.status='approved' AND s.replaced_by IS NULL AND s.identity_verified=1 AND s.character IN (${medalMarks})
     AND c.engine_version=? AND c.data_version=? AND c.policy_id=COALESCE((SELECT v.policy_id FROM rotation_active a JOIN rotation_versions v ON v.id=a.version_id WHERE a.character=s.character),?)
   ), ranked AS (SELECT uid,character,row_number() OVER(PARTITION BY character ORDER BY score DESC,id ASC) AS global_rank FROM candidates WHERE player_best=1)
-  SELECT uid,SUM(CASE WHEN global_rank=1 THEN 1 ELSE 0 END) AS gold,SUM(CASE WHEN global_rank=2 THEN 1 ELSE 0 END) AS silver,SUM(CASE WHEN global_rank=3 THEN 1 ELSE 0 END) AS bronze FROM ranked WHERE global_rank<=3 GROUP BY uid`,args:[...SUPPORTED,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
- const expected=(await medalStandings(db)).players,profiles=new Map(medalResult.rows.map(row=>[String(row.uid),{gold:Number(row.gold),silver:Number(row.silver),bronze:Number(row.bronze)}]));
+  SELECT uid,SUM(CASE WHEN global_rank=1 THEN 1 ELSE 0 END) AS gold,SUM(CASE WHEN global_rank=2 THEN 1 ELSE 0 END) AS silver,SUM(CASE WHEN global_rank=3 THEN 1 ELSE 0 END) AS bronze FROM ranked WHERE global_rank<=3 GROUP BY uid`,args:[...medalCharacters,ENGINE_VERSION,DATA_VERSION,POLICY_VERSION]});
+ const expected=(await medalStandingsFor(db,medalCharacters,true)).players,profiles=new Map(medalResult.rows.map(row=>[String(row.uid),{gold:Number(row.gold),silver:Number(row.silver),bronze:Number(row.bronze)}]));
  const expectedByUid=new Map(expected.map(player=>[player.uid,{gold:player.gold,silver:player.silver,bronze:player.bronze}]));
  const medalMismatches=[...new Set([...profiles.keys(),...expectedByUid.keys()])].flatMap(uid=>{
   const profile=profiles.get(uid)||{gold:0,silver:0,bronze:0},standings=expectedByUid.get(uid)||{gold:0,silver:0,bronze:0};
