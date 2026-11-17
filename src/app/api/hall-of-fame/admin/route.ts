@@ -213,8 +213,9 @@ const slug=url.searchParams.get("slug");
   if(requestedMatchId&&slug&&await can(actor,"draft_result",slug,requestedMatchId,db)){const steps=await db.execute({sql:"SELECT step_number,actor_slot,action,resonator,created_by,created_at FROM hof_draft_steps WHERE match_id=? ORDER BY step_number",args:[requestedMatchId]});draftSteps=steps.rows;}
   const phase3SafetyEnabled=await isFeatureEnabled("hof-phase-3-safety",db);
   const matchFlowEnabled=await isFeatureEnabled("hof-match-flow",db),matchFoundationEnabled=await isFeatureEnabled("hof-match-foundation",db);
+  const publicMatchViewEnabled=await isFeatureEnabled("hof-public-match-view",db);
   const roundBlocks=slug&&await can(actor,"manage_event",slug,null,db)?(await db.execute({sql:"SELECT round_number,round_label,COUNT(*) total,SUM(CASE WHEN phase_state='complete' OR state IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) resolved,SUM(CASE WHEN phase_state='complete' AND state NOT IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) completed,SUM(CASE WHEN state='forfeited' THEN 1 ELSE 0 END) forfeited FROM hof_matches WHERE tournament_slug=? GROUP BY round_number,round_label ORDER BY round_number",args:[slug]})).rows:[];
-  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},phase3SafetyEnabled,matchFlowEnabled,matchFoundationEnabled,roundBlocks,events:events.rows,deletedEvents:deletedEvents.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
+  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},phase3SafetyEnabled,matchFlowEnabled,matchFoundationEnabled,publicMatchViewEnabled,roundBlocks,events:events.rows,deletedEvents:deletedEvents.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
  }catch(e){return failure(e);}
 }
 export async function POST(request:Request){
@@ -232,9 +233,16 @@ export async function POST(request:Request){
   }
   if(action==="set_hof_match_flow_enabled"){
    if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can change Hall of Fame match-flow settings.");
-   const before=await isFeatureEnabled("hof-match-flow",db),enabled=Boolean(body.enabled);if(enabled&&!(await isFeatureEnabled("hof-match-foundation",db)))throw new HttpError(409,"Enable the Phase 1 match foundation before Phase 4.");if(enabled&&!(await isFeatureEnabled("hof-phase-3-safety",db)))throw new HttpError(409,"Enable Phase 3 safety tools before Phase 4.");
+   const before=await isFeatureEnabled("hof-match-flow",db),enabled=Boolean(body.enabled);if(enabled&&!(await isFeatureEnabled("hof-match-foundation",db)))throw new HttpError(409,"Enable the Phase 1 match foundation before Phase 4.");if(enabled&&!(await isFeatureEnabled("hof-phase-3-safety",db)))throw new HttpError(409,"Enable Phase 3 safety tools before Phase 4.");if(!enabled&&await isFeatureEnabled("hof-public-match-view",db))throw new HttpError(409,"Disable Phase 5 public match details before disabling Phase 4.");
    await db.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('feature:hof-match-flow',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[enabled?"true":"false",now]});
    await audit(db,actor,"match_flow_flag",null,{enabled:before},{enabled});return json({ok:true,enabled});
+  }
+  if(action==="set_hof_public_match_view_enabled"){
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can change the public Hall of Fame match view.");
+   const before=await isFeatureEnabled("hof-public-match-view",db),enabled=Boolean(body.enabled);
+   if(enabled&&!(await isFeatureEnabled("hof-match-flow",db)))throw new HttpError(409,"Enable Phase 4 match flow before Phase 5 public match details.");
+   await db.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('feature:hof-public-match-view',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[enabled?"true":"false",now]});
+   await audit(db,actor,"public_match_view_flag",null,{enabled:before},{enabled});return json({ok:true,enabled});
   }
   if(action==="set_hof_safety_enabled"){
    if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can change Hall of Fame safety features.");

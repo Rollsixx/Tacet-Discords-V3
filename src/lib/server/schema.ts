@@ -278,6 +278,8 @@ export const migrations = [
   {version:29,statements:[
     "INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES('feature:hof-match-flow','false',datetime('now'))",
   ]},
+  {version:30,statements:[
+    "INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES('feature:hof-public-match-view','false',datetime('now'))",
+  ]},
 ];
-
 
