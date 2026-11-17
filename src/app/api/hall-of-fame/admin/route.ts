@@ -361,12 +361,12 @@ export async function POST(request:Request){
    const eventSlug=String(current.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
    if(!["bracket_revealed","in_progress"].includes(String(current.event_status)))throw new HttpError(409,"Reveal the bracket before starting a match.");
    if(!current.participant_a||!current.participant_b)throw new HttpError(409,"Both match participants must be known before starting.");
-   if(!["ready","on_hold"].includes(String(current.phase_state)))throw new HttpError(409,"Only a Ready or On hold match can start.");
-   if(!["ready","scheduled"].includes(String(current.state)))throw new HttpError(409,"Only a Ready match can start.");
+   if(!["ready","on_hold","setting_up"].includes(String(current.phase_state)))throw new HttpError(409,"Only a Ready, On hold, or setup match can start without details.");
+   if(!["ready","scheduled","in_progress"].includes(String(current.state)))throw new HttpError(409,"Only a Ready or setup match can start without details.");
    tx=await db.transaction("write");
-   const active=await tx.execute({sql:"SELECT id FROM hof_matches WHERE tournament_slug=? AND phase_state IN ('setting_up','live') LIMIT 1",args:[eventSlug]});if(active.rows.length)throw new HttpError(409,"Another match is already Setting up or Live.");
+   const active=await tx.execute({sql:"SELECT id FROM hof_matches WHERE tournament_slug=? AND id<>? AND phase_state IN ('setting_up','live') LIMIT 1",args:[eventSlug,matchId]});if(active.rows.length)throw new HttpError(409,"Another match is already Setting up or Live.");
    const steps=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_draft_steps WHERE match_id=?",args:[matchId]});if(Number(steps.rows[0]?.total||0))throw new HttpError(409,"A match with draft steps cannot skip its setup.");
-   await tx.execute({sql:"UPDATE hof_matches SET state='in_progress',phase_state='live',started_without_details=1,match_boss='',boss_method=NULL,version=version+1,updated_at=? WHERE id=?",args:[now,matchId]});
+   const started=await tx.execute({sql:"UPDATE hof_matches SET state='in_progress',phase_state='live',started_without_details=1,match_boss='',boss_method=NULL,version=version+1,updated_at=? WHERE id=? AND phase_state=?",args:[now,matchId,String(current.phase_state)]});if(!started.rowsAffected)throw new HttpError(409,"Match setup changed before it could start.");
    await audit(tx,actor,"setup_edit",eventSlug,{phaseState:String(current.phase_state)},{phaseState:"live",startedWithoutDetails:true});await tx.commit();tx=null;return json({ok:true,phaseState:"live",startedWithoutDetails:true});
   }
   if(action==="start_match"){
