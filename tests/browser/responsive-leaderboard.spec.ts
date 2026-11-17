@@ -106,6 +106,7 @@ test("imported Resonators use patch filters and wait for a reviewed rotation", a
   const picker = page.getByRole("region", { name: "Choose a Resonator leaderboard" });
   const search = picker.getByRole("searchbox", { name: "Search Resonators" });
   const visible = picker.locator(".lb-character-option");
+  await expect(visible).toHaveCount(65);
   const versions = await visible.locator("small").allTextContents();
   const order = versions.map(label => label.split(" · ")[1].split(".").map(Number)).map(([major, minor]) => major*100+minor);
   expect(order).toHaveLength(65);
