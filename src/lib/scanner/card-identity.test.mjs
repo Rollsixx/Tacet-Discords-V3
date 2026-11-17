@@ -43,3 +43,10 @@ test('single-character OCR loss in a roster name resolves to its canonical key',
  assert.equal(parseCardIdentity('Jinhsi LV.90', '', '').character, 'Jinhsi');
  assert.equal(parseCardIdentity('Unknown Resonator LV.90', '', '').character, 'Unknown Resonator');
 });
+
+
+test('base and alternate forms remain distinct after expanding the roster',()=>{
+ assert.equal(parseCardIdentity('Yangyang LV.90','','').character,'Yangyang');
+ assert.equal(parseCardIdentity('Rover: Aero (Female) LV.90','','').character,'RoverAeroFemale');
+ assert.equal(parseCardIdentity('Rover LV.90','','').character,'Rover');
+});

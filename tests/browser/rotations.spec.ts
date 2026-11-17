@@ -6,7 +6,7 @@ test('rotation drafts autosave, reorder and survive reload; blank optional notes
  expect((await request.get('/api/admin/rotations')).status()).toBe(401);
  await page.goto('/BlackShores');await page.getByLabel('Black Shores access token',{exact:true}).fill(token);await page.getByRole('button',{name:'Continue to workspace'}).click();await clickAdminNavigation(page,'Rotation management');
  await expect(page.getByRole('heading',{name:'Rotation draft',exact:true})).toBeVisible();await expect(page.getByText('Optimizer connected · Owner-reviewed benchmark',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(39);
+ await expect(page.getByLabel('Resonator',{exact:true}).locator('option')).toHaveCount(65);
  await page.getByLabel('Evaluation mode').selectOption('admin-reviewed');await page.getByLabel('Starting conditions & combat review notes').fill('');
  await page.getByLabel('Rotation name',{exact:true}).fill('Browser draft '+info.project.name);
  await expect(page.getByText(/Saved · revision/)).toBeVisible({timeout:10000});

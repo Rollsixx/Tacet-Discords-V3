@@ -2,7 +2,7 @@ import {test} from 'node:test';import assert from 'node:assert/strict';
 import {createClient} from '@libsql/client';
 import {migrate} from './database.ts';import {fixture} from './fixtures.mjs';import {validateSubmission} from './validation.ts';import {submit} from './submission-store.ts';import {moderate,listBuilds,listLeaderboard,deleteBuild} from './store.ts';
 import {rotationWorkspace,saveRotationDraft,validateRotationDraft,sampleRotationDraft,startRotationPreview,stepRotationPreview,rotationPreview,activateRotation,initializeRotations} from './rotations/store.mjs';
-import {simulate,normalizeSpec} from './rotations/mechanics.mjs';import {MECHANICS_MODELS} from '../game-data/rotation-mechanics.mjs';
+import {simulate,normalizeSpec} from './rotations/mechanics.mjs';import {MECHANICS_MODELS,ROTATION_ROSTER} from '../game-data/rotation-mechanics.mjs';
 import {calculateStandard} from './scoring.mjs';import cards from '../../../tests/browser/user-card-expectations.json' with {type:'json'};import cases from '../game-data/scoring-cases.json' with {type:'json'};
 const spec={name:'Synthetic validation fixture',actions:[{type:'skill',key:'ArtofViolenceDMG',count:1}]};
 async function seed(db,uid='812345678',approved=true){const saved=await submit(validateSubmission(fixture(uid)),db);const card=cards.find(c=>c.file.startsWith('Carlotta'));const slots=Array.from({length:5},(_,i)=>({slot:i+1,cost:{raw:card.fields[i*7],value:card.fields[i*7]},mainStat:{raw:card.fields[i*7+1],value:card.fields[i*7+1]},substats:card.fields.slice(i*7+2,i*7+7).map(value=>({raw:value,value}))}));const calculation=await calculateStandard('Carlotta',slots,cases.cases.find(c=>c.character==='Carlotta').echoes);await db.execute({sql:"UPDATE submissions SET character='Carlotta',data=? WHERE id=?",args:[JSON.stringify({slots,assessment:{eligible:true,sourceHash:'a'.repeat(64),calculation}}),saved.id]});if(approved)await moderate(saved.id,'approved','QA','',true,db);return saved;}
@@ -15,12 +15,12 @@ test('state machine rejects incomplete rules and tracks repeat resources, bounds
  const cooldown=structuredClone(syntheticModel);Object.assign(cooldown.actions['skill:ArtofViolenceDMG'],{cooldownKey:'skill',cooldownMs:2000});assert.equal(simulate({...spec,actions:[{...spec.actions[0],count:2}]},cooldown).valid,false);
 });
 test('drafts autosave with revision CAS, engine catalog validation and fail-closed publication',async()=>{
- const db=createClient({url:'file::memory:'});try{await migrate(db);await seed(db);const before=await listBuilds({},db);const workspace=await rotationWorkspace(db,'Carlotta');assert.equal(workspace.characters.length,39);assert.equal(workspace.active.kind,'baseline');assert.ok(workspace.catalog.length>10);
+ const db=createClient({url:'file::memory:'});try{await migrate(db);await seed(db);const before=await listBuilds({},db);const workspace=await rotationWorkspace(db,'Carlotta');assert.equal(workspace.characters.length,ROTATION_ROSTER.length);assert.equal(workspace.active.kind,'baseline');assert.ok(workspace.catalog.length>10);
  const saved=await saveRotationDraft(db,'Carlotta',spec,0);assert.equal(saved.revision,1);await assert.rejects(saveRotationDraft(db,'Carlotta',{...spec,name:'Conflicting tab'},0),e=>e.status===409);
  await assert.rejects(normalizeSpec('Carlotta',{...spec,actions:[{...spec.actions[0],buffs:[{modifier:'ATK',modifierValue:999}]}]}));
  await assert.rejects(normalizeSpec('Carlotta',{...spec,actions:[{type:'skill',key:'InventedAttack',count:1}]}));
  assert.equal((await validateRotationDraft(db,'Carlotta',1)).valid,false);const sample=await sampleRotationDraft(db,'Carlotta',1);assert.equal(sample.provisional,true);assert.equal(sample.builds.length,1);assert.ok(sample.builds[0].score>0);assert.equal(sample.builds[0].actions.length,1);
- await assert.rejects(startRotationPreview(db,'Carlotta',1),e=>e.status===422);assert.deepEqual((await listBuilds({},db)).builds.map(b=>[b.id,b.score,b.identityVerified]),before.builds.map(b=>[b.id,b.score,b.identityVerified]));await initializeRotations(db);assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM rotation_versions')).rows[0].n),39);
+ await assert.rejects(startRotationPreview(db,'Carlotta',1),e=>e.status===422);assert.deepEqual((await listBuilds({},db)).builds.map(b=>[b.id,b.score,b.identityVerified]),before.builds.map(b=>[b.id,b.score,b.identityVerified]));await initializeRotations(db);assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM rotation_versions')).rows[0].n),ROTATION_ROSTER.length);
  }finally{db.close();}
 });
 test('version staging, continuing submissions, atomic activation, approval catch-up, history and rollback',async()=>{
