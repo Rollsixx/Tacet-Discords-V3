@@ -199,9 +199,9 @@ const slug=url.searchParams.get("slug");
   const requestedMatchId=url.searchParams.get("matchId");
   if(requestedMatchId&&slug&&await can(actor,"draft_result",slug,requestedMatchId,db)){const steps=await db.execute({sql:"SELECT step_number,actor_slot,action,resonator,created_by,created_at FROM hof_draft_steps WHERE match_id=? ORDER BY step_number",args:[requestedMatchId]});draftSteps=steps.rows;}
   const phase3SafetyEnabled=await isFeatureEnabled("hof-phase-3-safety",db);
-  const matchFlowEnabled=await isFeatureEnabled("hof-match-flow",db);
+  const matchFlowEnabled=await isFeatureEnabled("hof-match-flow",db),matchFoundationEnabled=await isFeatureEnabled("hof-match-foundation",db);
   const roundBlocks=slug&&await can(actor,"manage_event",slug,null,db)?(await db.execute({sql:"SELECT round_number,round_label,COUNT(*) total,SUM(CASE WHEN phase_state='complete' OR state IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) resolved,SUM(CASE WHEN phase_state='complete' AND state NOT IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) completed,SUM(CASE WHEN state='forfeited' THEN 1 ELSE 0 END) forfeited FROM hof_matches WHERE tournament_slug=? GROUP BY round_number,round_label ORDER BY round_number",args:[slug]})).rows:[];
-  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},phase3SafetyEnabled,matchFlowEnabled,roundBlocks,events:events.rows,deletedEvents:deletedEvents.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
+  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},phase3SafetyEnabled,matchFlowEnabled,matchFoundationEnabled,roundBlocks,events:events.rows,deletedEvents:deletedEvents.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
  }catch(e){return failure(e);}
 }
 export async function POST(request:Request){
@@ -210,6 +210,13 @@ export async function POST(request:Request){
   await migrateOnce();const db=database(),actor=await actorFor(request,db),body:any=await readJson(request,2400000);
   if(!body||typeof body!=="object")throw new HttpError(400,"Invalid request.");
   const action=text(body.action,"Action",60),now=new Date().toISOString(),slug=body.slug?text(body.slug,"Tournament",80):null,matchId=body.matchId?text(body.matchId,"Match",80):null;
+  if(action==="set_hof_match_foundation_enabled"){
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can change Hall of Fame match-foundation settings.");
+   const before=await isFeatureEnabled("hof-match-foundation",db),enabled=Boolean(body.enabled);
+   if(!enabled&&await isFeatureEnabled("hof-match-flow",db))throw new HttpError(409,"Disable Phase 4 match flow before disabling its Phase 1 foundation.");
+   await db.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('feature:hof-match-foundation',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[enabled?"true":"false",now]});
+   await audit(db,actor,"match_foundation_flag",null,{enabled:before},{enabled});return json({ok:true,enabled});
+  }
   if(action==="set_hof_match_flow_enabled"){
    if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can change Hall of Fame match-flow settings.");
    const before=await isFeatureEnabled("hof-match-flow",db),enabled=Boolean(body.enabled);if(enabled&&!(await isFeatureEnabled("hof-match-foundation",db)))throw new HttpError(409,"Enable the Phase 1 match foundation before Phase 4.");if(enabled&&!(await isFeatureEnabled("hof-phase-3-safety",db)))throw new HttpError(409,"Enable Phase 3 safety tools before Phase 4.");
@@ -263,7 +270,6 @@ export async function POST(request:Request){
   }
   if(action==="publish_podium"){
    if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"global_admin",slug,null,db);
-   const unresolved=(await db.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=? AND state='forfeited'",args:[slug]})).rows[0];if(Number(unresolved?.total||0)>0){const decision=(await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:[`hof:forfeited-round:${slug}`]})).rows[0];if(!decision)throw new HttpError(409,"Podium is blocked until an Arbiter cancels the event or reschedules the forfeited round.");}
    const unresolvedForfeits=(await db.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=? AND state='forfeited'",args:[slug]})).rows[0];if(Number(unresolvedForfeits?.total||0)>0){const decision=(await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:[`hof:forfeited-round:${slug}`]})).rows[0];if(!decision)throw new HttpError(409,"Podium is blocked until an Arbiter cancels the event or reschedules the forfeited round.");}
    const placements=body.placements;if(!placements||typeof placements!=="object")throw new HttpError(400,"Choose all three podium participants.");
    const ids=[text(placements.gold,"Champion",80),text(placements.silver,"Second place",80),text(placements.bronze,"Third place",80)];
@@ -278,7 +284,7 @@ export async function POST(request:Request){
    await audit(tx,actor,"publish_podium",slug,{medals:prior,status:String(event.status)},{gold:ids[0],silver:ids[1],bronze:ids[2],status:"finalized"});
    await tx.commit();tx=null;return json({ok:true,undoAvailable:true,undoAction:"publish_podium",undoExpiresAt:new Date(Date.now()+10000).toISOString()});
   }
-  const phase4Actions=new Set(["begin_match_setup","start_match","start_without_details","save_match_details","save_draft_step","hold_match","set_event_match_rules","set_tournament_boss_pool","upsert_boss_catalog","record_match_result","publish_match_result","hold_and_start_next","declare_walkover","call_next_reserve","declare_double_forfeit","resolve_forfeited_round","cancel_tournament_forfeited_round"]);
+  const phase4Actions=new Set(["begin_match_setup","start_match","start_without_details","save_match_details","save_draft_step","hold_match","set_event_match_rules","set_tournament_boss_pool","upsert_boss_catalog","report_match_winner","hold_and_start_next","declare_walkover","call_next_reserve","declare_double_forfeit","resolve_forfeited_round","cancel_tournament_forfeited_round"]);
   if(phase4Actions.has(action)&&!(await isFeatureEnabled("hof-match-flow",db)))throw new HttpError(404,"Hall of Fame match-flow tools are not enabled.");
   const foundationActions=new Set(["begin_match_setup","start_match","start_without_details","save_match_details","save_draft_step","hold_match","set_event_match_rules","set_tournament_boss_pool","upsert_boss_catalog"]);
   if(foundationActions.has(action)&&!(await isFeatureEnabled("hof-match-foundation",db)))throw new HttpError(404,"This Hall of Fame feature is not enabled.");
@@ -370,7 +376,7 @@ export async function POST(request:Request){
    let boss=body.matchBoss===undefined?String(current.match_boss||""):String(body.matchBoss||"").trim();
    const method=body.bossMethod===undefined?(current.boss_method?String(current.boss_method):null):(body.bossMethod?String(body.bossMethod):null);
    if(boss.length>80)throw new HttpError(400,"Boss name is too long.");
-   if(method==="roll"&&(!boss||boss===String(current.match_boss||""))){const pool=(await db.execute({sql:"SELECT b.boss_name FROM hof_tournament_bosses b JOIN hof_boss_catalog c ON c.name=b.boss_name WHERE b.tournament_slug=? AND c.enabled=1 ORDER BY b.pool_order",args:[eventSlug]})).rows.map((row:any)=>String(row.boss_name));if(!pool.length)throw new HttpError(409,"Add at least one Hologram boss to the event pool before rolling.");boss=pool[randomInt(pool.length)];}
+   if(method==="roll"){const pool=(await db.execute({sql:"SELECT b.boss_name FROM hof_tournament_bosses b JOIN hof_boss_catalog c ON c.name=b.boss_name WHERE b.tournament_slug=? AND c.enabled=1 ORDER BY b.pool_order",args:[eventSlug]})).rows.map((row:any)=>String(row.boss_name));if(!pool.length)throw new HttpError(409,"Add at least one Hologram boss to the event pool before rolling.");boss=pool[randomInt(pool.length)];}
    if(method&&!['manual','roll','headline'].includes(method))throw new HttpError(400,"Choose manual, roll, or headline boss selection.");
    if(boss&&!method)throw new HttpError(400,"Choose how this boss was selected.");
    const previousBoss=String(current.match_boss||""),previousMethod=current.boss_method?String(current.boss_method):null;
@@ -772,5 +778,4 @@ export async function POST(request:Request){
   throw new HttpError(400,"Unknown Hall of Fame action.");
  }catch(e){if(tx)await tx.rollback();return failure(e);}
 }
-
 
