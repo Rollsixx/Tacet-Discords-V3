@@ -3,6 +3,8 @@ import {createHash,randomBytes,randomInt,timingSafeEqual,randomUUID} from "node:
 import {database,migrateOnce} from "@/lib/server/database";
 import {failure,json,readJson} from "@/lib/server/http";
 import {HttpError} from "@/lib/server/validation";
+import {isFeatureEnabled} from "@/lib/server/feature-flags.mjs";
+import {draftOrder,initialMatchPhaseState,validateDraftStep} from "@/lib/server/hof-match-foundation.mjs";
 import {featuredResonators} from "@/lib/resonators";
 
 const statuses=["draft","announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","finalized","archived","suspended","cancelled"];
@@ -36,8 +38,8 @@ async function audit(db:any,actor:Actor,action:string,slug:string|null,before:un
 }
 async function addMatch(tx:any,slug:string,round:number,label:string,order:number,side:string,left:any,right:any,now:string,bracketPosition=-1){
  const leftId=left?.kind==="player"?left.id:null,rightId=right?.kind==="player"?right.id:null;
- const state=leftId&&rightId?"ready":"awaiting_competitors",id=randomUUID();
- await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,bracket_position,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",args:[id,slug,round,label,order,side,leftId,rightId,state,bracketPosition,now]});
+ const state=leftId&&rightId?"ready":"awaiting_competitors",phaseState=initialMatchPhaseState({participantA:leftId,participantB:rightId}),id=randomUUID();
+ await tx.execute({sql:"INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,bracket_position,phase_state,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",args:[id,slug,round,label,order,side,leftId,rightId,state,bracketPosition,phaseState,now]});
  if(left?.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_a')",args:[id,left.id]});
  if(right?.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_b')",args:[id,right.id]});
  return {kind:"match",id,round,order,left,right};
@@ -157,8 +159,8 @@ export async function GET(request:Request){
   const artworkSlug=url.searchParams.get("artwork");
   if(artworkSlug){await requireCan(actor,"manage_event",artworkSlug,null,db);const row=await db.execute({sql:"SELECT artwork_data_url FROM hof_tournaments WHERE slug=?",args:[artworkSlug]});return json({artworkDataUrl:String(row.rows[0]?.artwork_data_url||"")});}
 const slug=url.searchParams.get("slug");
-  let eventSql="SELECT slug,title,boss,status,format,event_date,rules,public_notice,capacity_min,capacity_max,roster_published,bracket_published,medals_published,CASE WHEN artwork_data_url='' THEN 0 ELSE 1 END has_artwork,tournament_kind,bracket_mode FROM hof_tournaments ORDER BY updated_at DESC",eventArgs:any[]=[];
-  if(actor.role==="organizer"||actor.role==="referee"){eventSql="SELECT DISTINCT t.slug,t.title,t.boss,t.status,t.format,t.event_date,t.rules,t.public_notice,t.capacity_min,t.capacity_max,t.roster_published,t.bracket_published,t.medals_published,CASE WHEN t.artwork_data_url='' THEN 0 ELSE 1 END has_artwork,t.tournament_kind,t.bracket_mode FROM hof_tournaments t JOIN hof_staff_assignments a ON a.tournament_slug=t.slug WHERE a.staff_id=? ORDER BY t.updated_at DESC";eventArgs=[actor.id]}
+  let eventSql="SELECT slug,title,boss,headline_boss,bans_per_player,status,format,event_date,rules,public_notice,capacity_min,capacity_max,roster_published,bracket_published,medals_published,CASE WHEN artwork_data_url='' THEN 0 ELSE 1 END has_artwork,tournament_kind,bracket_mode FROM hof_tournaments ORDER BY updated_at DESC",eventArgs:any[]=[];
+  if(actor.role==="organizer"||actor.role==="referee"){eventSql="SELECT DISTINCT t.slug,t.title,t.boss,t.headline_boss,t.bans_per_player,t.status,t.format,t.event_date,t.rules,t.public_notice,t.capacity_min,t.capacity_max,t.roster_published,t.bracket_published,t.medals_published,CASE WHEN t.artwork_data_url='' THEN 0 ELSE 1 END has_artwork,t.tournament_kind,t.bracket_mode FROM hof_tournaments t JOIN hof_staff_assignments a ON a.tournament_slug=t.slug WHERE a.staff_id=? ORDER BY t.updated_at DESC";eventArgs=[actor.id]}
   const events=await db.execute({sql:eventSql,args:eventArgs});
   const people=await db.execute("SELECT id,display_name,resonator_icon FROM hof_participants ORDER BY display_name COLLATE NOCASE LIMIT 300");
   const auditRows=await db.execute({sql:"SELECT action,actor_role,reason,outcome,created_at,tournament_slug FROM hof_audit_events "+((actor.role==="owner"||actor.role==="hall_of_fame_admin")?"":"WHERE tournament_slug IN (SELECT tournament_slug FROM hof_staff_assignments WHERE staff_id=?) ")+"ORDER BY created_at DESC LIMIT 30",args:(actor.role==="owner"||actor.role==="hall_of_fame_admin")?[]:[actor.id]});
@@ -166,12 +168,12 @@ const slug=url.searchParams.get("slug");
   if(slug){
    const mayManage=await can(actor,"manage_event",slug,null,db);
    if(mayManage){
-    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_position,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
+    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_position,m.bracket_side,m.state,m.phase_state,m.match_boss,m.boss_method,m.clear_time_seconds,m.staff_note,m.hold_note,m.started_without_details,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
     matches=result.rows;
    }else if(actor.role==="referee"){
     const assigned=await db.execute({sql:"SELECT match_id FROM hof_staff_assignments WHERE staff_id=? AND tournament_slug=? AND match_id IS NOT NULL",args:[actor.id,slug]});
     const allowed=new Set(assigned.rows.map((row:any)=>String(row.match_id)));
-    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_position,m.bracket_side,m.state,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
+    const result=await db.execute({sql:"SELECT m.id,m.round_number,m.round_label,m.match_order,m.bracket_position,m.bracket_side,m.state,m.phase_state,m.match_boss,m.boss_method,m.clear_time_seconds,m.staff_note,m.hold_note,m.started_without_details,m.participant_a,m.participant_b,m.winner_id,m.outcome,m.version,a.display_name name_a,b.display_name name_b FROM hof_matches m LEFT JOIN hof_participants a ON a.id=m.participant_a LEFT JOIN hof_participants b ON b.id=m.participant_b WHERE m.tournament_slug=? ORDER BY m.round_number,m.match_order,m.bracket_side",args:[slug]});
     matches=result.rows.filter((row:any)=>allowed.has(String(row.id)));
    }
   }
@@ -190,7 +192,12 @@ const slug=url.searchParams.get("slug");
   }
   let roster:any[]=[];if(slug&&await can(actor,"manage_event",slug,null,db)){const r=await db.execute({sql:"SELECT p.id,p.display_name,p.resonator_icon,r.state,r.published,r.seed_position,r.reserve_order FROM hof_roster r JOIN hof_participants p ON p.id=r.participant_id WHERE r.tournament_slug=? ORDER BY CASE r.state WHEN 'confirmed' THEN 0 WHEN 'reserve' THEN 1 ELSE 2 END,COALESCE(r.seed_position,r.reserve_order,9999),p.display_name COLLATE NOCASE",args:[slug]});roster=r.rows;}
   const reserves=roster.filter((row:any)=>row.state==="reserve");
-  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff});
+  const bossCatalog=await db.execute({sql:"SELECT name,icon_url FROM hof_boss_catalog WHERE enabled=1 ORDER BY name COLLATE NOCASE",args:[]});
+  let bossPool:any[]=[],draftSteps:any[]=[];
+  if(slug&&await can(actor,"manage_event",slug,null,db)){const pool=await db.execute({sql:"SELECT b.boss_name name,c.icon_url,b.pool_order FROM hof_tournament_bosses b JOIN hof_boss_catalog c ON c.name=b.boss_name WHERE b.tournament_slug=? AND c.enabled=1 ORDER BY b.pool_order",args:[slug]});bossPool=pool.rows;}
+  const requestedMatchId=url.searchParams.get("matchId");
+  if(requestedMatchId&&slug&&await can(actor,"draft_result",slug,requestedMatchId,db)){const steps=await db.execute({sql:"SELECT step_number,actor_slot,action,resonator,created_by,created_at FROM hof_draft_steps WHERE match_id=? ORDER BY step_number",args:[requestedMatchId]});draftSteps=steps.rows;}
+  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
  }catch(e){return failure(e);}
 }
 export async function POST(request:Request){
@@ -199,6 +206,125 @@ export async function POST(request:Request){
   await migrateOnce();const db=database(),actor=await actorFor(request,db),body:any=await readJson(request,2400000);
   if(!body||typeof body!=="object")throw new HttpError(400,"Invalid request.");
   const action=text(body.action,"Action",60),now=new Date().toISOString(),slug=body.slug?text(body.slug,"Tournament",80):null,matchId=body.matchId?text(body.matchId,"Match",80):null;
+  const foundationActions=new Set(["begin_match_setup","start_match","start_without_details","save_match_details","save_draft_step","hold_match","set_event_match_rules","set_tournament_boss_pool","upsert_boss_catalog"]);
+  if(foundationActions.has(action)&&!(await isFeatureEnabled("hof-match-foundation",db)))throw new HttpError(404,"This Hall of Fame feature is not enabled.");
+  if(action==="upsert_boss_catalog"){
+   await requireCan(actor,"global_admin",null,null,db);
+   const name=text(body.name,"Boss name",80),iconUrl=String(body.iconUrl||"").trim();
+   if(iconUrl.length>500||iconUrl.startsWith("//")||iconUrl&&!iconUrl.startsWith("/")&&!/^https:\/\//i.test(iconUrl))throw new HttpError(400,"Boss artwork must use a site path or HTTPS URL.");
+   await db.execute({sql:"INSERT INTO hof_boss_catalog(name,icon_url,enabled,created_at,updated_at) VALUES(?,?,1,?,?) ON CONFLICT(name) DO UPDATE SET icon_url=excluded.icon_url,enabled=1,updated_at=excluded.updated_at",args:[name,iconUrl,now,now]});
+   await audit(db,actor,"boss_catalog_update",null,{}, {name,iconUrl});return json({ok:true,name});
+  }
+  if(action==="set_event_match_rules"){
+   if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"manage_event",slug,null,db);
+   const headlineBoss=text(body.headlineBoss,"Headline boss",80),bansPerPlayer=Number(body.bansPerPlayer);
+   if(![3,4].includes(bansPerPlayer))throw new HttpError(400,"Choose three or four bans per player.");
+   const event=(await db.execute({sql:"SELECT headline_boss,bans_per_player,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event)throw new HttpError(404,"Tournament not found.");
+   if(!["draft","announced","registration_open","registration_closed"].includes(String(event.status)))throw new HttpError(409,"Event match rules are locked after bracket preparation.");
+   const boss=(await db.execute({sql:"SELECT name FROM hof_boss_catalog WHERE name=? COLLATE NOCASE AND enabled=1",args:[headlineBoss]})).rows[0];if(!boss)throw new HttpError(400,"Choose a boss from the enabled catalog.");
+   await db.execute({sql:"UPDATE hof_tournaments SET boss=?,headline_boss=?,bans_per_player=?,updated_at=?,version=version+1 WHERE slug=?",args:[String(boss.name),String(boss.name),bansPerPlayer,now,slug]});
+   await audit(db,actor,"setup_edit",slug,event,{headlineBoss:String(boss.name),bansPerPlayer});return json({ok:true,headlineBoss:String(boss.name),bansPerPlayer,draftSteps:draftOrder(bansPerPlayer).length});
+  }
+  if(action==="set_tournament_boss_pool"){
+   if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"manage_event",slug,null,db);
+   if(!Array.isArray(body.bosses)||body.bosses.length>32)throw new HttpError(400,"Choose up to 32 bosses for this event.");
+   const names=body.bosses.map((value:unknown)=>text(value,"Boss name",80)),normalized=names.map((name:string)=>name.toLocaleLowerCase("en-US"));
+   if(new Set(normalized).size!==names.length)throw new HttpError(400,"A boss can only appear once in the pool.");
+   const event=(await db.execute({sql:"SELECT status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event)throw new HttpError(404,"Tournament not found.");
+   if(!["draft","announced","registration_open","registration_closed"].includes(String(event.status)))throw new HttpError(409,"The boss pool is locked after bracket preparation.");
+   const used=(await db.execute({sql:"SELECT 1 FROM hof_matches WHERE tournament_slug=? AND phase_state IN ('setting_up','live','complete') LIMIT 1",args:[slug]})).rows.length>0;if(used)throw new HttpError(409,"The boss pool cannot change after a match has started.");
+   for(const name of names){const row=(await db.execute({sql:"SELECT name FROM hof_boss_catalog WHERE name=? COLLATE NOCASE AND enabled=1",args:[name]})).rows[0];if(!row)throw new HttpError(400,"Every pool boss must be present in the enabled catalog.");}
+   tx=await db.transaction("write");
+   const before=(await tx.execute({sql:"SELECT boss_name FROM hof_tournament_bosses WHERE tournament_slug=? ORDER BY pool_order",args:[slug]})).rows.map((row:any)=>String(row.boss_name));
+   await tx.execute({sql:"DELETE FROM hof_tournament_bosses WHERE tournament_slug=?",args:[slug]});
+   for(const [index,name] of names.entries())await tx.execute({sql:"INSERT INTO hof_tournament_bosses(tournament_slug,boss_name,pool_order,added_by,created_at) VALUES(?,?,?,?,?)",args:[slug,name,index,actor.id,now]});
+   await audit(tx,actor,"setup_edit",slug,{bosses:before},{bosses:names});await tx.commit();tx=null;return json({ok:true,bosses:names});
+  }
+  if(action==="begin_match_setup"){
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   const current=(await db.execute({sql:"SELECT m.tournament_slug,m.phase_state,m.participant_a,m.participant_b,t.status event_status FROM hof_matches m JOIN hof_tournaments t ON t.slug=m.tournament_slug WHERE m.id=?",args:[matchId]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(current.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
+   if(!["bracket_revealed","in_progress"].includes(String(current.event_status)))throw new HttpError(409,"Reveal the bracket before preparing a match.");
+   if(!current.participant_a||!current.participant_b)throw new HttpError(409,"Both match participants must be known before setup.");
+   if(!["ready","on_hold","setting_up"].includes(String(current.phase_state)))throw new HttpError(409,"Only a Ready, On hold, or existing setup match can be opened.");
+   tx=await db.transaction("write");
+   const locked=(await tx.execute({sql:"SELECT phase_state FROM hof_matches WHERE id=?",args:[matchId]})).rows[0];
+   const active=await tx.execute({sql:"SELECT id FROM hof_matches WHERE tournament_slug=? AND id<>? AND phase_state IN ('setting_up','live') LIMIT 1",args:[eventSlug,matchId]});if(active.rows.length)throw new HttpError(409,"Finish or resume the other Setting up or Live match first.");
+   if(!locked||!["ready","on_hold","setting_up"].includes(String(locked.phase_state)))throw new HttpError(409,"Match changed while setup was opening.");
+   await tx.execute({sql:"UPDATE hof_matches SET phase_state='setting_up',hold_note='',version=version+1,updated_at=? WHERE id=?",args:[now,matchId]});
+   await audit(tx,actor,"setup_edit",eventSlug,{phaseState:String(locked.phase_state)},{phaseState:"setting_up"});await tx.commit();tx=null;return json({ok:true,phaseState:"setting_up"});
+  }
+  if(action==="start_without_details"){
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   const current=(await db.execute({sql:"SELECT m.tournament_slug,m.phase_state,m.participant_a,m.participant_b,t.status event_status FROM hof_matches m JOIN hof_tournaments t ON t.slug=m.tournament_slug WHERE m.id=?",args:[matchId]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(current.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
+   if(!["bracket_revealed","in_progress"].includes(String(current.event_status)))throw new HttpError(409,"Reveal the bracket before starting a match.");
+   if(!current.participant_a||!current.participant_b)throw new HttpError(409,"Both match participants must be known before starting.");
+   if(!["ready","on_hold"].includes(String(current.phase_state)))throw new HttpError(409,"Only a Ready or On hold match can start.");
+   tx=await db.transaction("write");
+   const active=await tx.execute({sql:"SELECT id FROM hof_matches WHERE tournament_slug=? AND phase_state IN ('setting_up','live') LIMIT 1",args:[eventSlug]});if(active.rows.length)throw new HttpError(409,"Another match is already Setting up or Live.");
+   const steps=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_draft_steps WHERE match_id=?",args:[matchId]});if(Number(steps.rows[0]?.total||0))throw new HttpError(409,"A match with draft steps cannot skip its setup.");
+   await tx.execute({sql:"UPDATE hof_matches SET phase_state='live',started_without_details=1,match_boss='',boss_method=NULL,version=version+1,updated_at=? WHERE id=?",args:[now,matchId]});
+   await audit(tx,actor,"setup_edit",eventSlug,{phaseState:String(current.phase_state)},{phaseState:"live",startedWithoutDetails:true});await tx.commit();tx=null;return json({ok:true,phaseState:"live",startedWithoutDetails:true});
+  }
+  if(action==="start_match"){
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   const current=(await db.execute({sql:"SELECT m.tournament_slug,m.phase_state,m.match_boss,m.started_without_details FROM hof_matches m WHERE m.id=?",args:[matchId]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(current.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
+   if(String(current.phase_state)!=="setting_up")throw new HttpError(409,"Open match setup before starting it.");
+   if(!String(current.match_boss||"")&&!Number(current.started_without_details))throw new HttpError(409,"Choose a boss before starting the match, or use Start without details.");
+   tx=await db.transaction("write");
+   const active=await tx.execute({sql:"SELECT id FROM hof_matches WHERE tournament_slug=? AND id<>? AND phase_state IN ('setting_up','live') LIMIT 1",args:[eventSlug,matchId]});if(active.rows.length)throw new HttpError(409,"Another match is already Setting up or Live.");
+   const started=await tx.execute({sql:"UPDATE hof_matches SET phase_state='live',version=version+1,updated_at=? WHERE id=? AND phase_state='setting_up'",args:[now,matchId]});if(!started.rowsAffected)throw new HttpError(409,"Match setup changed before it could start.");
+   await audit(tx,actor,"setup_edit",eventSlug,{phaseState:"setting_up"},{phaseState:"live"});await tx.commit();tx=null;return json({ok:true,phaseState:"live"});
+  }
+  if(action==="hold_match"){
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   const current=(await db.execute({sql:"SELECT tournament_slug,phase_state FROM hof_matches WHERE id=?",args:[matchId]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(current.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
+   if(!["ready","on_hold"].includes(String(current.phase_state)))throw new HttpError(409,"Only a Ready match can be put on hold.");
+   const note=String(body.note||"").trim().slice(0,1000);
+   await db.execute({sql:"UPDATE hof_matches SET phase_state='on_hold',hold_note=?,version=version+1,updated_at=? WHERE id=?",args:[note,now,matchId]});
+   await audit(db,actor,"hold",eventSlug,{phaseState:String(current.phase_state)},{phaseState:"on_hold",holdNote:note},note);return json({ok:true,phaseState:"on_hold"});
+  }
+  if(action==="save_match_details"){
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   const current=(await db.execute({sql:"SELECT m.*,t.headline_boss,t.status event_status,t.bans_per_player FROM hof_matches m JOIN hof_tournaments t ON t.slug=m.tournament_slug WHERE m.id=?",args:[matchId]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(current.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
+   if(!(String(current.phase_state)==="setting_up"||(String(current.phase_state)==="live"&&Number(current.started_without_details))))throw new HttpError(409,"Match details can only be edited during setup or for a match started without details.");
+   const boss=body.matchBoss===undefined?String(current.match_boss||""):String(body.matchBoss||"").trim();
+   const method=body.bossMethod===undefined?(current.boss_method?String(current.boss_method):null):(body.bossMethod?String(body.bossMethod):null);
+   if(boss.length>80)throw new HttpError(400,"Boss name is too long.");
+   if(method&&!['manual','roll','headline'].includes(method))throw new HttpError(400,"Choose manual, roll, or headline boss selection.");
+   if(boss&&!method)throw new HttpError(400,"Choose how this boss was selected.");
+   const previousBoss=String(current.match_boss||""),previousMethod=current.boss_method?String(current.boss_method):null;
+   const draftCount=Number((await db.execute({sql:"SELECT COUNT(*) total FROM hof_draft_steps WHERE match_id=?",args:[matchId]})).rows[0]?.total||0);
+   if(draftCount&&(boss!==previousBoss||method!==previousMethod))throw new HttpError(409,"The boss is locked after the draft starts.");
+   if(boss){
+    const finalMatch=['third_place','grand_final'].includes(String(current.bracket_side))||String(current.round_label).toLocaleLowerCase("en-US")==="final";
+    if(finalMatch){if(method!=="headline"||boss.toLocaleLowerCase("en-US")!==String(current.headline_boss||"").toLocaleLowerCase("en-US"))throw new HttpError(409,"Final and third-place matches must use the event headline boss.");}
+    else{if(!['manual','roll'].includes(String(method)))throw new HttpError(400,"Choose a boss from the event pool for this match.");const inPool=(await db.execute({sql:"SELECT 1 FROM hof_tournament_bosses b JOIN hof_boss_catalog c ON c.name=b.boss_name WHERE b.tournament_slug=? AND b.boss_name=? COLLATE NOCASE AND c.enabled=1",args:[eventSlug,boss]})).rows.length>0;if(!inPool)throw new HttpError(409,"Choose a boss from this event's Hologram boss pool.");}
+   }
+   const rawClearTime=body.clearTimeSeconds===undefined?current.clear_time_seconds:(body.clearTimeSeconds===null||body.clearTimeSeconds===""?null:Number(body.clearTimeSeconds)),clearTime=rawClearTime===null||rawClearTime===undefined?null:Number(rawClearTime);
+   if(clearTime!==null&&(!Number.isInteger(clearTime)||clearTime<0||clearTime>86400))throw new HttpError(400,"Clear time must be a whole number of seconds between 0 and 86400.");
+   const staffNote=body.staffNote===undefined?String(current.staff_note||""):String(body.staffNote||"").trim().slice(0,1500),holdNote=body.holdNote===undefined?String(current.hold_note||""):String(body.holdNote||"").trim().slice(0,1000);
+   await db.execute({sql:"UPDATE hof_matches SET match_boss=?,boss_method=?,clear_time_seconds=?,staff_note=?,hold_note=?,started_without_details=CASE WHEN ?<>'' THEN 0 ELSE started_without_details END,version=version+1,updated_at=? WHERE id=?",args:[boss,method,clearTime,staffNote,holdNote,boss,now,matchId]});
+   const auditAction=method==="roll"&&boss!==previousBoss?"boss_roll":"setup_edit";
+   await audit(db,actor,auditAction,eventSlug,{matchBoss:previousBoss,bossMethod:previousMethod,clearTimeSeconds:current.clear_time_seconds},{matchBoss:boss,bossMethod:method,clearTimeSeconds:clearTime,staffNote,holdNote},String(body.reason||"" ).slice(0,500));return json({ok:true,matchBoss:boss,bossMethod:method,clearTimeSeconds:clearTime});
+  }
+  if(action==="save_draft_step"){
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   tx=await db.transaction("write");
+   const current=(await tx.execute({sql:"SELECT m.tournament_slug,m.phase_state,m.participant_a,m.participant_b,m.match_boss,m.started_without_details,t.bans_per_player FROM hof_matches m JOIN hof_tournaments t ON t.slug=m.tournament_slug WHERE m.id=?",args:[matchId]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(current.tournament_slug);await requireCan(actor,"draft_result",eventSlug,matchId,db);
+   if(!["setting_up","live"].includes(String(current.phase_state)))throw new HttpError(409,"Start match setup before saving draft steps.");
+   if(!current.participant_a||!current.participant_b)throw new HttpError(409,"Both match participants must be known before drafting.");
+   const name=text(body.resonator,"Resonator",64),resonator=featuredResonators.find((entry)=>entry.name.toLocaleLowerCase("en-US")===name.toLocaleLowerCase("en-US"));if(!resonator)throw new HttpError(400,"Choose a supported Resonator.");
+   const rows=await tx.execute({sql:"SELECT step_number,actor_slot,action,resonator FROM hof_draft_steps WHERE match_id=? ORDER BY step_number",args:[matchId]});
+   let step:any;try{step=validateDraftStep({history:rows.rows,stepNumber:Number(body.stepNumber),actorSlot:String(body.actorSlot),action:String(body.stepAction),resonator:resonator.name,bansPerPlayer:Number(current.bans_per_player),bossChosen:Boolean(String(current.match_boss||"")),startedWithoutDetails:Boolean(Number(current.started_without_details))});}catch(error){throw new HttpError(409,error instanceof Error?error.message:"Draft step is invalid.");}
+   await tx.execute({sql:"INSERT INTO hof_draft_steps(match_id,step_number,actor_slot,action,resonator,created_by,created_at) VALUES(?,?,?,?,?,?,?)",args:[matchId,step.stepNumber,step.actorSlot,step.action,step.resonator,actor.id,now]});
+   await audit(tx,actor,"setup_edit",eventSlug,{draftSteps:rows.rows.length},{draftStep:step});await tx.commit();tx=null;return json({ok:true,step,draftComplete:step.stepNumber===draftOrder(Number(current.bans_per_player)).length});
+  }
   if(action==="create_staff"){
    if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only full-access Black Shores titles can issue staff credentials.");
    const label=text(body.label,"Staff name",64),title=text(body.title,"Staff title",32) as WorkspaceTitle;
@@ -265,7 +391,7 @@ export async function POST(request:Request){
    for(let group=0;group<roundTwo.length;group++){
     const match=roundTwo[group],left=slots[group*2],right=slots[group*2+1],a=left.kind==="player"?left.id:null,b=right.kind==="player"?right.id:null;
     await tx.execute({sql:"DELETE FROM hof_match_dependencies WHERE match_id=?",args:[match.id]});
-    await tx.execute({sql:"UPDATE hof_matches SET participant_a=?,participant_b=?,winner_id=NULL,outcome='',outcome_published=0,state=?,bracket_position=?,version=version+1,updated_at=? WHERE id=?",args:[a,b,a&&b?"ready":"awaiting_competitors",group,now,match.id]});
+    await tx.execute({sql:"UPDATE hof_matches SET participant_a=?,participant_b=?,winner_id=NULL,outcome='',outcome_published=0,state=?,phase_state=?,bracket_position=?,version=version+1,updated_at=? WHERE id=?",args:[a,b,a&&b?"ready":"awaiting_competitors",initialMatchPhaseState({participantA:a,participantB:b}),group,now,match.id]});
     if(left.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_a')",args:[match.id,left.id]});
     if(right.kind==="match")await tx.execute({sql:"INSERT INTO hof_match_dependencies(match_id,depends_on_match_id,dependency_type,target_slot) VALUES(?,?,'winner','participant_b')",args:[match.id,right.id]});
    }
@@ -288,12 +414,12 @@ export async function POST(request:Request){
    await audit(db,actor,action,slug,event.rows[0],{status:"bracket_revealed",bracketPublished:true});return json({ok:true});
   }
   if(action==="record_match_result"){
-   if(!matchId)throw new HttpError(400,"Match is required.");const m=await db.execute({sql:"SELECT tournament_slug,state,participant_a,participant_b,version FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
+   if(!matchId)throw new HttpError(400,"Match is required.");const m=await db.execute({sql:"SELECT tournament_slug,state,phase_state,participant_a,participant_b,version FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
    const eventSlug=String(m.rows[0].tournament_slug);await requireCan(actor,"draft_result",eventSlug,matchId,db);
    if(!["ready","scheduled","in_progress"].includes(String(m.rows[0].state)))throw new HttpError(409,"This match is not ready for a result.");
    const winner=text(body.winnerId,"Winner",80),outcome=text(body.outcome,"Outcome summary",500),expected=Number(body.version);
    if(winner!==m.rows[0].participant_a&&winner!==m.rows[0].participant_b)throw new HttpError(400,"Winner must be one of the two match participants.");
-   const write=await db.execute({sql:"UPDATE hof_matches SET winner_id=?,outcome=?,state='pending_publication',version=version+1,updated_at=? WHERE id=? AND version=? AND state IN ('ready','scheduled','in_progress')",args:[winner,outcome,now,matchId,expected]});
+   const write=await db.execute({sql:"UPDATE hof_matches SET winner_id=?,outcome=?,state='pending_publication',phase_state='complete',version=version+1,updated_at=? WHERE id=? AND version=? AND state IN ('ready','scheduled','in_progress')",args:[winner,outcome,now,matchId,expected]});
    if(!write.rowsAffected)throw new HttpError(409,"Match changed while this result was being entered. Refresh and retry.");
    await audit(db,actor,"record_match_result",eventSlug,m.rows[0],{winnerId:winner,outcome,state:"pending_publication"});return json({ok:true});
   }
@@ -317,9 +443,9 @@ export async function POST(request:Request){
     if(occupied&&occupied!==advancing)throw new HttpError(409,"The next match slot is already occupied by another participant.");
     const other=slot==="participant_a"?dep.participant_b:dep.participant_a;
     const nextState=other?"ready":"awaiting_competitors";
-    await tx.execute({sql:"UPDATE hof_matches SET "+slot+"=?,state=?,version=version+1,updated_at=? WHERE id=?",args:[advancing,nextState,now,dep.match_id]});
+    await tx.execute({sql:"UPDATE hof_matches SET "+slot+"=?,state=?,phase_state=?,version=version+1,updated_at=? WHERE id=?",args:[advancing,nextState,other?"ready":"upcoming",now,dep.match_id]});
    }
-   const published=await tx.execute({sql:"UPDATE hof_matches SET state='published',outcome_published=1,version=version+1,updated_at=? WHERE id=? AND version=? AND state='pending_publication'",args:[now,matchId,match.version]});
+   const published=await tx.execute({sql:"UPDATE hof_matches SET state='published',phase_state='complete',outcome_published=1,version=version+1,updated_at=? WHERE id=? AND version=? AND state='pending_publication'",args:[now,matchId,match.version]});
    if(!published.rowsAffected)throw new HttpError(409,"Match changed during publication. Refresh and retry.");
    const incomplete=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=? AND state NOT IN ('published','no_result','cancelled')",args:[eventSlug]});
    const newStatus=Number(incomplete.rows[0]?.total||0)===0?"results_pending":"in_progress";
@@ -328,20 +454,20 @@ export async function POST(request:Request){
    await tx.commit();tx=null;return json({ok:true});
   }
   if(action==="open_dispute"){
-   if(!matchId)throw new HttpError(400,"Match is required.");const m=await db.execute({sql:"SELECT tournament_slug,state FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
+   if(!matchId)throw new HttpError(400,"Match is required.");const m=await db.execute({sql:"SELECT tournament_slug,state,phase_state FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
    const eventSlug=String(m.rows[0].tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);if(["published","cancelled"].includes(String(m.rows[0].state)))throw new HttpError(409,"A published match needs an administrator correction workflow.");
    const reason=text(body.reason,"Dispute reason",1500),id=randomUUID();
    await db.execute({sql:"INSERT INTO hof_disputes(id,match_id,opened_by,reason,created_at) VALUES(?,?,?,?,?)",args:[id,matchId,actor.id,reason,now]});
-   await db.execute({sql:"UPDATE hof_matches SET state='disputed',version=version+1,updated_at=? WHERE id=?",args:[now,matchId]});await audit(db,actor,action,eventSlug,{}, {matchId,disputeId:id,state:"disputed"});return json({ok:true});
+   await db.execute({sql:"UPDATE hof_matches SET state='disputed',phase_state='on_hold',hold_note=?,version=version+1,updated_at=? WHERE id=?",args:[reason,now,matchId]});await audit(db,actor,action,eventSlug,{}, {matchId,disputeId:id,state:"disputed",phaseState:"on_hold"});return json({ok:true});
   }
   if(action==="resolve_dispute"){
    if(!matchId)throw new HttpError(400,"Match is required.");if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can resolve a dispute.");
    const rationale=text(body.reason,"Resolution rationale",1500),d=await db.execute({sql:"SELECT id FROM hof_disputes WHERE match_id=? AND state='open'",args:[matchId]});if(!d.rows.length)throw new HttpError(404,"Open dispute not found.");
-   const m=await db.execute({sql:"SELECT tournament_slug,winner_id,outcome FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
-   const state=m.rows[0].winner_id?"pending_publication":"ready";
+   const m=await db.execute({sql:"SELECT tournament_slug,winner_id,outcome,participant_a,participant_b FROM hof_matches WHERE id=?",args:[matchId]});if(!m.rows.length)throw new HttpError(404,"Match not found.");
+   const state=m.rows[0].winner_id?"pending_publication":"ready",phaseState=m.rows[0].winner_id?"complete":m.rows[0].participant_a&&m.rows[0].participant_b?"ready":"upcoming";
    await db.execute({sql:"UPDATE hof_disputes SET state='resolved',resolution=?,resolved_by=?,resolved_at=? WHERE match_id=? AND state='open'",args:[rationale,actor.id,now,matchId]});
-   await db.execute({sql:"UPDATE hof_matches SET state=?,version=version+1,updated_at=? WHERE id=?",args:[state,now,matchId]});
-   await audit(db,actor,action,String(m.rows[0].tournament_slug),{}, {state:"resolved",resolution:rationale});return json({ok:true});
+   await db.execute({sql:"UPDATE hof_matches SET state=?,phase_state=?,hold_note='',version=version+1,updated_at=? WHERE id=?",args:[state,phaseState,now,matchId]});
+   await audit(db,actor,action,String(m.rows[0].tournament_slug),{}, {state:"resolved",phaseState,resolution:rationale});return json({ok:true});
   }
   if(action==="delete_tournament"){
    if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only a full-access Black Shores administrator can delete tournaments.");
@@ -353,11 +479,13 @@ export async function POST(request:Request){
    const matchArgs=[slug];
    await tx.execute({sql:"DELETE FROM hof_match_dependencies WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+") OR depends_on_match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:[...matchArgs,...matchArgs]});
    await tx.execute({sql:"DELETE FROM hof_match_evidence WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
+   await tx.execute({sql:"DELETE FROM hof_draft_steps WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
    await tx.execute({sql:"DELETE FROM hof_match_claims WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
    await tx.execute({sql:"DELETE FROM hof_disputes WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
    await tx.execute({sql:"DELETE FROM hof_staff_assignments WHERE tournament_slug=?",args:[slug]});
    await tx.execute({sql:"DELETE FROM hof_registrations WHERE tournament_slug=?",args:[slug]});
    await tx.execute({sql:"DELETE FROM hof_roster WHERE tournament_slug=?",args:[slug]});
+   await tx.execute({sql:"DELETE FROM hof_tournament_bosses WHERE tournament_slug=?",args:[slug]});
    await tx.execute({sql:"DELETE FROM hof_medals WHERE tournament_slug=?",args:[slug]});
    await tx.execute({sql:"DELETE FROM hof_announcements WHERE tournament_slug=?",args:[slug]});
    await tx.execute({sql:"DELETE FROM hof_matches WHERE tournament_slug=?",args:[slug]});
@@ -392,7 +520,7 @@ export async function POST(request:Request){
    }
    if(medals.size!==3)throw new HttpError(400,"Assign Champion, 2nd place, and 3rd place before importing.");
    const capacityMax=Math.max(2,entrants.length);tx=await db.transaction("write");
-   await tx.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,roster_published,bracket_published,medals_published,artwork_data_url,tournament_kind,bracket_mode,created_at,updated_at) VALUES(?,?,?,'single_elimination','archived',2,?,NULL,'UTC',?,?,?,1,0,1,?,'hologram','single_elimination',?,?)",args:[eventSlug,title,boss,capacityMax,rules,notice,eventDate,artwork,now,now]});
+   await tx.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,roster_published,bracket_published,medals_published,artwork_data_url,tournament_kind,bracket_mode,headline_boss,bans_per_player,created_at,updated_at) VALUES(?,?,?,'single_elimination','archived',2,?,NULL,'UTC',?,?,?,1,0,1,?,'hologram','single_elimination',?,3,?,?)",args:[eventSlug,title,boss,capacityMax,rules,notice,eventDate,artwork,boss,now,now]});
    for(const entrant of entrants){await tx.execute({sql:"INSERT INTO hof_roster(tournament_slug,participant_id,state,published,updated_at) VALUES(?,?,'confirmed',1,?)",args:[eventSlug,entrant.participantId,now]});if(entrant.medal)await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?)",args:[eventSlug,entrant.medal,entrant.participantId,actor.id,now]});}
    await audit(tx,actor,action,eventSlug,{}, {status:"archived",historical:true,participants:entrants.length,medals:medals.size});await tx.commit();tx=null;return json({ok:true,participants:entrants.length,medals:medals.size,slug:eventSlug});
   }
@@ -408,7 +536,7 @@ export async function POST(request:Request){
    const rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000);
    let artwork=String(row.artwork_data_url||"");
    if(body.artworkDataUrl!==undefined){artwork=String(body.artworkDataUrl||"");if(artwork.length>2100000||!/^data:image\/(png|jpeg|webp);base64,/.test(artwork))throw new HttpError(400,"Artwork must be PNG, JPG, or WebP under 1.5 MB.");}
-   await db.execute({sql:"UPDATE hof_tournaments SET title=?,boss=?,event_date=?,rules=?,public_notice=?,artwork_data_url=?,updated_at=?,version=version+1 WHERE slug=?",args:[title,boss,eventDate,rules,notice,artwork,now,slug]});
+   await db.execute({sql:"UPDATE hof_tournaments SET title=?,boss=?,headline_boss=?,event_date=?,rules=?,public_notice=?,artwork_data_url=?,updated_at=?,version=version+1 WHERE slug=?",args:[title,boss,boss,eventDate,rules,notice,artwork,now,slug]});
    await audit(db,actor,action,slug,{title:row.title,boss:row.boss,eventDate:row.event_date},{title,boss,eventDate,rules,publicNotice:notice,artworkChanged:body.artworkDataUrl!==undefined});
    return json({ok:true});
   }
@@ -419,7 +547,7 @@ export async function POST(request:Request){
    const min=Math.max(2,Math.min(256,Number(body.capacityMin)||2)),max=Math.max(min,Math.min(256,Number(body.capacityMax)||32)),rules=String(body.rules||"").slice(0,10000),notice=String(body.publicNotice||"").slice(0,2000),eventDate=body.eventDate?text(body.eventDate,"Event date",50):null,artwork=String(body.artworkDataUrl||"");
    if(!/^data:image\/(png|jpeg|webp);base64,/.test(artwork)||artwork.length>2100000)throw new HttpError(400,"Upload a tournament image under 1.5 MB (PNG, JPG, or WebP).");
    if(eventDate&&Number.isNaN(Date.parse(eventDate)))throw new HttpError(400,"Enter a valid event date.");
-   await db.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,artwork_data_url,tournament_kind,bracket_mode,created_at,updated_at) VALUES(?,?,?,?,'draft',?,?,NULL,'UTC',?,?,?,?, 'hologram',?,?,?)",args:[eventSlug,title,boss,format,min,max,rules,notice,eventDate,artwork,format,now,now]});
+   await db.execute({sql:"INSERT INTO hof_tournaments(slug,title,boss,format,status,capacity_min,capacity_max,registration_deadline,timezone,rules,public_notice,event_date,artwork_data_url,tournament_kind,bracket_mode,headline_boss,bans_per_player,created_at,updated_at) VALUES(?,?,?,?,'draft',?,?,NULL,'UTC',?,?,?,?, 'hologram',?,?,3,?,?)",args:[eventSlug,title,boss,format,min,max,rules,notice,eventDate,artwork,format,boss,now,now]});
    await audit(db,actor,action,eventSlug,{}, {title,boss,format,status:"draft"});return json({ok:true,slug:eventSlug});
   }
   if(action==="set_status"){
@@ -448,7 +576,7 @@ export async function POST(request:Request){
    const prior=String(current.rows[0][slot]||"");if(!prior)throw new HttpError(409,"That match slot is empty.");
    const reserve=await db.execute({sql:"SELECT state FROM hof_roster WHERE tournament_slug=? AND participant_id=?",args:[eventSlug,participantId]});
    if(reserve.rows[0]?.state!=="reserve")throw new HttpError(409,"Choose someone on this tournament's reserve list.");
-   await db.execute({sql:"UPDATE hof_matches SET "+slot+"=?,version=version+1,updated_at=? WHERE id=?",args:[participantId,now,matchId]});
+   await db.execute({sql:"UPDATE hof_matches SET "+slot+"=?,phase_state='ready',version=version+1,updated_at=? WHERE id=?",args:[participantId,now,matchId]});
    await db.execute({sql:"UPDATE hof_roster SET state='withdrawn',reserve_reason='Replaced from bracket slot',updated_at=? WHERE tournament_slug=? AND participant_id=?",args:[now,eventSlug,prior]});
    await db.execute({sql:"UPDATE hof_roster SET state='confirmed',published=1,updated_at=? WHERE tournament_slug=? AND participant_id=?",args:[now,eventSlug,participantId]});
    await audit(db,actor,"substitute_reserve",eventSlug,{matchId,slot,participantId:prior},{matchId,slot,participantId,priorParticipantId:prior});
