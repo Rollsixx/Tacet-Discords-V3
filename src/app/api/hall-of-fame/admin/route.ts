@@ -159,9 +159,10 @@ export async function GET(request:Request){
   const artworkSlug=url.searchParams.get("artwork");
   if(artworkSlug){await requireCan(actor,"manage_event",artworkSlug,null,db);const row=await db.execute({sql:"SELECT artwork_data_url FROM hof_tournaments WHERE slug=?",args:[artworkSlug]});return json({artworkDataUrl:String(row.rows[0]?.artwork_data_url||"")});}
 const slug=url.searchParams.get("slug");
-  let eventSql="SELECT slug,title,boss,headline_boss,bans_per_player,status,format,event_date,rules,public_notice,capacity_min,capacity_max,roster_published,bracket_published,medals_published,CASE WHEN artwork_data_url='' THEN 0 ELSE 1 END has_artwork,tournament_kind,bracket_mode FROM hof_tournaments ORDER BY updated_at DESC",eventArgs:any[]=[];
-  if(actor.role==="organizer"||actor.role==="referee"){eventSql="SELECT DISTINCT t.slug,t.title,t.boss,t.headline_boss,t.bans_per_player,t.status,t.format,t.event_date,t.rules,t.public_notice,t.capacity_min,t.capacity_max,t.roster_published,t.bracket_published,t.medals_published,CASE WHEN t.artwork_data_url='' THEN 0 ELSE 1 END has_artwork,t.tournament_kind,t.bracket_mode FROM hof_tournaments t JOIN hof_staff_assignments a ON a.tournament_slug=t.slug WHERE a.staff_id=? ORDER BY t.updated_at DESC";eventArgs=[actor.id]}
+  let eventSql="SELECT slug,title,boss,headline_boss,bans_per_player,status,format,event_date,rules,public_notice,capacity_min,capacity_max,roster_published,bracket_published,medals_published,CASE WHEN artwork_data_url='' THEN 0 ELSE 1 END has_artwork,tournament_kind,bracket_mode FROM hof_tournaments WHERE soft_deleted_at IS NULL ORDER BY updated_at DESC",eventArgs:any[]=[];
+  if(actor.role==="organizer"||actor.role==="referee"){eventSql="SELECT DISTINCT t.slug,t.title,t.boss,t.headline_boss,t.bans_per_player,t.status,t.format,t.event_date,t.rules,t.public_notice,t.capacity_min,t.capacity_max,t.roster_published,t.bracket_published,t.medals_published,CASE WHEN t.artwork_data_url='' THEN 0 ELSE 1 END has_artwork,t.tournament_kind,t.bracket_mode FROM hof_tournaments t JOIN hof_staff_assignments a ON a.tournament_slug=t.slug WHERE a.staff_id=? AND t.soft_deleted_at IS NULL ORDER BY t.updated_at DESC";eventArgs=[actor.id]}
   const events=await db.execute({sql:eventSql,args:eventArgs});
+  const deletedEvents=(actor.role==="owner"||actor.role==="hall_of_fame_admin")?await db.execute({sql:"SELECT slug,title,status,soft_deleted_at FROM hof_tournaments WHERE soft_deleted_at IS NOT NULL ORDER BY soft_deleted_at DESC",args:[]}):{rows:[]};
   const people=await db.execute("SELECT id,display_name,resonator_icon FROM hof_participants ORDER BY display_name COLLATE NOCASE LIMIT 300");
   const auditRows=await db.execute({sql:"SELECT action,actor_role,reason,outcome,created_at,tournament_slug FROM hof_audit_events "+((actor.role==="owner"||actor.role==="hall_of_fame_admin")?"":"WHERE tournament_slug IN (SELECT tournament_slug FROM hof_staff_assignments WHERE staff_id=?) ")+"ORDER BY created_at DESC LIMIT 30",args:(actor.role==="owner"||actor.role==="hall_of_fame_admin")?[]:[actor.id]});
   let matches:any[]=[];
@@ -197,7 +198,8 @@ const slug=url.searchParams.get("slug");
   if(slug&&await can(actor,"manage_event",slug,null,db)){const pool=await db.execute({sql:"SELECT b.boss_name name,c.icon_url,b.pool_order FROM hof_tournament_bosses b JOIN hof_boss_catalog c ON c.name=b.boss_name WHERE b.tournament_slug=? AND c.enabled=1 ORDER BY b.pool_order",args:[slug]});bossPool=pool.rows;}
   const requestedMatchId=url.searchParams.get("matchId");
   if(requestedMatchId&&slug&&await can(actor,"draft_result",slug,requestedMatchId,db)){const steps=await db.execute({sql:"SELECT step_number,actor_slot,action,resonator,created_by,created_at FROM hof_draft_steps WHERE match_id=? ORDER BY step_number",args:[requestedMatchId]});draftSteps=steps.rows;}
-  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},events:events.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
+  const phase3SafetyEnabled=await isFeatureEnabled("hof-phase-3-safety",db);
+  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},phase3SafetyEnabled,events:events.rows,deletedEvents:deletedEvents.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
  }catch(e){return failure(e);}
 }
 export async function POST(request:Request){
@@ -206,6 +208,66 @@ export async function POST(request:Request){
   await migrateOnce();const db=database(),actor=await actorFor(request,db),body:any=await readJson(request,2400000);
   if(!body||typeof body!=="object")throw new HttpError(400,"Invalid request.");
   const action=text(body.action,"Action",60),now=new Date().toISOString(),slug=body.slug?text(body.slug,"Tournament",80):null,matchId=body.matchId?text(body.matchId,"Match",80):null;
+  if(action==="set_hof_safety_enabled"){
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can change Hall of Fame safety features.");
+   const before=await isFeatureEnabled("hof-phase-3-safety",db),enabled=Boolean(body.enabled);
+   await db.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES('feature:hof-phase-3-safety',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",args:[enabled?"true":"false",now]});
+   await audit(db,actor,"phase3_safety_flag",null,{enabled:before},{enabled});return json({ok:true,enabled});
+  }
+  const phase3Actions=new Set(["edit_completed_match","edit_completed_setup","publish_podium"]);
+  if(phase3Actions.has(action)&&!(await isFeatureEnabled("hof-phase-3-safety",db)))throw new HttpError(404,"Hall of Fame safety features are not enabled.");
+  if(action==="edit_completed_match"){
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   const reason=String(body.reason||"").trim().slice(0,1000),winner=text(body.winnerId,"Winner",80),outcome=text(body.outcome,"Outcome summary",500),expected=Number(body.version);
+   tx=await db.transaction("write");
+   const match=(await tx.execute({sql:"SELECT * FROM hof_matches WHERE id=?",args:[matchId]})).rows[0];if(!match)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(match.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
+   if(![match.participant_a,match.participant_b].includes(winner))throw new HttpError(400,"Winner must be one of the two match participants.");
+   if(!["complete","result_recorded","published","pending_publication"].includes(String(match.phase_state))&&!match.winner_id)throw new HttpError(409,"Only a match with a recorded result can be corrected.");
+   if(Number(match.version)!==expected)throw new HttpError(409,"Match changed while the correction form was open. Refresh and retry.");
+   const event=(await tx.execute({sql:"SELECT bracket_published FROM hof_tournaments WHERE slug=?",args:[eventSlug]})).rows[0];
+   if(Number(event?.bracket_published)===1&&!reason)throw new HttpError(400,"A correction reason is required after the bracket is public.");
+   const dependents=(await tx.execute({sql:"WITH RECURSIVE downstream(id) AS (SELECT match_id FROM hof_match_dependencies WHERE depends_on_match_id=? UNION SELECT d.match_id FROM hof_match_dependencies d JOIN downstream x ON d.depends_on_match_id=x.id) SELECT m.* FROM downstream x JOIN hof_matches m ON m.id=x.id",args:[matchId]})).rows;
+   if(dependents.some((item:any)=>["in_progress","pending_publication","disputed"].includes(String(item.state))))throw new HttpError(409,"A dependent match is already underway or disputed. Resolve it before correcting this result.");
+   const before={match,dependents};
+   await tx.execute({sql:"UPDATE hof_matches SET winner_id=?,outcome=?,state='pending_publication',phase_state='complete',outcome_published=0,version=version+1,updated_at=? WHERE id=? AND version=?",args:[winner,outcome,now,matchId,expected]});
+   for(const item of dependents)await tx.execute({sql:"UPDATE hof_matches SET participant_a=NULL,participant_b=NULL,winner_id=NULL,outcome='',state='awaiting_competitors',phase_state='upcoming',outcome_published=0,version=version+1,updated_at=? WHERE id=?",args:[now,item.id]});
+   await audit(tx,actor,"edit_match_result",eventSlug,before,{matchId,winnerId:winner,outcome,resetDependentMatchIds:dependents.map((item:any)=>String(item.id))},reason);
+   await tx.commit();tx=null;return json({ok:true,undoAvailable:true,undoAction:"edit_match_result",undoExpiresAt:new Date(Date.now()+10000).toISOString(),resetDependentMatchIds:dependents.map((item:any)=>String(item.id))});
+  }
+  if(action==="edit_completed_setup"){
+   if(!matchId)throw new HttpError(400,"Match is required.");
+   const reason=String(body.reason||"").trim().slice(0,1000),boss=String(body.boss||"").trim().slice(0,80),method=body.bossMethod==="manual"||body.bossMethod==="roll"||body.bossMethod==="headline"?body.bossMethod:null,clearTime=body.clearTimeSeconds===""||body.clearTimeSeconds==null?null:Number(body.clearTimeSeconds),staffNote=String(body.staffNote||"").trim().slice(0,1000),expected=Number(body.version);
+   if(!Number.isInteger(clearTime)&&clearTime!==null||clearTime!==null&&(clearTime<0||clearTime>86400))throw new HttpError(400,"Clear time must be between 0 and 86,400 seconds.");
+   tx=await db.transaction("write");
+   const match=(await tx.execute({sql:"SELECT * FROM hof_matches WHERE id=?",args:[matchId]})).rows[0];if(!match)throw new HttpError(404,"Match not found.");
+   const eventSlug=String(match.tournament_slug);await requireCan(actor,"manage_event",eventSlug,matchId,db);
+   if(String(match.phase_state)!=="complete"&&!match.winner_id)throw new HttpError(409,"Only a completed match setup can be edited here.");
+   if(Number(match.version)!==expected)throw new HttpError(409,"Match changed while this form was open. Refresh and retry.");
+   const event=(await tx.execute({sql:"SELECT bracket_published FROM hof_tournaments WHERE slug=?",args:[eventSlug]})).rows[0];
+   if(Number(event?.bracket_published)===1&&!reason)throw new HttpError(400,"A correction reason is required after the bracket is public.");
+   if(boss){const known=await tx.execute({sql:"SELECT 1 FROM hof_boss_catalog WHERE name=? COLLATE NOCASE AND enabled=1",args:[boss]});if(!known.rows.length)throw new HttpError(400,"Choose an enabled Hologram boss.");}
+   const before={match_boss:match.match_boss,boss_method:match.boss_method,clear_time_seconds:match.clear_time_seconds,staff_note:match.staff_note};
+   const after={match_boss:boss||String(match.match_boss||""),boss_method:method,clear_time_seconds:clearTime,staff_note:staffNote};
+   await tx.execute({sql:"UPDATE hof_matches SET match_boss=?,boss_method=?,clear_time_seconds=?,staff_note=?,version=version+1,updated_at=? WHERE id=? AND version=?",args:[after.match_boss,after.boss_method,after.clear_time_seconds,after.staff_note,now,matchId,expected]});
+   await audit(tx,actor,"edit_match_setup",eventSlug,before,{matchId,...after},reason);
+   await tx.commit();tx=null;return json({ok:true,undoAvailable:true,undoAction:"edit_match_setup",undoExpiresAt:new Date(Date.now()+10000).toISOString()});
+  }
+  if(action==="publish_podium"){
+   if(!slug)throw new HttpError(400,"Tournament is required.");await requireCan(actor,"global_admin",null,null,db);
+   const placements=body.placements;if(!placements||typeof placements!=="object")throw new HttpError(400,"Choose all three podium participants.");
+   const ids=[text(placements.gold,"Champion",80),text(placements.silver,"Second place",80),text(placements.bronze,"Third place",80)];
+   if(new Set(ids).size!==3)throw new HttpError(400,"Each podium place must be a different confirmed participant.");
+   tx=await db.transaction("write");
+   const event=(await tx.execute({sql:"SELECT title,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event)throw new HttpError(404,"Tournament not found.");
+   const incomplete=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=? AND state NOT IN ('published','no_result','cancelled')",args:[slug]});if(Number(incomplete.rows[0]?.total||0))throw new HttpError(409,"Finish or resolve every match before publishing the podium.");
+   for(const id of ids){const valid=await tx.execute({sql:"SELECT 1 FROM hof_roster WHERE tournament_slug=? AND participant_id=? AND state='confirmed'",args:[slug,id]});if(!valid.rows.length)throw new HttpError(409,"Only confirmed participants can be on the podium.");}
+   const prior=(await tx.execute({sql:"SELECT * FROM hof_medals WHERE tournament_slug=?",args:[slug]})).rows;
+   for(const [medal,index] of [["gold",0],["silver",1],["bronze",2]] as const)await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?) ON CONFLICT(tournament_slug,medal) DO UPDATE SET participant_id=excluded.participant_id,published=1,published_by=excluded.published_by,published_at=excluded.published_at",args:[slug,medal,ids[index],actor.id,now]});
+   await tx.execute({sql:"UPDATE hof_tournaments SET medals_published=1,status='finalized',updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});
+   await audit(tx,actor,"publish_podium",slug,{medals:prior,status:String(event.status)},{gold:ids[0],silver:ids[1],bronze:ids[2],status:"finalized"});
+   await tx.commit();tx=null;return json({ok:true,undoAvailable:true,undoAction:"publish_podium",undoExpiresAt:new Date(Date.now()+10000).toISOString()});
+  }
   const foundationActions=new Set(["begin_match_setup","start_match","start_without_details","save_match_details","save_draft_step","hold_match","set_event_match_rules","set_tournament_boss_pool","upsert_boss_catalog"]);
   if(foundationActions.has(action)&&!(await isFeatureEnabled("hof-match-foundation",db)))throw new HttpError(404,"This Hall of Fame feature is not enabled.");
   if(action==="upsert_boss_catalog"){
@@ -473,25 +535,57 @@ export async function POST(request:Request){
    if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only a full-access Black Shores administrator can delete tournaments.");
    if(!slug)throw new HttpError(400,"Choose a tournament to delete.");
    tx=await db.transaction("write");
-   const event=(await tx.execute({sql:"SELECT slug,title,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];
-   if(!event)throw new HttpError(404,"Tournament not found.");
-   const matchFilter="tournament_slug=?";
-   const matchArgs=[slug];
-   await tx.execute({sql:"DELETE FROM hof_match_dependencies WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+") OR depends_on_match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:[...matchArgs,...matchArgs]});
-   await tx.execute({sql:"DELETE FROM hof_match_evidence WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
-   await tx.execute({sql:"DELETE FROM hof_draft_steps WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
-   await tx.execute({sql:"DELETE FROM hof_match_claims WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
-   await tx.execute({sql:"DELETE FROM hof_disputes WHERE match_id IN (SELECT id FROM hof_matches WHERE "+matchFilter+")",args:matchArgs});
-   await tx.execute({sql:"DELETE FROM hof_staff_assignments WHERE tournament_slug=?",args:[slug]});
-   await tx.execute({sql:"DELETE FROM hof_registrations WHERE tournament_slug=?",args:[slug]});
-   await tx.execute({sql:"DELETE FROM hof_roster WHERE tournament_slug=?",args:[slug]});
-   await tx.execute({sql:"DELETE FROM hof_tournament_bosses WHERE tournament_slug=?",args:[slug]});
-   await tx.execute({sql:"DELETE FROM hof_medals WHERE tournament_slug=?",args:[slug]});
-   await tx.execute({sql:"DELETE FROM hof_announcements WHERE tournament_slug=?",args:[slug]});
-   await tx.execute({sql:"DELETE FROM hof_matches WHERE tournament_slug=?",args:[slug]});
-   await tx.execute({sql:"DELETE FROM hof_tournaments WHERE slug=?",args:[slug]});
-   await audit(tx,actor,action,slug,{title:String(event.title),status:String(event.status)},{deleted:true,relatedEventDataRemoved:true},"Tournament permanently deleted by administrator.");
-   await tx.commit();tx=null;return json({ok:true,deleted:true,title:String(event.title)});
+   const event=(await tx.execute({sql:"SELECT slug,title,status,soft_deleted_at FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];
+   if(!event)throw new HttpError(404,"Tournament not found.");if(event.soft_deleted_at)throw new HttpError(409,"This tournament is already deleted.");
+   const impact=(await tx.execute({sql:"SELECT (SELECT COUNT(*) FROM hof_roster WHERE tournament_slug=?) participants,(SELECT COUNT(*) FROM hof_matches WHERE tournament_slug=?) matches,(SELECT COUNT(*) FROM hof_medals WHERE tournament_slug=?) medals,(SELECT COUNT(*) FROM hof_announcements WHERE tournament_slug=?) announcements",args:[slug,slug,slug,slug]})).rows[0];
+   await tx.execute({sql:"UPDATE hof_tournaments SET soft_deleted_at=?,updated_at=?,version=version+1 WHERE slug=? AND soft_deleted_at IS NULL",args:[now,now,slug]});
+   await audit(tx,actor,"delete_tournament",slug,event,{softDeletedAt:now,impact});
+   await tx.commit();tx=null;return json({ok:true,undoAvailable:true,undoExpiresAt:new Date(Date.parse(now)+10000).toISOString(),impact});
+  }
+  if(action==="undo_hof_edit"){
+   if(!slug)throw new HttpError(400,"Tournament is required.");
+   const targetAction=String(body.targetAction||"");if(!["edit_match_result","edit_match_setup","publish_podium"].includes(targetAction))throw new HttpError(400,"That edit cannot be undone here.");
+   const targetMatch=body.matchId?String(body.matchId):"";await requireCan(actor,targetAction==="publish_podium"?"global_admin":"manage_event",targetAction==="publish_podium"?null:slug,targetMatch||null,db);
+   tx=await db.transaction("write");
+   const auditRow=(await tx.execute({sql:"SELECT before_state,created_at FROM hof_audit_events WHERE tournament_slug=? AND action=? AND (?='' OR json_extract(after_state,'$.matchId')=?) ORDER BY created_at DESC LIMIT 1",args:[slug,targetAction,targetMatch,targetMatch]})).rows[0];
+   if(!auditRow||Date.now()-Date.parse(String(auditRow.created_at))>10000)throw new HttpError(409,"The 10-second Undo window has expired.");
+   const latest=(await tx.execute({sql:"SELECT action,created_at FROM hof_audit_events WHERE tournament_slug=? ORDER BY created_at DESC LIMIT 1",args:[slug]})).rows[0];
+   if(!latest||String(latest.action)!==targetAction||String(latest.created_at)!==String(auditRow.created_at))throw new HttpError(409,"A later change depends on this edit. Use the normal correction workflow.");
+   const before=JSON.parse(String(auditRow.before_state||"{}"));
+   if(targetAction==="edit_match_result"){
+    const original=before.match;if(!original?.id)throw new HttpError(409,"The saved correction snapshot is unavailable.");
+    await tx.execute({sql:"UPDATE hof_matches SET participant_a=?,participant_b=?,winner_id=?,outcome=?,state=?,phase_state=?,outcome_published=?,version=version+1,updated_at=? WHERE id=?",args:[original.participant_a,original.participant_b,original.winner_id,original.outcome,original.state,original.phase_state,original.outcome_published,now,original.id]});
+    for(const item of before.dependents||[])await tx.execute({sql:"UPDATE hof_matches SET participant_a=?,participant_b=?,winner_id=?,outcome=?,state=?,phase_state=?,outcome_published=?,version=version+1,updated_at=? WHERE id=?",args:[item.participant_a,item.participant_b,item.winner_id,item.outcome,item.state,item.phase_state,item.outcome_published,now,item.id]});
+   }else if(targetAction==="edit_match_setup"){
+    const current=(await tx.execute({sql:"SELECT id FROM hof_matches WHERE id=?",args:[targetMatch]})).rows[0];if(!current)throw new HttpError(404,"Match not found.");
+    await tx.execute({sql:"UPDATE hof_matches SET match_boss=?,boss_method=?,clear_time_seconds=?,staff_note=?,version=version+1,updated_at=? WHERE id=?",args:[before.match_boss,before.boss_method,before.clear_time_seconds,before.staff_note,now,targetMatch]});
+   }else{
+    await tx.execute({sql:"DELETE FROM hof_medals WHERE tournament_slug=?",args:[slug]});
+    for(const medal of before.medals||[])await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at,correction_of) VALUES(?,?,?,?,?,?,?)",args:[medal.tournament_slug,medal.medal,medal.participant_id,medal.published,medal.published_by,medal.published_at,medal.correction_of]});
+    await tx.execute({sql:"UPDATE hof_tournaments SET status=?,medals_published=?,version=version+1,updated_at=? WHERE slug=?",args:[before.status,((before.medals||[]).some((medal:any)=>Number(medal.published)===1)?1:0),now,slug]});
+   }
+   await audit(tx,actor,"undo_hof_edit",slug,{undid:targetAction,matchId:targetMatch},{restored:true});
+   await tx.commit();tx=null;return json({ok:true});
+  }
+  if(action==="undo_delete_tournament"){
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only a full-access Black Shores administrator can restore tournaments.");
+   if(!slug)throw new HttpError(400,"Choose a tournament to restore.");
+   tx=await db.transaction("write");
+   const event=(await tx.execute({sql:"SELECT title,soft_deleted_at FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event?.soft_deleted_at)throw new HttpError(404,"Deleted tournament not found.");
+   const deletedAt=Date.parse(String(event.soft_deleted_at));if(!Number.isFinite(deletedAt)||Date.now()-deletedAt>10000)throw new HttpError(409,"The 10-second Undo window has expired. Use Restore with a reason.");
+   const latest=(await tx.execute({sql:"SELECT action FROM hof_audit_events WHERE tournament_slug=? AND created_at>=? ORDER BY created_at DESC,id DESC LIMIT 1",args:[slug,String(event.soft_deleted_at)]})).rows[0];if(latest?.action!=="delete_tournament")throw new HttpError(409,"A later tournament change prevents Undo. Use Restore with a reason.");
+   await tx.execute({sql:"UPDATE hof_tournaments SET soft_deleted_at=NULL,updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});
+   await audit(tx,actor,"undo_delete_tournament",slug,{softDeletedAt:event.soft_deleted_at},{restored:true});
+   await tx.commit();tx=null;return json({ok:true});
+  }
+  if(action==="restore_deleted_tournament"){
+   if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only a full-access Black Shores administrator can restore tournaments.");
+   if(!slug)throw new HttpError(400,"Choose a tournament to restore.");
+   const reason=text(body.reason,"Restore reason",1000);tx=await db.transaction("write");
+   const event=(await tx.execute({sql:"SELECT title,soft_deleted_at FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event?.soft_deleted_at)throw new HttpError(404,"Deleted tournament not found.");
+   await tx.execute({sql:"UPDATE hof_tournaments SET soft_deleted_at=NULL,updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});
+   await audit(tx,actor,"restore_deleted_tournament",slug,{softDeletedAt:event.soft_deleted_at},{restored:true},reason);
+   await tx.commit();tx=null;return json({ok:true});
   }
   if(action==="archive"){
    if(!slug)throw new HttpError(400,"Tournament is required.");if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only an Administrator can archive events.");
@@ -633,3 +727,4 @@ export async function POST(request:Request){
   throw new HttpError(400,"Unknown Hall of Fame action.");
  }catch(e){if(tx)await tx.rollback();return failure(e);}
 }
+

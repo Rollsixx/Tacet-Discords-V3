@@ -269,4 +269,11 @@ export const migrations = [
     "INSERT INTO hof_boss_catalog(name,icon_url,enabled,created_at,updated_at) VALUES('Reactor Husk','/hologram-bosses/synchronization/Reactor_Husk_Icon.webp',1,datetime('now'),datetime('now')) ON CONFLICT(name) DO UPDATE SET icon_url=excluded.icon_url,enabled=1,updated_at=excluded.updated_at",
     "INSERT INTO hof_boss_catalog(name,icon_url,enabled,created_at,updated_at) VALUES('Sigillum','/hologram-bosses/synchronization/Sigillum_Icon.webp',1,datetime('now'),datetime('now')) ON CONFLICT(name) DO UPDATE SET icon_url=excluded.icon_url,enabled=1,updated_at=excluded.updated_at",
   ]},
+  {version:27,statements:[
+    "INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES('feature:hof-phase-3-safety','false',datetime('now'))",
+  ]},
+  {version:28,statements:[
+    "ALTER TABLE hof_tournaments ADD COLUMN soft_deleted_at TEXT",
+  ]},
 ];
+

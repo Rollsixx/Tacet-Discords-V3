@@ -11,7 +11,7 @@ function publicTournament(row:any){
  return {slug:String(row.slug),title:String(row.title),boss:String(row.boss),format:String(row.format),status:String(row.status),capacityMin:Number(row.capacity_min),capacityMax:Number(row.capacity_max),registrationDeadline:row.registration_deadline?String(row.registration_deadline):null,timezone:String(row.timezone),rules:String(row.rules||""),publicNotice:String(row.public_notice||""),eventDate:row.event_date?String(row.event_date):null,rosterPublished:Boolean(row.roster_published),bracketPublished:Boolean(row.bracket_published),medalsPublished:Boolean(row.medals_published),updatedAt:String(row.updated_at),artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(String(row.slug))+"?v="+encodeURIComponent(String(row.updated_at||""))};
 }
 async function tournamentBySlug(slug:string,db:any){
- const result=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE slug=? AND status IN (${placeholders})`,args:[slug,...publicStates]});
+ const result=await db.execute({sql:`SELECT * FROM hof_tournaments WHERE slug=? AND soft_deleted_at IS NULL AND status IN (${placeholders})`,args:[slug,...publicStates]});
  return result.rows[0]?publicTournament(result.rows[0]):null;
 }
 async function officialMedals(slug:string,db:any){
@@ -19,7 +19,7 @@ async function officialMedals(slug:string,db:any){
  return result.rows.map((row:any)=>({medal:String(row.medal),participantId:String(row.id),name:String(row.display_name),resonatorIcon:String(row.resonator_icon)}));
 }
 async function recentMedalists(db:any){
- const result=await db.execute({sql:`WITH recent AS (SELECT slug,title,boss,format,status,event_date,updated_at FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 ORDER BY COALESCE(event_date,updated_at) DESC,slug DESC LIMIT 12) SELECT r.slug,r.title,r.boss,r.format,r.status,r.event_date,r.updated_at,m.medal,p.id participant_id,p.display_name,p.resonator_icon FROM recent r LEFT JOIN hof_medals m ON m.tournament_slug=r.slug AND m.published=1 LEFT JOIN hof_participants p ON p.id=m.participant_id ORDER BY COALESCE(r.event_date,r.updated_at) DESC,r.slug DESC,CASE m.medal WHEN 'gold' THEN 1 WHEN 'silver' THEN 2 WHEN 'bronze' THEN 3 ELSE 4 END`,args:[]});
+ const result=await db.execute({sql:`WITH recent AS (SELECT slug,title,boss,format,status,event_date,updated_at FROM hof_tournaments WHERE soft_deleted_at IS NULL AND status IN ('finalized','archived') AND medals_published=1 ORDER BY COALESCE(event_date,updated_at) DESC,slug DESC LIMIT 12) SELECT r.slug,r.title,r.boss,r.format,r.status,r.event_date,r.updated_at,m.medal,p.id participant_id,p.display_name,p.resonator_icon FROM recent r LEFT JOIN hof_medals m ON m.tournament_slug=r.slug AND m.published=1 LEFT JOIN hof_participants p ON p.id=m.participant_id ORDER BY COALESCE(r.event_date,r.updated_at) DESC,r.slug DESC,CASE m.medal WHEN 'gold' THEN 1 WHEN 'silver' THEN 2 WHEN 'bronze' THEN 3 ELSE 4 END`,args:[]});
  const events=new Map<string,any>();
  for(const row of result.rows){
   const slug=String(row.slug);let event=events.get(slug);
@@ -83,10 +83,10 @@ export async function GET(request:Request){
    const requestedYear=(url.searchParams.get("year")||"").slice(0,4),year=/^\d{4}$/.test(requestedYear)?requestedYear:"";
    const requestedBoss=(url.searchParams.get("boss")||"").slice(0,80),direction=url.searchParams.get("sort")==="oldest"?"ASC":"DESC";
    const [result,count,yearRows,bossRows]=await Promise.all([
-    db.execute({sql:`SELECT * FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(boss),lower(?))>0) AND (?='' OR substr(COALESCE(event_date,updated_at),1,4)=?) AND (?='' OR boss=?) ORDER BY COALESCE(event_date,updated_at) ${direction},slug ${direction} LIMIT 11 OFFSET ?`,args:[search,search,search,year,year,requestedBoss,requestedBoss,(page-1)*10]}),
-    db.execute({sql:`SELECT COUNT(*) total FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(boss),lower(?))>0) AND (?='' OR substr(COALESCE(event_date,updated_at),1,4)=?) AND (?='' OR boss=?)`,args:[search,search,search,year,year,requestedBoss,requestedBoss]}),
-    db.execute({sql:`SELECT DISTINCT substr(COALESCE(event_date,updated_at),1,4) year FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 ORDER BY year DESC`,args:[]}),
-    db.execute({sql:`SELECT DISTINCT boss FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 ORDER BY boss COLLATE NOCASE`,args:[]})
+    db.execute({sql:`SELECT * FROM hof_tournaments WHERE soft_deleted_at IS NULL AND status IN ('finalized','archived') AND medals_published=1 AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(boss),lower(?))>0) AND (?='' OR substr(COALESCE(event_date,updated_at),1,4)=?) AND (?='' OR boss=?) ORDER BY COALESCE(event_date,updated_at) ${direction},slug ${direction} LIMIT 11 OFFSET ?`,args:[search,search,search,year,year,requestedBoss,requestedBoss,(page-1)*10]}),
+    db.execute({sql:`SELECT COUNT(*) total FROM hof_tournaments WHERE soft_deleted_at IS NULL AND status IN ('finalized','archived') AND medals_published=1 AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(boss),lower(?))>0) AND (?='' OR substr(COALESCE(event_date,updated_at),1,4)=?) AND (?='' OR boss=?)`,args:[search,search,search,year,year,requestedBoss,requestedBoss]}),
+    db.execute({sql:`SELECT DISTINCT substr(COALESCE(event_date,updated_at),1,4) year FROM hof_tournaments WHERE soft_deleted_at IS NULL AND status IN ('finalized','archived') AND medals_published=1 ORDER BY year DESC`,args:[]}),
+    db.execute({sql:`SELECT DISTINCT boss FROM hof_tournaments WHERE soft_deleted_at IS NULL AND status IN ('finalized','archived') AND medals_published=1 ORDER BY boss COLLATE NOCASE`,args:[]})
    ]);
    const events=await Promise.all(result.rows.slice(0,10).map(async(row:any)=>{const event=publicTournament(row);return {...event,medals:await officialMedals(event.slug,db)}}));
    const total=Number(count.rows[0]?.total||0);
@@ -101,13 +101,13 @@ export async function GET(request:Request){
    const profile=await eventHistoryForParticipant((url.searchParams.get("id")||"").slice(0,80),db);
    return Response.json({participant:profile},{headers:{"Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","Vercel-CDN-Cache-Control":"public,s-maxage=30,stale-while-revalidate=60","X-Content-Type-Options":"nosniff"}});
   }
-  const all=await db.execute({sql:`SELECT slug,title,boss,format,status,event_date,updated_at,bracket_published FROM hof_tournaments WHERE status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
+  const all=await db.execute({sql:`SELECT slug,title,boss,format,status,event_date,updated_at,bracket_published FROM hof_tournaments WHERE soft_deleted_at IS NULL AND status IN (${placeholders}) ORDER BY CASE status WHEN 'registration_open' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'results_pending' THEN 3 WHEN 'bracket_revealed' THEN 4 ELSE 5 END,COALESCE(event_date,updated_at) DESC,slug DESC`,args:publicStates});
   const currentRow=all.rows.find((row:any)=>["announced","registration_open","registration_closed","bracket_prepared","bracket_revealed","in_progress","results_pending","suspended"].includes(String(row.status)));
   const matchProgressResult=currentRow&&Boolean(currentRow.bracket_published)?await db.execute({sql:`SELECT COUNT(*) total,SUM(CASE WHEN state IN ('published','no_result') THEN 1 ELSE 0 END) completed,MIN(CASE WHEN state NOT IN ('published','no_result','cancelled') THEN round_number END) next_round FROM hof_matches WHERE tournament_slug=? AND state<>'cancelled'`,args:[String(currentRow.slug)]}):null;
   const progressRow=matchProgressResult?.rows[0];
   const current=currentRow?{slug:String(currentRow.slug),title:String(currentRow.title),boss:String(currentRow.boss),format:String(currentRow.format),status:String(currentRow.status),eventDate:currentRow.event_date?String(currentRow.event_date):null,bracketPublished:Boolean(currentRow.bracket_published),matchProgress:progressRow?{total:Number(progressRow.total||0),completed:Number(progressRow.completed||0),nextRound:progressRow.next_round?Number(progressRow.next_round):null}:null,artworkUrl:"/api/hall-of-fame/artwork/"+encodeURIComponent(String(currentRow.slug))+"?v="+encodeURIComponent(String(currentRow.updated_at||""))}:null;
   const inviteResult=section==="overview"?await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hall_of_fame_join_contest_url"]}):null;
-  const latestResultsResult=section==="overview"?await db.execute({sql:"SELECT 1 FROM hof_tournaments WHERE status IN ('finalized','archived') AND medals_published=1 LIMIT 1"}):null;
+  const latestResultsResult=section==="overview"?await db.execute({sql:"SELECT 1 FROM hof_tournaments WHERE soft_deleted_at IS NULL AND status IN ('finalized','archived') AND medals_published=1 LIMIT 1"}):null;
   const hasResults=Boolean(latestResultsResult?.rows.length);
   const inviteValue=String(inviteResult?.rows[0]?.value||"");let joinContestUrl="";
   try{const invite=new URL(inviteValue);if(invite.protocol==="https:"&&(invite.hostname==="discord.gg"||invite.hostname==="discord.com"&&invite.pathname.startsWith("/invite/")))joinContestUrl=inviteValue;}catch{}
@@ -117,3 +117,4 @@ export async function GET(request:Request){
   return Response.json({current,medalists,participants:list,...(section==="overview"?{joinContestUrl,hasResults}: {})},{headers:{"Cache-Control":cache,"Vercel-CDN-Cache-Control":cache,"X-Content-Type-Options":"nosniff"}});
  }catch(error){return failure(error);}
 }
+
