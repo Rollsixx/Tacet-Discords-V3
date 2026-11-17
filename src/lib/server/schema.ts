@@ -281,5 +281,8 @@ export const migrations = [
   {version:30,statements:[
     "INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES('feature:hof-public-match-view','false',datetime('now'))",
   ]},
+  {version:31,statements:[
+    "UPDATE hof_boss_catalog SET enabled=0,updated_at=datetime('now') WHERE lower(name) IN ('denia & myriad snare','nightmare: kelpie')",
+  ]},
 ];
 
