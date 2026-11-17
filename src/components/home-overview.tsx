@@ -23,6 +23,8 @@ export function HomeOverview(){
  const spotlight=result?.featured?.length?result.featured[spotlightIndex%result.featured.length]:null;
  useEffect(()=>{
   if(!result?.featured?.length||result.featured.length<2)return;
+  const reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)");
+  if(reduceMotion.matches)return;
   const timer=window.setInterval(()=>setSpotlightIndex(index=>(index+1)%result.featured.length),7000);
   return()=>window.clearInterval(timer);
  },[result?.featured]);
