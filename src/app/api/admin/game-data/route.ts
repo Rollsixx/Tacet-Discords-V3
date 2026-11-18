@@ -5,8 +5,9 @@ import { featuredResonators } from '@/lib/resonators';
 import { weaponCatalog } from '@/lib/weapons/catalog';
 import { HttpError } from '@/lib/server/validation';
 import { database, migrateOnce } from '@/lib/server/database';
+import { collectCatalog } from '@/lib/server/game-data-catalog-import';
 
-export const maxDuration = 20;
+export const maxDuration = 60;
 
 type Commit = { sha: string; commit?: { committer?: { date?: string }; message?: string } };
 type Comparison = { files?: { filename: string; status: string }[]; total_commits?: number; status?: string };
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
       assetsChanged ? github<Comparison>(`wuthering-waves-assets/compare/${fingerprints.assetCommit}...${assets.sha}`) : null,
     ]);
     const changed = (diff: Comparison | null, pattern: RegExp) => (diff?.files || []).filter(file => pattern.test(file.filename)).map(file => ({ path: file.filename, status: file.status })).slice(0, 80);
-    const [newCatalog, staged] = await Promise.all([discover(optimizer.sha, assets.sha), database().execute('SELECT kind,source_key,weapon_type,icon_url,source_sha,asset_sha,discovered_at FROM game_data_discoveries ORDER BY discovered_at DESC,kind,source_key LIMIT 100')]);
+    const [newCatalog, staged, imported] = await Promise.all([discover(optimizer.sha, assets.sha), database().execute('SELECT kind,source_key,weapon_type,icon_url,source_sha,asset_sha,discovered_at FROM game_data_discoveries ORDER BY discovered_at DESC,kind,source_key LIMIT 100'), database().execute('SELECT kind,source_key,name,image_url,details,source_sha,asset_sha,imported_at,state FROM game_data_catalog ORDER BY imported_at DESC,kind,source_key LIMIT 100')]);
     return json({ checkedAt: new Date().toISOString(), current: { optimizer: source.commit, assets: fingerprints.assetCommit, resonators: featuredResonators.length, weapons: weaponCatalog.length, echoes: fingerprints.echoes.length, sonatas: fingerprints.sets.length },
       upstream: { optimizer: optimizer.sha, assets: assets.sha, optimizerDate: optimizer.commit?.committer?.date, assetsDate: assets.commit?.committer?.date },
       updates: { optimizer: optimizerChanged, assets: assetsChanged, sourceCommits: optimizerDiff?.total_commits || 0,
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
         truncated: Boolean((optimizerDiff?.files?.length || 0) >= 300 || (assetDiff?.files?.length || 0) >= 300) },
       dispatchConfigured: Boolean(process.env.GITHUB_DATA_IMPORT_TOKEN),
       newCatalog, staged: staged.rows.map(row => ({ kind: row.kind, key: row.source_key, weaponType: row.weapon_type, iconUrl: row.icon_url, sourceSha: row.source_sha, assetSha: row.asset_sha, discoveredAt: row.discovered_at })),
+      imported: imported.rows.map(row => ({ kind: row.kind, key: row.source_key, name: row.name, image: row.image_url, details: JSON.parse(String(row.details)), sourceSha: row.source_sha, assetSha: row.asset_sha, importedAt: row.imported_at, state: row.state })),
       workflowUrl: 'https://github.com/Rollsixx/Tacet-Discords-V3/actions/workflows/prepare-game-data.yml',
     });
   } catch (error) { return failure(error); }
@@ -73,6 +75,17 @@ export async function POST(request: Request) {
   try {
     authorize(request); await migrateOnce();
     const body = await readJson(request, 1024);
+    if (body && typeof body === 'object' && 'action' in body && body.action === 'publish') {
+      const kind = 'kind' in body ? body.kind : null, key = 'key' in body ? body.key : null;
+      if (!['resonator', 'weapon', 'echo', 'sonata'].includes(String(kind)) || typeof key !== 'string' || key.length < 2 || key.length > 64 || /[\u0000-\u001f]/.test(key)) throw new HttpError(400, 'Choose a saved catalog item.');
+      const db = database(), row = await db.execute({ sql: 'SELECT image_url FROM game_data_catalog WHERE kind=? AND source_key=?', args: [String(kind), key] });
+      if (!row.rows.length) throw new HttpError(404, 'Catalog item was not found.');
+      const image = String(row.rows[0].image_url);
+      const artwork = await fetch(image, { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(5000) });
+      if (!artwork.ok || !(artwork.headers.get('content-type') || '').startsWith('image/')) throw new HttpError(409, 'Published artwork is not available.');
+      await db.execute({ sql: "UPDATE game_data_catalog SET state='published',published_at=? WHERE kind=? AND source_key=?", args: [new Date().toISOString(), String(kind), key] });
+      return json({ published: true });
+    }
     if (!body || typeof body !== 'object' || !('optimizer' in body) || !('assets' in body) ||
       typeof body.optimizer !== 'string' || typeof body.assets !== 'string' ||
       !/^[a-f0-9]{40}$/.test(body.optimizer) || !/^[a-f0-9]{40}$/.test(body.assets)) {
@@ -89,6 +102,21 @@ export async function POST(request: Request) {
       const now = new Date().toISOString();
       for (const entry of candidates) await database().execute({ sql: `INSERT INTO game_data_discoveries(kind,source_key,weapon_type,source_sha,asset_sha,icon_url,discovered_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(kind,source_key) DO UPDATE SET weapon_type=excluded.weapon_type,source_sha=excluded.source_sha,asset_sha=excluded.asset_sha,icon_url=excluded.icon_url,discovered_at=excluded.discovered_at`, args: [entry.kind, entry.key, entry.weaponType, optimizer.sha, assets.sha, entry.iconUrl, now] });
       return json({ discovered: candidates.length });
+    }
+    if ('action' in body && (body.action === 'preview' || body.action === 'import')) {
+      const existing = await database().execute('SELECT kind,source_key FROM game_data_catalog');
+      const importedKeys = new Set(existing.rows.map(row => `${row.kind}:${row.source_key}`));
+      const candidates = (await collectCatalog(optimizer.sha, assets.sha)).filter(item => !importedKeys.has(`${item.kind}:${item.key}`));
+      if (candidates.length > 60) throw new HttpError(409, 'More than 60 new items were found. Review this source change before importing.');
+      const checked = await Promise.all(candidates.map(async item => {
+        if (!item.image) return { ...item, imageAvailable: false };
+        try { const response = await fetch(item.image, { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(5000) }); return { ...item, imageAvailable: response.ok && (response.headers.get('content-type') || '').startsWith('image/') }; }
+        catch { return { ...item, imageAvailable: false }; }
+      }));
+      if (body.action === 'preview') return json({ candidates: checked, optimizer: optimizer.sha, assets: assets.sha });
+      const now = new Date().toISOString();
+      for (const item of checked) await database().execute({ sql: `INSERT INTO game_data_catalog(kind,source_key,name,image_url,details,source_sha,asset_sha,imported_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(kind,source_key) DO UPDATE SET name=excluded.name,image_url=excluded.image_url,details=excluded.details,source_sha=excluded.source_sha,asset_sha=excluded.asset_sha,imported_at=excluded.imported_at`, args: [item.kind, item.key, item.name, item.image, JSON.stringify(item.details), optimizer.sha, assets.sha, now] });
+      return json({ imported: checked.length, state: 'staged' });
     }
     const credential = process.env.GITHUB_DATA_IMPORT_TOKEN;
     if (!credential) throw new HttpError(503, 'One-click source preparation needs a repository-scoped GitHub Actions token. Use catalog discovery without Actions.');
