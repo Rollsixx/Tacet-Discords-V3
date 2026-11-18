@@ -423,8 +423,8 @@ export async function POST(request:Request){
    if(clearTime!==null&&(!Number.isInteger(clearTime)||clearTime<0||clearTime>86400))throw new HttpError(400,"Clear time must be a whole number of seconds between 0 and 86400.");
    const staffNote=body.staffNote===undefined?String(current.staff_note||""):String(body.staffNote||"").trim().slice(0,1500),holdNote=body.holdNote===undefined?String(current.hold_note||""):String(body.holdNote||"").trim().slice(0,1000);
    await db.execute({sql:"UPDATE hof_matches SET match_boss=?,boss_method=?,clear_time_seconds=?,staff_note=?,hold_note=?,started_without_details=CASE WHEN ?<>'' THEN 0 ELSE started_without_details END,version=version+1,updated_at=? WHERE id=?",args:[boss,method,clearTime,staffNote,holdNote,boss,now,matchId]});
-   const auditAction=method==="roll"&&boss!==previousBoss?"boss_roll":"setup_edit";
-   await audit(db,actor,auditAction,eventSlug,{matchBoss:previousBoss,bossMethod:previousMethod,clearTimeSeconds:current.clear_time_seconds},{matchBoss:boss,bossMethod:method,clearTimeSeconds:clearTime,staffNote,holdNote},String(body.reason||"" ).slice(0,500));return json({ok:true,matchBoss:boss,bossMethod:method,clearTimeSeconds:clearTime});
+   const auditAction=method==="roll"&&body.bossMethod==="roll"?"boss_roll":"setup_edit";
+   await audit(db,actor,auditAction,eventSlug,{matchBoss:previousBoss,bossMethod:previousMethod,clearTimeSeconds:current.clear_time_seconds},{matchId,matchBoss:boss,bossMethod:method,clearTimeSeconds:clearTime,staffNote,holdNote},String(body.reason||"" ).slice(0,500));return json({ok:true,matchBoss:boss,bossMethod:method,clearTimeSeconds:clearTime});
   }
   if(action==="save_draft_step"){
    if(!matchId)throw new HttpError(400,"Match is required.");
