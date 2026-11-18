@@ -6,14 +6,16 @@ type FileChange = { path: string; status: string };
 type Review = { checkedAt: string; current: { optimizer: string; assets: string; resonators: number; weapons: number; echoes: number; sonatas: number };
   upstream: { optimizer: string; assets: string; optimizerDate?: string; assetsDate?: string };
   updates: { optimizer: boolean; assets: boolean; sourceCommits: number; resonators: FileChange[]; weapons: FileChange[]; echoes: FileChange[]; rotation: FileChange[]; icons: FileChange[]; truncated: boolean };
-  workflowUrl: string };
+  workflowUrl: string; dispatchConfigured: boolean };
 
 export function GameDataUpdates({ token }: { token: string }) {
   const [review, setReview] = useState<Review | null>(null);
   const [loading, setLoading] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [queued, setQueued] = useState(false);
   const [error, setError] = useState('');
   async function check() {
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setQueued(false);
     try {
       const response = await fetch('/api/admin/game-data', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' });
       const result = await response.json();
@@ -21,6 +23,19 @@ export function GameDataUpdates({ token }: { token: string }) {
       setReview(result);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not check upstream data.'); }
     finally { setLoading(false); }
+  }
+  async function prepare() {
+    if (!review) return;
+    setStarting(true); setError('');
+    try {
+      const response = await fetch('/api/admin/game-data', { method: 'POST', headers: {
+        Authorization: 'Bearer ' + token, 'Content-Type': 'application/json',
+      }, body: JSON.stringify({ optimizer: review.upstream.optimizer, assets: review.upstream.assets }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not start the import workflow.');
+      setQueued(true);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not start the import workflow.'); }
+    finally { setStarting(false); }
   }
   const groups = review ? [
     ['Resonator kits', review.updates.resonators], ['Weapons', review.updates.weapons],
@@ -35,7 +50,7 @@ export function GameDataUpdates({ token }: { token: string }) {
       <div className="bs-data-sources">{([['Optimizer and rotation data', review.current.optimizer, review.upstream.optimizer, review.updates.optimizer], ['Artwork', review.current.assets, review.upstream.assets, review.updates.assets]] as const).map(([label, pinned, latest, changed]) => <article key={label}><strong>{label}</strong><span className={changed ? 'bs-data-new' : 'bs-data-current'}>{changed ? 'Update available' : 'Current'}</span><small>Pinned {pinned.slice(0, 12)} · Upstream {latest.slice(0, 12)}</small></article>)}</div>
       {review.updates.truncated && <p className="rotation-validation-issue">GitHub shortened the file comparison. The candidate workflow checks the complete source archive.</p>}
       <div className="bs-data-groups">{groups.map(([label, files]) => <details key={label}><summary>{label} <span>{files.length} changed file{files.length === 1 ? '' : 's'}</span></summary>{files.length ? <ul>{files.map(file => <li key={file.path}><span>{file.status}</span><code>{file.path}</code></li>)}</ul> : <p>No changed files in this category.</p>}</details>)}</div>
-      {(review.updates.optimizer || review.updates.assets) && <div className="bs-data-import"><h3>Prepare an import</h3><p>The repository workflow gathers a candidate source package and a change report in a draft pull request. Review catalog coverage, scanner evidence, effects, and icons before merging. Existing scores and published rotations continue using the pinned version until deployment.</p><a className="action" href={review.workflowUrl} target="_blank" rel="noopener noreferrer">Open import workflow ↗</a><small>On GitHub, select “Run workflow.” The workflow prepares the candidate; it does not publish it.</small></div>}
+      {(review.updates.optimizer || review.updates.assets) && <div className="bs-data-import"><h3>Prepare an import</h3><p>The repository workflow gathers a candidate source package and a change report in a draft pull request. Review catalog coverage, scanner evidence, effects, and icons before merging. Existing scores and published rotations continue using the pinned version until deployment.</p><div className="bs-data-import-actions">{review.dispatchConfigured && <button type="button" className="action" disabled={starting || queued} onClick={() => void prepare()}>{starting ? 'Starting…' : queued ? 'Import queued' : 'Prepare candidate import'}</button>}<a className={review.dispatchConfigured ? 'outline-button' : 'action'} href={review.workflowUrl} target="_blank" rel="noopener noreferrer">{review.dispatchConfigured ? 'View workflow ↗' : 'Prepare on GitHub ↗'}</a></div>{queued ? <small role="status">GitHub accepted the request. Follow the workflow and its draft pull request for validation.</small> : <small>{review.dispatchConfigured ? 'The button starts the GitHub workflow directly.' : 'On GitHub, select “Run workflow.” Direct dispatch can be enabled with a repository-scoped Actions token.'}</small>}</div>}
       {!review.updates.optimizer && !review.updates.assets && <p className="bs-success">Both upstream repositories match the pinned versions.</p>}
     </>}
   </section>;

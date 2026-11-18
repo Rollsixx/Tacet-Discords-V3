@@ -1,4 +1,4 @@
-import { authorize, failure, json } from '@/lib/server/http';
+import { authorize, failure, json, readJson } from '@/lib/server/http';
 import source from '../../../../../vendor/wuthering-tools/source-manifest.json';
 import fingerprints from '@/lib/game-data/fingerprints.json';
 import { featuredResonators } from '@/lib/resonators';
@@ -39,7 +39,36 @@ export async function GET(request: Request) {
         echoes: changed(optimizerDiff, /^src\/echoes\//), rotation: changed(optimizerDiff, /^src\/(calculator|buffs)\//),
         icons: changed(assetDiff, /^images\/(weapons\/|echoes\/|[^/]+\.(png|webp|jpg))/),
         truncated: Boolean((optimizerDiff?.files?.length || 0) >= 300 || (assetDiff?.files?.length || 0) >= 300) },
+      dispatchConfigured: Boolean(process.env.GITHUB_DATA_IMPORT_TOKEN),
       workflowUrl: 'https://github.com/Rollsixx/Tacet-Discords-V3/actions/workflows/prepare-game-data.yml',
     });
+  } catch (error) { return failure(error); }
+}
+
+export async function POST(request: Request) {
+  try {
+    authorize(request);
+    const body = await readJson(request, 1024);
+    if (!body || typeof body !== 'object' || !('optimizer' in body) || !('assets' in body) ||
+      typeof body.optimizer !== 'string' || typeof body.assets !== 'string' ||
+      !/^[a-f0-9]{40}$/.test(body.optimizer) || !/^[a-f0-9]{40}$/.test(body.assets)) {
+      throw new HttpError(400, 'Check upstream first, then use the exact reviewed source revisions.');
+    }
+    const credential = process.env.GITHUB_DATA_IMPORT_TOKEN;
+    if (!credential) throw new HttpError(503, 'One-click import needs a repository-scoped GitHub Actions token configured on Vercel. Use the GitHub workflow link until it is configured.');
+    // Confirm that the requested revisions are still the heads of the fixed sources.
+    const [optimizer, assets] = await Promise.all([
+      github<Commit>('wuthering-waves-optimizer/commits/master'),
+      github<Commit>('wuthering-waves-assets/commits/master'),
+    ]);
+    if (optimizer.sha !== body.optimizer || assets.sha !== body.assets) throw new HttpError(409, 'Upstream changed since the last check. Check for updates again.');
+    const response = await fetch('https://api.github.com/repos/Rollsixx/Tacet-Discords-V3/actions/workflows/prepare-game-data.yml/dispatches', {
+      method: 'POST', headers: { Authorization: `Bearer ${credential}`, Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json', 'User-Agent': 'Tacet-Discords-data-review' },
+      body: JSON.stringify({ ref: 'main', inputs: { optimizer: optimizer.sha, assets: assets.sha } }),
+      cache: 'no-store', signal: AbortSignal.timeout(9000),
+    });
+    if (!response.ok) throw new HttpError(503, 'GitHub did not accept the import workflow request. Check that the repository token has Actions write access.');
+    return json({ queued: true });
   } catch (error) { return failure(error); }
 }
