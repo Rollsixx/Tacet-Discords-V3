@@ -3,7 +3,7 @@
 import {useState} from "react";
 import {clearCorrectionDraft,correctionDraftKey,updateCorrectionDraft} from "./substat-correction-drafts.mjs";
 import {SUBSTAT_OPTIONS} from "@/lib/scanner/substat-options";
-import {parseSubstat} from "@/lib/scanner/stat-validation";
+import {parseSubstat,correctionStatType} from "@/lib/scanner/stat-validation";
 
 type Slot={slot:number;substats:{raw?:string;value:string}[]};
 type SavedCorrection={slot:number;position:number;replacement:string};
@@ -17,11 +17,11 @@ export function SubstatCorrection({id,slots,sourceSlots,corrections=[],token,rev
  const [evidence,setEvidence]=useState<{image:string}|null>(null);
  async function inspect(){setError('');try{const r=await fetch('/api/admin/source-evidence?id='+id,{headers:{Authorization:'Bearer '+token},cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error);setEvidence(data);}catch(e){setError(e instanceof Error?e.message:'Original evidence unavailable.');}}
  const expected=slots[slot-1]?.substats[position-1]?.value||"";
- const parsedExpected=parseSubstat(expected);
+ const parsedExpected=correctionStatType(expected);
  const detectedType=SUBSTAT_OPTIONS.find(option=>parsedExpected&&option.name===parsedExpected.name&&option.key.endsWith(parsedExpected.percent?":percent":":flat"))?.key;
  const effectiveType=detectedType||draft.type;
  const options=SUBSTAT_OPTIONS.find(option=>option.key===effectiveType)?.values||[];
- const currentLegalRoll=options.find(value=>{const parsed=parseSubstat(value);return Boolean(parsed&&parsedExpected&&parsed.name===parsedExpected.name&&parsed.amount===parsedExpected.amount&&parsed.percent===parsedExpected.percent)});
+ const currentLegalRoll=options.find(value=>{const parsed=parseSubstat(value);return Boolean(parsed&&parsedExpected&&parsed.name===parsedExpected.name&&parseSubstat(expected)?.amount===parsed.amount&&parsed.percent===parsedExpected.percent)});
  const selectedValue=options.includes(draft.value)?draft.value:currentLegalRoll||"";
  const parsedSelected=parseSubstat(selectedValue);
  const hasSavedCorrection=corrections.some(c=>c.slot===slot&&c.position===position&&c.replacement===selectedValue);

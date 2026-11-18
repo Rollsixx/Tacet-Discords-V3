@@ -142,3 +142,34 @@ test('saved legal correction clears stale OCR roll errors and remains available 
   assert.equal((await listLeaderboard({character:'Sigrika',search:f.uid},db)).builds.length,0);
  }finally{db.close();}
 });
+test('corrects damaged OCR labels for every pinned substat type without a server error',async()=>{
+ const {SUBSTAT_OPTIONS}=await import('../scanner/substat-options.ts');
+ for(const option of SUBSTAT_OPTIONS){
+  const db=createClient({url:'file::memory:'});
+  try{
+   await migrate(db);
+   const f=await seedCorrection(db,'Carlotta',{uid:'833333337'});
+   const replacement=option.values[0];
+   const label=option.name;
+   const original=option.key.endsWith(':percent')?label+' PART':label+' 999';
+   const value=option.key.endsWith(':percent')?(new Set(['ATK','HP','DEF']).has(option.name)?option.name+' 999%':original):option.name+' 999';
+   f.data.slots[f.slot-1].substats[f.position-1].value=value;
+   f.data.assessment.sourceSlots[f.slot-1].substats[f.position-1].value=value;
+   await db.execute({sql:'UPDATE submissions SET data=? WHERE id=?',args:[JSON.stringify(f.data),f.id]});
+   const saved=await correctEchoSubstat(f.id,f.slot,f.position,value,replacement,'QA','',db);
+   assert.equal(saved.replacement,replacement);
+  }finally{db.close();}
+ }
+});
+test('missing archived field recovers the verified source reading',async()=>{
+ const db=createClient({url:'file::memory:'});try{
+  await migrate(db);const f=await seedCorrection(db,'Carlotta',{uid:'833333338'});
+  const archived=structuredClone(f.original);delete archived[f.slot-1].substats[f.position-1];
+  await db.execute({sql:'DELETE FROM submission_source_evidence WHERE submission_id=?',args:[f.id]});
+  await db.execute({sql:'INSERT INTO submission_source_evidence VALUES (?,?,?,?,?,?,?)',args:[f.id,f.image,f.data.assessment.sourceHash,'[]',JSON.stringify(archived),JSON.stringify(f.displayed),new Date().toISOString()]});
+  const result=await correctEchoSubstat(f.id,f.slot,f.position,'DEF 8.1%','DEF 11.8%','QA','',db);
+  assert.equal(result.replacement,'DEF 11.8%');
+  const data=JSON.parse((await db.execute({sql:'SELECT data FROM submissions WHERE id=?',args:[f.id]})).rows[0].data);
+  assert.equal(data.assessment.originalSourceSlots[f.slot-1].substats[f.position-1].value,'DEF 11.9%');
+ }finally{db.close();}
+});
