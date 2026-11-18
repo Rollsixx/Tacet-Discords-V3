@@ -1980,3 +1980,23 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{ou
 .blackshores-root .bs-console .rotation-equipment-grid img { width:44px; height:44px; flex:0 0 44px; object-fit:contain; border-radius:6px; }
 .blackshores-root .bs-console .rotation-equipment-grid strong,.blackshores-root .bs-console .rotation-equipment-grid small { display:block; overflow-wrap:anywhere; }
 .blackshores-root .bs-console .rotation-equipment-grid small { margin-top:3px; color:#9fb7c5; }
+
+.bs-data-updates { display:grid; gap:18px; }
+.bs-data-updates .bs-panel-heading { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px; }
+.bs-data-updates .bs-panel-heading p { margin:7px 0 0; color:#a8bac6; }
+.bs-data-flow { display:flex; flex-wrap:wrap; gap:8px; }
+.bs-data-flow span { padding:8px 11px; border:1px solid #355464; border-radius:8px; background:#10232c; color:#a8d9d4; font-size:12px; }
+.bs-data-sources { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; }
+.bs-data-sources article { display:grid; gap:6px; padding:16px; background:#0b1b24; border:1px solid #2c4853; border-radius:10px; }
+.bs-data-sources small { overflow-wrap:anywhere; color:#aabcc6; }
+.bs-data-new { color:#f1c67b; }.bs-data-current { color:#83dfd2; }
+.bs-data-groups { display:grid; gap:8px; }
+.bs-data-groups details { border:1px solid #2f4754; border-radius:9px; background:#0b1a23; }
+.bs-data-groups summary { display:flex; justify-content:space-between; gap:10px; padding:13px; cursor:pointer; font-weight:600; }
+.bs-data-groups summary span { color:#95bbc1; font-weight:400; }
+.bs-data-groups ul { max-height:250px; overflow:auto; list-style:none; padding:0 13px 13px; margin:0; }
+.bs-data-groups li { display:flex; gap:12px; padding:6px 0; border-top:1px solid #253b48; overflow-wrap:anywhere; }
+.bs-data-groups li span { min-width:54px; color:#90d5ce; }.bs-data-groups code { white-space:normal; }
+.bs-data-groups p { padding:0 13px 13px; }
+.bs-data-import { padding:18px; border:1px solid #3e6e68; border-radius:11px; background:#112c2c; }
+.bs-data-import p { max-width:75ch; line-height:1.55; }.bs-data-import small { display:block; margin-top:10px; color:#aabfc4; }
