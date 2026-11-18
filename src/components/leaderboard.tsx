@@ -54,6 +54,7 @@ function sets(build:Build) {
  return [...values.values()];
 }
 import { PublicImage, EchoDetails } from "./echo-details";
+type ImportedCatalogItem = { kind: string; key: string; name: string; image: string; details: Record<string, unknown> };
 export function Leaderboard(){
  const params=useSearchParams();
  const router=useRouter();
@@ -64,12 +65,14 @@ export function Leaderboard(){
  const [result,setResult]=useState<Result|null>(null);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState('');
+ const [importedCatalog,setImportedCatalog]=useState<ImportedCatalogItem[]>([]);
  const [retry,setRetry]=useState(0);
  const [expanded,setExpanded]=useState<string|null>(null);
  const currentResonator=leaderboardResonators.find(item=>item.name===character)||leaderboardResonators[0];
  const [columnState,setColumnState]=useState(()=>({character,columns:defaultLeaderboardColumns(currentResonator)}));
  const columns=columnState.character===character?columnState.columns:defaultLeaderboardColumns(currentResonator);
  useEffect(()=>{const frame=requestAnimationFrame(()=>{try{setMyUid(localStorage.getItem('tacet-my-uid')||'');const saved=localStorage.getItem('tacet-leaderboard-columns-v1');if(saved){const parsed=JSON.parse(saved);if(parsed&&typeof parsed==='object')setColumnState(parsed);}}catch{}if(!params.get('character')){try{const last=localStorage.getItem('tacet-last-character');if(last&&leaderboardResonators.some(item=>item.name===leaderboardCharacterKey(last)))setCharacter(leaderboardCharacterKey(last));}catch{}}});return()=>cancelAnimationFrame(frame);},[]);
+ useEffect(()=>{let active=true;fetch('/api/public/game-catalog').then(response=>response.ok?response.json():null).then(data=>{if(active&&Array.isArray(data?.items))setImportedCatalog(data.items);}).catch(()=>{});return()=>{active=false;};},[]);
  useEffect(()=>{const next=new URLSearchParams();next.set('character',character);if(search.trim())next.set('search',search.trim());if(page>1)next.set('page',String(page));router.replace('/leaderboards?'+next,{scroll:false});},[character,search,page,router]);
  function updateColumn(key:"primary"|"attribute"|"damage"|"recovery",metric:LeaderboardMetric){const next={character,columns:{...columns,[key]:metric}};setColumnState(next);try{localStorage.setItem('tacet-leaderboard-columns-v1',JSON.stringify(next));}catch{}}
  const resonator=currentResonator;
@@ -105,5 +108,6 @@ export function Leaderboard(){
    <div className="lb-bottom"><span>Highest benchmark damage first · Select a player to view their build details</span>{(page>1||result?.hasMore)&&<div className="lb-pagination"><button className="outline-button" disabled={loading||page<=1} onClick={()=>setPage(value=>value-1)}>Previous</button><span>Page {page}</span><button className="outline-button" disabled={loading||!result?.hasMore||Boolean(error)} onClick={()=>setPage(value=>value+1)}>Next</button></div>} </div>
   </section>
   {result?.rotationReady===false&&<p className="import-blocked" role="status">Imports are open for {displayCharacter}. Rankings are awaiting the owner’s first published rotation.</p>}
+  {importedCatalog.length>0&&<section className="lb-catalog-preview" aria-label="New game data awaiting ranking"><h2>New game data</h2><p>These source details and icons were imported by the admin. New Resonators remain unavailable for build uploads and rankings until scanner and scoring support are verified.</p><div className="lb-catalog-preview-grid">{importedCatalog.map(item=><article key={`${item.kind}:${item.key}`}>{item.image&&<PublicImage src={item.image} alt={item.name} className="lb-catalog-preview-icon"/>}<div><strong>{item.name}</strong><small>{item.kind}{typeof item.details.element==='string'?` · ${item.details.element}`:''}</small></div><span>Catalog only</span></article>)}</div></section>}
  </div>;
 }

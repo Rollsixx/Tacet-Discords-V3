@@ -59,3 +59,13 @@
  .lb-expanded-toolbar{align-items:stretch;flex-direction:column}
  .lb-detail-content{padding-left:8px}
 }
+.lb-catalog-preview{margin:24px 0;padding:22px;border:1px solid #29404b;border-radius:16px;background:#101c24}
+.lb-catalog-preview h2{margin:0 0 8px;font-size:1.15rem}
+.lb-catalog-preview p{color:#adc2ca;margin:0 0 16px;max-width:760px}
+.lb-catalog-preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.lb-catalog-preview-grid article{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #314552;border-radius:10px;background:#0b1720;min-width:0}
+.lb-catalog-preview-grid article div{min-width:0;display:grid;gap:3px}
+.lb-catalog-preview-grid article strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-catalog-preview-grid article small{color:#a8bac3;text-transform:capitalize}
+.lb-catalog-preview-grid article span:last-child{margin-left:auto;color:#91d9cb;font-size:.72rem;white-space:nowrap}
+.lb-catalog-preview-icon{width:42px;height:42px;object-fit:contain;border-radius:8px;background:#172b34;flex:none}

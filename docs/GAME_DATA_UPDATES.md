@@ -6,6 +6,12 @@ Black Shores → Content & scoring → Game data updates compares the current pi
 
 Use **Sync catalog discoveries** on the admin page to record new Resonator directory keys and weapon source keys directly in the database. This does not use GitHub Actions, a local command, or a repository write token. The discovery list is an owner review queue; it is not an active game catalog. New items cannot be uploaded or ranked until their release metadata, weapon effects, image and scanner evidence, and scoring support are integrated and verified. Echo and Sonata definition changes and executable optimizer formulas remain subject to the source review and deployment path below. The current upstream snapshot contains no new Resonator or weapon keys beyond the supported catalog.
 
+## Database catalog import
+
+**Preview catalog import** downloads the exact reviewed upstream source revision and parses literal metadata from its character, weapon, Echo, and Sonata definitions. It never executes downloaded TypeScript. **Stage** stores only new entries and source revisions in Turso. Repeated imports skip already stored entries. The owner can publish each staged item after confirming its official release; publishing checks that its icon responds as an image. Public leaderboards show published additions in a separate **New game data** section labeled **Catalog only**. This requires no local command, GitHub Actions, or repository push. The source archive is size-capped, new entries are capped, and the source SHAs are checked again before staging.
+
+The import deliberately does not turn unknown Resonators or Echoes into uploads or rankings. OCR fingerprints, main Echo identity, verified modifiers, ranking policy, and owner rotations are compiled and need tests plus a deployment. The upstream project itself warns that generated character and weapon definitions may need manual modifier and preset review. Changes to optimizer formulas remain in the source-review path; no database record can silently change an existing score.
+
 ## Starting an import
 
 ### Without GitHub Actions
