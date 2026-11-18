@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import * as engine from '../../../../vendor/wuthering-tools/dist/index.mjs';
 import {MECHANICS_MODELS,ROTATION_ROSTER} from '../../game-data/rotation-mechanics.mjs';
 import {HttpError} from '../validation.ts';
-import {scoringPreset} from '../../game-data/scoring-policies.mjs';
+import {scoringPreset,benchmarkWeapon} from '../../game-data/scoring-policies.mjs';
 import {modifierCatalog,normalizeEffects,REVIEWED_MODE,reviewedVersion,AUTOMATIC_EFFECTS} from './configuration.mjs';
 import {DATA_VERSION} from '../scoring.mjs';
 export const specificationHash=spec=>createHash('sha256').update(JSON.stringify(spec)).digest('hex');
@@ -16,19 +16,22 @@ export async function actionCatalog(character){
  return attacks;
 }
 export async function normalizeSpec(character,input){
- if(!input||typeof input!=='object'||Object.keys(input).some(k=>!['name','actions','mode','conditions','defaults','effectMode'].includes(k))||typeof input.name!=='string'||input.name.trim().length<2||input.name.length>100||!Array.isArray(input.actions)||input.actions.length>100)throw new HttpError(400,'Use a name (2–100 characters) and up to 100 actions.');
+ if(!input||typeof input!=='object'||Object.keys(input).some(k=>!['name','actions','mode','conditions','defaults','effectMode','weapon'].includes(k))||typeof input.name!=='string'||input.name.trim().length<2||input.name.length>100||!Array.isArray(input.actions)||input.actions.length>100)throw new HttpError(400,'Use a name (2–100 characters) and up to 100 actions.');
  if(input.mode!==undefined&&input.mode!==REVIEWED_MODE)throw new HttpError(400,'Unknown rotation mode.');
  if(input.conditions!==undefined&&(typeof input.conditions!=='string'||input.conditions.length>4000))throw new HttpError(400,'Starting conditions must be text of up to 4000 characters.');
  if(input.defaults!==undefined&&input.mode!==REVIEWED_MODE)throw new HttpError(400,'Shared effects require admin-reviewed mode.');
  if(input.effectMode!==undefined&&(input.effectMode!==AUTOMATIC_EFFECTS||input.mode!==REVIEWED_MODE))throw new HttpError(400,'Automatic equipped effects require owner-reviewed mode and a known effect policy.');
- const catalog=await actionCatalog(character),modifiers=await modifierCatalog(character);let total=0;
+ const catalog=await actionCatalog(character),modifiers=await modifierCatalog(character),basic=(await engine.getCharByName(character)).basic,weaponGroups=await engine.getWeaponsByType(basic.weapon),allowedWeapons=Object.values(weaponGroups).flat().map(w=>w.key);if(input.weapon!==undefined&&(input.mode!==REVIEWED_MODE||typeof input.weapon!=='string'||!allowedWeapons.includes(input.weapon)))throw new HttpError(400,'Choose a weapon of this Resonator’s weapon type.');let total=0;
  const actions=input.actions.map(a=>{
   if(!a||Object.keys(a).some(k=>!['type','key','count','mainEcho','effects'].includes(k))||!catalog.some(c=>c.type===a.type&&c.key===a.key&&c.mainEcho===a.mainEcho)||!Number.isInteger(a.count)||a.count<1||a.count>20)throw new HttpError(400,'Unknown attack, unsupported override or invalid repeat count.');
   if(a.effects!==undefined&&input.mode!==REVIEWED_MODE)throw new HttpError(400,'Configured effects require admin-reviewed mode.');
   total+=a.count;return {type:a.type,key:a.key,count:a.count,...(a.mainEcho?{mainEcho:a.mainEcho}:{}),...(input.mode===REVIEWED_MODE?{effects:normalizeEffects(a.effects,modifiers)}:{})};
  });
  if(total>200)throw new HttpError(400,'A rotation may contain at most 200 expanded actions.');
- return {name:input.name.trim(),actions,...(input.effectMode?{effectMode:input.effectMode}:{}),...(input.defaults!==undefined?{defaults:normalizeEffects(input.defaults,modifiers,200)}:{}),...(input.mode===REVIEWED_MODE?{mode:REVIEWED_MODE,conditions:(input.conditions||'').trim()}:{})};
+ const defaults=input.defaults===undefined?undefined:normalizeEffects(input.defaults,modifiers,200);
+ const selectedWeapon=input.weapon||benchmarkWeapon(basic);
+ for(const effect of [...(defaults||[]),...actions.flatMap(a=>a.effects||[])]){const definition=modifiers.find(m=>m.id===effect.id);if(definition?.category==='weaponPassives'&&definition.scope!==selectedWeapon)throw new HttpError(400,'Weapon effects must match the selected benchmark weapon.');}
+ return {name:input.name.trim(),actions,...(input.weapon?{weapon:input.weapon}:{}),...(input.effectMode?{effectMode:input.effectMode}:{}),...(input.defaults!==undefined?{defaults}:{}),...(input.mode===REVIEWED_MODE?{mode:REVIEWED_MODE,conditions:(input.conditions||'').trim()}:{})};
 }
 // Small declarative state machine. All definitions are server-reviewed source,
 // not editable mechanics. No expressions, eval, dynamic imports or user buffs.

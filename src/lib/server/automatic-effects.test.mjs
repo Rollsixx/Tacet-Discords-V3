@@ -41,3 +41,15 @@ test('automatic policy stages, publishes real eligible calculations and rolls ba
  const rollback=await stage(w.active.id);await activateRotation(db,rollback.run.id,rollback.confirmation,true);assert.equal((await listLeaderboard({character:'Chisa',search:f.uid},db)).builds[0].score,before.score);
  }finally{db.close();}
 });
+test('selected benchmark weapon is type-valid and only its passive assumptions enter scoring',async()=>{
+ const character='Carlotta',basic=(await engine.getCharByName(character)).basic,groups=await engine.getWeaponsByType(basic.weapon),catalog=await modifierCatalog(character,true),selected=catalog.find(d=>d.category==='weaponPassives'&&groups.four.some(w=>w.key===d.scope)&&!d.automatic&&!d.unavailableReason),alternative=selected?.scope;
+ assert.ok(selected,'A supported four-star weapon should have a conditional passive.');
+ const attack=(await actionCatalog(character)).find(a=>!a.mainEcho&&!['Healing','Shield','ElementalEffect'].includes(a.damageType));
+ const spec=await normalizeSpec(character,{name:'Alternate benchmark weapon',mode:'admin-reviewed',weapon:alternative,defaults:[{id:selected.id,isEnabled:true,...(selected.hasStacks?{stacks:selected.minStacks}:{})}],actions:[{type:attack.type,key:attack.key,count:1}]});
+ const ids=gear('RejuvenatingGlow'),compiled=compileReviewed(spec,catalog,ids);
+ assert.ok(compiled.trace[0].applied.some(e=>e.effect===selected.label));
+ assert.ok(compiled.trace[0].applied.filter(e=>e.effect.includes(' · ')).every(e=>!e.effect.includes('Static Mist')));
+ const score=await calculateStandard(character,slots,ids,{name:spec.name,actions:compiled.actions,baseConfig:compiled.baseConfig,configuredEffects:true,weapon:spec.weapon});
+ assert.equal(score.weapon,alternative);
+ await assert.rejects(normalizeSpec(character,{...spec,weapon:groups.swords?.[0]?.key||'NotAValidPistol'}),/weapon type/);
+});
