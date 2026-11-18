@@ -1897,3 +1897,7 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{ou
 @media(max-width:600px){.nav-inner{grid-template-columns:minmax(0,1fr) auto}.nav-links{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}.nav-links a{min-width:0;padding:9px 3px;font-size:12px}.nav-links a:nth-child(4){grid-column:2}.nav-links a:nth-child(5){grid-column:3}}
 /* Override the desktop-only minimum table width when Profile rows become cards. */
 @media(max-width:1100px){.pp-build-table{min-width:0!important;width:100%;max-width:100%;table-layout:fixed}.pp-build-table tbody{min-width:0;width:100%}.pp-build-table .lb-detail-row,.pp-build-table .lb-detail-row>td{min-width:0;width:100%;max-width:100%}}
+
+.lb-medal-eligibility { display: inline-block; width: fit-content; max-width: 100%; padding: 2px 6px; border: 1px solid #455a66; border-radius: 5px; color: #b4c5ce; font-size: 11px; font-weight: 650; line-height: 1.35; }
+.lb-medal-eligibility.is-eligible { color: #f2d095; border-color: #796442; background: #2c271f; }
+.lb-character-option .lb-medal-eligibility { margin-top: 3px; white-space: normal; }

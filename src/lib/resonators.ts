@@ -86,6 +86,30 @@ export const featuredResonators: ResonatorPreview[] = [
 export const latestResonators=[...featuredResonators].sort((a,b)=>b.releaseDate.localeCompare(a.releaseDate)).slice(0,3);
 
 export function resonatorDisplayName(name: string) {
-  const resonator = featuredResonators.find(item => item.name === name || item.displayName === name);
+  const resonator = featuredResonators.find(item => item.name === name || item.displayName === name) ?? leaderboardResonators.find(item => item.name === name);
   return resonator?.displayName || resonator?.name || name;
 }
+
+// Gender-specific source keys stay intact for imports and rotation policies.
+const roverBoards: Record<string, [string, string]> = {
+  RoverAero: ["RoverAeroFemale", "RoverAeroMale"],
+  RoverElectro: ["Roverelectrofemale", "Roverelectromale"],
+  RoverHavoc: ["RoverHavocFemale", "RoverHavocMale"],
+  RoverSpectro: ["RoverSpectroFemale", "RoverSpectroMale"],
+};
+const roverVariants = new Map(Object.entries(roverBoards).flatMap(([board, variants]) => variants.map(variant => [variant, board])));
+
+export function leaderboardCharacterKey(character: string) {
+  return roverVariants.get(character) || character;
+}
+
+export function leaderboardCharacterMembers(character: string): string[] {
+  const key = leaderboardCharacterKey(character);
+  return Object.hasOwn(roverBoards, key) ? roverBoards[key] : [key];
+}
+
+export const leaderboardResonators = [...new Map(featuredResonators.map(character => {
+  const key = leaderboardCharacterKey(character.name);
+  const board = key === character.name ? character : { ...character, name: key, displayName: `Rover: ${character.element}` };
+  return [key, board] as const;
+})).values()];
