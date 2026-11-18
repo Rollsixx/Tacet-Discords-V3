@@ -1,19 +1,29 @@
-.panel { display: grid; gap: 16px; }
+.panel { display: grid; gap: 24px; }
 .panel :is(h2, p) { margin: 0; }
-.panel p { color: #b2c5cf; margin-top: 6px; }
-.filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
-.filters label { display: grid; gap: 4px; flex: 1 1 170px; }
-.filters p { padding-block: 10px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
-.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: 10px; border: 1px solid #354b57; border-radius: 8px; background: #13222b; }
-.identity { display: flex; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
-.identity small { display: block; color: #a5bbc8; }
-.identity .portrait { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 6px; }
-.switch { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 5px 9px; border: 1px solid #576c78; border-radius: 7px; background: #26343e; color: #e6eff4; white-space: nowrap; }
+.intro { display: grid; gap: 7px; }
+.intro p { color: #b2c5cf; max-width: 68ch; line-height: 1.55; }
+.toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 22px; padding: 18px; border: 1px solid #314b55; border-radius: 12px; background: #10232b; }
+.summary { display: grid; gap: 2px; min-width: 140px; color: #b6cbd0; font-size: 12px; }
+.summary strong { color: #91e4d4; font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.summary strong span { color: #829aa4; font-size: 16px; }
+.filters { display: flex; flex: 1 1 470px; flex-wrap: wrap; gap: 12px; }
+.filters label { display: grid; gap: 6px; flex: 2 1 220px; color: #ccdade; font-size: 13px; }
+.filters label + label { flex: 1 1 165px; }
+.filters :is(input, select) { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid #38535e; border-radius: 8px; background: #0b1a22; color: #f0f5f6; font: inherit; }
+.filters :is(input, select):focus-visible { outline: 2px solid #89e0d1; outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; padding: 0; margin: 0; list-style: none; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 12px; border: 1px solid #354b57; border-radius: 12px; background: #13222b; transition: border-color .18s, background .18s; }
+.row:hover { border-color: #64877f; background: #192c33; }
+.identity { display: flex; align-items: center; gap: 11px; min-width: 0; overflow-wrap: anywhere; }
+.identity strong { display: block; line-height: 1.3; }
+.identity small { display: block; margin-top: 3px; color: #a5bbc8; font-size: 12px; }
+.identity .portrait { width: 56px; height: 56px; flex: 0 0 56px; object-fit: cover; border: 1px solid #405764; border-radius: 9px; background: #20343e; }
+.switch { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; min-width: 105px; padding: 6px 9px; border: 1px solid #576c78; border-radius: 8px; background: #26343e; color: #e6eff4; font-size: 12px; font-weight: 650; cursor: pointer; }
 .switch[aria-checked="true"] { border-color: #57a89e; background: #1c3a3d; color: #a9eee1; }
-.knob { width: 23px; height: 13px; padding: 2px; box-sizing: border-box; border-radius: 10px; background: #57717e; }
-.knob::before { content: ""; display: block; width: 9px; height: 9px; border-radius: 50%; background: #f0f7fa; }
+.switch:disabled { opacity: .65; cursor: wait; }
+.knob { width: 25px; height: 15px; padding: 2px; box-sizing: border-box; flex: 0 0 25px; border-radius: 10px; background: #57717e; }
+.knob::before { content: ""; display: block; width: 11px; height: 11px; border-radius: 50%; background: #f0f7fa; transition: transform .18s; }
 .switch[aria-checked="true"] .knob { background: #2c8176; }
 .switch[aria-checked="true"] .knob::before { transform: translateX(10px); }
 .switch:focus-visible { outline: 2px solid #a9eee1; outline-offset: 2px; }
-@media (max-width: 440px) { .identity .portrait { display: none; } }
+@media (max-width: 640px) { .toolbar { padding: 14px; } .grid { grid-template-columns: 1fr; } }
