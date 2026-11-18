@@ -15,6 +15,9 @@ async function github(path) {
   return response.json();
 }
 const [optimizer, assets] = await Promise.all([github('wuthering-waves-optimizer/commits/master'), github('wuthering-waves-assets/commits/master')]);
+for (const [name, expected, actual] of [['optimizer', process.env.EXPECTED_OPTIMIZER_SHA, optimizer.sha], ['assets', process.env.EXPECTED_ASSET_SHA, assets.sha]]) {
+  if (expected && expected !== actual) throw Error(`${name} changed after the admin review. Check again before preparing an import.`);
+}
 const optimizerChanged = optimizer.sha !== source.commit;
 const assetsChanged = assets.sha !== fingerprint.assetCommit;
 if (!optimizerChanged && !assetsChanged) { console.log('Upstream source and artwork match the pinned versions.'); process.exit(0); }
@@ -41,6 +44,28 @@ try {
     await Promise.all([mkdir(upstream), mkdir(base), mkdir(candidate)]);
     await x({ file: downloaded, cwd: upstream, strip: 1, strict: true });
     await x({ file: 'vendor/wuthering-tools/scoring-source.tar.gz', cwd: base, strict: true });
+    if (source.catalogOverlay) await x({ file: join('vendor/wuthering-tools', source.catalogOverlay.file), cwd: base, strict: true });
+    const oldCharacters = new Set((await readdir(join(base, 'src', 'characters'), { withFileTypes: true })).filter(item => item.isDirectory()).map(item => item.name));
+    const newCharacters = (await readdir(join(upstream, 'src', 'characters'), { withFileTypes: true })).filter(item => item.isDirectory() && !oldCharacters.has(item.name)).map(item => item.name);
+    const weaponTypes = ['Swords', 'Broadblades', 'Pistols', 'Rectifiers', 'Gauntlets'];
+    const newWeapons = [];
+    for (const type of weaponTypes) {
+      const old = new Set((await readdir(join(base, 'src', 'weapons', type))).filter(name => name.endsWith('.ts')));
+      for (const name of (await readdir(join(upstream, 'src', 'weapons', type))).filter(name => name.endsWith('.ts') && !old.has(name))) newWeapons.push(name.slice(0, -3));
+    }
+    report.push('## New catalog source keys', '', `- Resonators: ${newCharacters.join(', ') || 'none'}`, `- Weapons: ${newWeapons.join(', ') || 'none'}`, '');
+    async function gatherArtwork(name, relative) {
+      const response = await fetch(`https://raw.githubusercontent.com/ryanbenson/wuthering-waves-assets/${assets.sha}/images/${relative}`);
+      if (!response.ok) { report.push(`- Missing artwork: ${relative} (${name}).`); return; }
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length > 2_000_000 || !response.headers.get('content-type')?.startsWith('image/')) { report.push(`- Rejected oversized or invalid artwork: ${relative}.`); return; }
+      const dest = join('docs/data-imports/artwork', relative);
+      await mkdir(join(dest, '..'), { recursive: true }); await writeFile(dest, bytes);
+    }
+    report.push('## Candidate artwork', '', 'Icons are held under docs/data-imports/artwork for visual review before integration.', '');
+    for (const key of newCharacters.slice(0, 30)) await gatherArtwork(key, key + '.png');
+    for (const key of newWeapons.slice(0, 40)) await gatherArtwork(key, 'weapons/' + key + '.png');
+    if (newCharacters.length > 30 || newWeapons.length > 40) report.push('Artwork download capped; review the remaining keys manually.', '');
     await cp(base, candidate, { recursive: true });
     for (const folder of ['buffs', 'calculator', 'characters', 'echoes', 'utils', 'weapons']) {
       await rm(join(candidate, 'src', folder), { recursive: true, force: true });
