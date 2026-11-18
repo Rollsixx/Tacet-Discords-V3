@@ -93,6 +93,18 @@ export function parseSubstat(value: string): {
   };
 }
 
+/** Resolve the stat label of a damaged OCR reading without inventing its roll. */
+export function correctionStatType(value: string): { name: string; percent: boolean } | null {
+  const parsed = parseSubstat(value);
+  if (parsed) return { name: parsed.name, percent: parsed.percent };
+  const label = normalizeName(value.replace(/\s+[+]?\d+(?:[.,]\d+)?\s*%?\s*$/, ""));
+  const name = resolveStatName(label);
+  if (!name) return null;
+  if (PERCENT_ONLY.has(name)) return { name, percent: true };
+  if (/%\s*$/.test(value)) return { name, percent: true };
+  return null;
+}
+
 function editDistance(left: string, right: string): number {
   const row = Array.from({ length: right.length + 1 }, (_, index) => index);
   for (let i = 1; i <= left.length; i += 1) {
