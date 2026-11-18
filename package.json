@@ -15,6 +15,7 @@
     "test:reference": "node scripts/fetch-reference-fixture.mjs && npm run test:browser",
     "pretest": "node scripts/build-scoring-engine.mjs",
     "data:export": "node scripts/export-scoring-data.mjs",
+    "data:prepare": "node scripts/prepare-upstream-candidate.mjs",
     "setup": "node scripts/setup-local.mjs",
     "start:production": "node scripts/start-production.mjs",
     "db:rescore": "node --env-file-if-exists=.env.local scripts/rescore.mts",
