@@ -1,7 +1,7 @@
 import {randomUUID,createHash} from 'node:crypto';
 import {HttpError} from './validation.ts';
 import {allowedSubstatCorrection} from '../scanner/substat-options.ts';
-import {parseSubstat,validateEchoSlot} from '../scanner/stat-validation.ts';
+import {parseSubstat,correctionStatType,validateEchoSlot} from '../scanner/stat-validation.ts';
 import {assessEquipment,identitiesFromReport,SUPPORTED,ENGINE_VERSION,DATA_VERSION} from './scoring.mjs';
 import {initializeRotations,scoreActiveRotation} from './rotations/store.mjs';
 import {isRankableUnderActiveRotation} from './approval-policy.mjs';
@@ -98,7 +98,7 @@ export async function correctEchoSubstat(id,slot,position,expected,replacement,r
   const row=(await tx.execute({sql:"SELECT * FROM submissions WHERE id=? AND status IN ('pending','approved')",args:[id]})).rows[0];must(row,'Submission not found.',404);
   const data=JSON.parse(String(row.data)),field=data.slots?.[slot-1]?.substats?.[position-1];
   must(field&&field.value===expected,'Stored reading changed. Reload before correcting.',409);
-  const old=parseSubstat(expected),corrected=parseSubstat(replacement);must(old&&corrected&&old.name===corrected.name&&old.percent===corrected.percent,'Correction must preserve the recognized stat type and unit.');await proof(row,data,tx);
+  const old=correctionStatType(expected),corrected=parseSubstat(replacement);must(old&&corrected&&old.name===corrected.name&&old.percent===corrected.percent,'Correction must preserve the recognized stat type and unit.');await proof(row,data,tx);
   if(expected===replacement){
    const ledger=data.substatCorrections||[],hasSaved=ledger.some((c,i)=>c.slot===slot&&c.position===position&&c.replacement===replacement&&allowedSubstatCorrection(c.replacement)&&(c.adminVerifiedSubstat===true||(data.correctionVerifications||[]).some(v=>v.verified===true&&JSON.stringify(v.corrections?.[i])===JSON.stringify(c))));
    must(hasSaved,'This Echo already shows that roll, but no moderator-verified saved correction exists.',400);
@@ -106,7 +106,7 @@ export async function correctEchoSubstat(id,slot,position,expected,replacement,r
    await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_correction_revalidated',reviewer.trim(),JSON.stringify({slot,position,replacement,...result}),at]});
    await tx.commit();return {slot,position,original:expected,replacement,...result};
   }
-  const original=data.assessment.sourceSlots[slot-1]?.substats?.[position-1];must(original,'Original server OCR field is missing.');
+  const original=data.assessment.sourceSlots?.[slot-1]?.substats?.[position-1];must(original,'Original server OCR field is missing.');
   const next=structuredClone(data);
   if(!next.assessment.originalSourceSlots){
    const evidence=(await tx.execute({sql:'SELECT original_slots FROM submission_source_evidence WHERE submission_id=?',args:[id]})).rows[0];
@@ -115,12 +115,22 @@ export async function correctEchoSubstat(id,slot,position,expected,replacement,r
    // server reading. Never infer a replacement from proximity to a legal roll.
    if(!evidence){const seen=new Set();for(const c of data.substatCorrections||[]){const key=c.slot+':'+c.position;if(!seen.has(key)&&typeof c.serverOriginal==='string'){const f=next.assessment.originalSourceSlots[c.slot-1]?.substats?.[c.position-1];if(f)f.value=c.serverOriginal;seen.add(key);}}}
   }
+  let archived=next.assessment.originalSourceSlots?.[slot-1]?.substats?.[position-1];
+  if(!archived){
+   const firstCorrection=(data.substatCorrections||[]).find(c=>c.slot===slot&&c.position===position);
+   const restored=firstCorrection?.serverOriginal?{raw:firstCorrection.serverRaw||firstCorrection.serverOriginal,value:firstCorrection.serverOriginal}:firstCorrection?null:original;
+   must(restored,'Original server OCR field is missing. Review the retained source evidence before correcting.');
+   next.assessment.originalSourceSlots[slot-1]??=structuredClone(data.assessment.sourceSlots[slot-1]);
+   next.assessment.originalSourceSlots[slot-1].substats??=[];
+   next.assessment.originalSourceSlots[slot-1].substats[position-1]=structuredClone(restored);
+   archived=restored;
+  }
   next.originalDisplayedSlots??=structuredClone(data.slots);
   // Score the entire canonical server array, not a mixture of display and OCR.
   next.slots=structuredClone(data.assessment.sourceSlots);
   next.slots[slot-1].substats[position-1]={...original,value:replacement};
   next.assessment.sourceSlots=structuredClone(next.slots);
-  const record={slot,position,original:expected,serverOriginal:next.assessment.originalSourceSlots[slot-1].substats[position-1].value,serverRaw:next.assessment.originalSourceSlots[slot-1].substats[position-1].raw,previousServerValue:original.value,replacement,reviewer:reviewer.trim(),note:note.trim()||'Moderator attested the legal roll against original evidence.',at:new Date().toISOString(),adminVerifiedSubstat:true};
+  const record={slot,position,original:expected,serverOriginal:archived.value,serverRaw:archived.raw,previousServerValue:original.value,replacement,reviewer:reviewer.trim(),note:note.trim()||'Moderator attested the legal roll against original evidence.',at:new Date().toISOString(),adminVerifiedSubstat:true};
   next.substatCorrections=[...(next.substatCorrections||[]),record];
   const result=await rebuild(tx,row,next);
   await tx.execute({sql:'INSERT INTO admin_audit_events VALUES (?,?,?,?,?,?)',args:[randomUUID(),id,'substat_corrected',reviewer.trim(),JSON.stringify({...record,...result}),record.at]});
