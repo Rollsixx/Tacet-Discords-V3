@@ -27,3 +27,10 @@
 .switch[aria-checked="true"] .knob::before { transform: translateX(10px); }
 .switch:focus-visible { outline: 2px solid #a9eee1; outline-offset: 2px; }
 @media (max-width: 640px) { .toolbar { padding: 14px; } .grid { grid-template-columns: 1fr; } }
+
+.patchFilter { display: flex; width: fit-content; max-width: 100%; gap: 4px; padding: 4px; border: 1px solid #314b55; border-radius: 11px; background: #0b1921; }
+.patchButton { min-width: 46px; min-height: 38px; padding: 7px 12px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #aabec7; font-size: 13px; font-weight: 650; cursor: pointer; }
+.patchButton:hover { color: #e8f4f2; background: #1a3339; }
+.patchButton[aria-pressed="true"] { border-color: #458d83; background: #214a49; color: #9aeadb; }
+.patchButton:focus-visible { outline: 2px solid #a9eee1; outline-offset: 2px; }
+.resultCount { color: #aabec7; font-size: 13px; }

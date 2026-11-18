@@ -11,6 +11,7 @@ export function MedalEligibilitySettings({ token }: { token: string }) {
   const [characters, setCharacters] = useState<Resonator[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [patch, setPatch] = useState("all");
   const [saving, setSaving] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -52,7 +53,8 @@ export function MedalEligibilitySettings({ token }: { token: string }) {
 
   const visible = (characters ?? []).filter(character =>
     character.label.toLowerCase().includes(query.trim().toLowerCase()) &&
-    (filter === "all" || character.eligible === (filter === "included")),
+    (filter === "all" || character.eligible === (filter === "included")) &&
+    (patch === "all" || character.patchVersion.startsWith(patch + ".")),
   ).sort((a, b) => a.label.localeCompare(b.label));
 
   return <section className={`bs-panel ${styles.panel}`} aria-labelledby="medal-settings-heading">
@@ -75,6 +77,11 @@ export function MedalEligibilitySettings({ token }: { token: string }) {
           </select></label>
         </div>
       </div>
+      <div className={styles.patchFilter} role="group" aria-label="Filter Resonators by release version">
+        {(["all", "1", "2", "3"] as const).map(value => <button key={value} type="button" className={styles.patchButton}
+          aria-pressed={patch === value} onClick={() => setPatch(value)}>{value === "all" ? "All" : `${value}.x`}</button>)}
+      </div>
+      <p className={styles.resultCount} role="status">Showing {visible.length} Resonator{visible.length === 1 ? "" : "s"}</p>
       {visible.length ? <ul className={styles.grid}>
         {visible.map(character => <li key={character.name} className={styles.row}>
           <div className={styles.identity}>
