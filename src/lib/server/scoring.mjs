@@ -102,8 +102,8 @@ export async function diagnoseSlots(image,costs){
 export async function calculateStandard(character,slots,identities,managed=null){
  if(!SUPPORTED.includes(character))throw Error('No reference-backed rotation policy is available for '+character+'.');
  const chosen=await engine.getCharByName(character);
- const weapon=benchmarkWeapon(chosen.basic);
- const weaponDescription=chosen.basic.signatureWeapon?"signature weapon":"standard benchmark weapon";
+ const weapon=managed?.weapon||benchmarkWeapon(chosen.basic);
+ const weaponDescription=managed?.weapon?"owner-selected benchmark weapon":chosen.basic.signatureWeapon?"signature weapon":"standard benchmark weapon";
  const echoes=slots.map((slot,index)=>{
   const type=Number(slot.cost.value),stat=attributes[slot.mainStat.value];
   if(!engine.statsTable[type]?.[stat]?.[5])throw Error('Unsupported Echo main stat.');
