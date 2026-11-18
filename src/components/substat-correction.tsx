@@ -3,6 +3,7 @@
 import {useState} from "react";
 import {clearCorrectionDraft,correctionDraftKey,updateCorrectionDraft} from "./substat-correction-drafts.mjs";
 import {SUBSTAT_OPTIONS} from "@/lib/scanner/substat-options";
+import {parseSubstat} from "@/lib/scanner/stat-validation";
 
 type Slot={slot:number;substats:{raw?:string;value:string}[]};
 type SavedCorrection={slot:number;position:number;replacement:string};
@@ -16,13 +17,16 @@ export function SubstatCorrection({id,slots,sourceSlots,corrections=[],token,rev
  const [evidence,setEvidence]=useState<{image:string}|null>(null);
  async function inspect(){setError('');try{const r=await fetch('/api/admin/source-evidence?id='+id,{headers:{Authorization:'Bearer '+token},cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error);setEvidence(data);}catch(e){setError(e instanceof Error?e.message:'Original evidence unavailable.');}}
  const expected=slots[slot-1]?.substats[position-1]?.value||"";
- const detectedType=SUBSTAT_OPTIONS.find(o=>o.values.some(v=>v.replace(/[-+]?[0-9]+(?:[.][0-9]+)?%?[ ]*$/,"").trim()===expected.replace(/[-+]?[0-9]+(?:[.][0-9]+)?%?[ ]*$/,"").trim()&&v.includes("%")===expected.includes("%")))?.key;
+ const parsedExpected=parseSubstat(expected);
+ const detectedType=SUBSTAT_OPTIONS.find(option=>parsedExpected&&option.name===parsedExpected.name&&option.key.endsWith(parsedExpected.percent?":percent":":flat"))?.key;
  const effectiveType=detectedType||draft.type;
- const options=SUBSTAT_OPTIONS.find(x=>x.key===effectiveType)?.values||[];
- const selectedValue=options.includes(draft.value)?draft.value:(options.includes(expected)?expected:"");
+ const options=SUBSTAT_OPTIONS.find(option=>option.key===effectiveType)?.values||[];
+ const currentLegalRoll=options.find(value=>{const parsed=parseSubstat(value);return Boolean(parsed&&parsedExpected&&parsed.name===parsedExpected.name&&parsed.amount===parsedExpected.amount&&parsed.percent===parsedExpected.percent)});
+ const selectedValue=options.includes(draft.value)?draft.value:currentLegalRoll||"";
+ const parsedSelected=parseSubstat(selectedValue);
  const hasSavedCorrection=corrections.some(c=>c.slot===slot&&c.position===position&&c.replacement===selectedValue);
  const canRevalidateSaved=Boolean(hasSavedCorrection&&selectedValue===expected);
- const sameType=Boolean(expected)&&expected.replace(/[-+]?[0-9]+(?:[.][0-9]+)?%?[ ]*$/,"").trim()===selectedValue.replace(/[-+]?[0-9]+(?:[.][0-9]+)?%?[ ]*$/,"").trim()&&expected.includes("%")===selectedValue.includes("%");
+ const sameType=Boolean(parsedExpected&&parsedSelected&&parsedExpected.name===parsedSelected.name&&parsedExpected.percent===parsedSelected.percent);
  async function save(){setBusy(true);setError("");setSuccess("");setStage("Saving correction and recalculating score…");try{
   const response=await fetch('/api/moderation',{method:'PUT',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({id,slot,position,expected,replacement:selectedValue,reviewer,note:draft.note})});
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Correction failed.');
