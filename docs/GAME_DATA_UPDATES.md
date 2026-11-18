@@ -2,6 +2,10 @@
 
 Black Shores → Content & scoring → Game data updates compares the current pinned optimizer source and artwork revisions with their upstream `master` commits. The administrator bearer token protects the check. The browser never receives a GitHub credential.
 
+## No-push catalog discovery
+
+Use **Sync catalog discoveries** on the admin page to record new Resonator directory keys and weapon source keys directly in the database. This does not use GitHub Actions, a local command, or a repository write token. The discovery list is an owner review queue; it is not an active game catalog. New items cannot be uploaded or ranked until their release metadata, weapon effects, image and scanner evidence, and scoring support are integrated and verified. Echo and Sonata definition changes and executable optimizer formulas remain subject to the source review and deployment path below. The current upstream snapshot contains no new Resonator or weapon keys beyond the supported catalog.
+
 ## Starting an import
 
 ### Without GitHub Actions
