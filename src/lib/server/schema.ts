@@ -284,5 +284,8 @@ export const migrations = [
   {version:31,statements:[
     "UPDATE hof_boss_catalog SET enabled=0,updated_at=datetime('now') WHERE lower(name) IN ('denia & myriad snare','nightmare: kelpie')",
   ]},
+  {version:32,statements:[
+    `CREATE TABLE game_data_discoveries (kind TEXT NOT NULL CHECK(kind IN ('resonator','weapon')), source_key TEXT NOT NULL, weapon_type TEXT NOT NULL DEFAULT '', source_sha TEXT NOT NULL, asset_sha TEXT NOT NULL, icon_url TEXT NOT NULL DEFAULT '', discovered_at TEXT NOT NULL, PRIMARY KEY(kind,source_key))`,
+  ]},
 ];
 
