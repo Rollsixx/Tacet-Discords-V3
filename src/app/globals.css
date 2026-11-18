@@ -1940,3 +1940,29 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{ou
 .bs-medal-patch-button:focus-visible { outline: 2px solid #a9eee1; outline-offset: 2px; }
 .bs-medal-result-count { color: #aabec7; font-size: 13px; }
 
+/* Rotation workspace: compact release filters and a second attack entry point. */
+.blackshores-root .bs-console .rotation-resonator-picker { min-width:0; padding:14px; border:1px solid #2b424e; border-radius:14px; background:#101a22; }
+.blackshores-root .bs-console .rotation-resonator-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:12px; }
+.blackshores-root .bs-console .rotation-era-tabs { display:flex; gap:4px; padding:4px; border:1px solid #314b55; border-radius:11px; background:#0b1921; }
+.blackshores-root .bs-console .rotation-era-tabs button { min-width:48px; min-height:34px; padding:6px 10px; border:0; border-radius:8px; background:transparent; color:#a9bac8; cursor:pointer; }
+.blackshores-root .bs-console .rotation-era-tabs button[aria-pressed=true] { background:#1b4042; color:#8be4d9; box-shadow:inset 0 0 0 1px #397a77; }
+.blackshores-root .bs-console .rotation-resonator-toolbar input { width:min(100%,270px); min-height:39px; }
+.blackshores-root .bs-console .rotation-resonator-list { display:flex; gap:8px; overflow-x:auto; scrollbar-color:#506779 transparent; padding-bottom:6px; }
+.blackshores-root .bs-console .rotation-resonator-list button { display:flex; flex:0 0 174px; align-items:center; gap:9px; min-height:70px; padding:8px; border:1px solid #2c414e; border-radius:10px; background:#0d1821; color:#e6edf3; text-align:left; cursor:pointer; }
+.blackshores-root .bs-console .rotation-resonator-list button:hover,.blackshores-root .bs-console .rotation-resonator-list button:focus-visible { border-color:#70cfc5; background:#173035; }
+.blackshores-root .bs-console .rotation-resonator-list button[aria-pressed=true] { border-color:#80dfd2; background:#183337; }
+.blackshores-root .bs-console .rotation-resonator-list button:disabled { cursor:wait; opacity:.55; }
+.blackshores-root .bs-console .rotation-resonator-list .resonator-portrait { width:42px; height:42px; flex:0 0 42px; border-radius:8px; object-fit:cover; }
+.blackshores-root .bs-console .rotation-resonator-list strong,.blackshores-root .bs-console .rotation-resonator-list small { display:block; overflow-wrap:anywhere; }
+.blackshores-root .bs-console .rotation-resonator-list small { margin-top:3px; color:#9fb3c2; }
+.blackshores-root .bs-console .rotation-attack-option { grid-template-columns:76px minmax(0,1fr); grid-template-rows:auto auto; align-items:start; }
+.blackshores-root .bs-console .rotation-attack-type { grid-column:1; grid-row:1 / 3; }
+.blackshores-root .bs-console .rotation-attack-name { grid-column:2; grid-row:1; line-height:1.35; }
+.blackshores-root .bs-console .rotation-attack-coefficient { grid-column:2; grid-row:2; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.3; }
+.blackshores-root .bs-console .rotation-quick-add { display:grid; gap:10px; margin:16px 0 20px; padding:14px; border:1px solid #3d6968; border-radius:11px; background:#102528; }
+.blackshores-root .bs-console .rotation-quick-add strong,.blackshores-root .bs-console .rotation-quick-add small { display:block; }
+.blackshores-root .bs-console .rotation-quick-add small { color:#a8bec6; margin-top:3px; }
+.blackshores-root .bs-console .rotation-quick-controls { display:flex; gap:9px; }
+.blackshores-root .bs-console .rotation-quick-controls input { flex:1; min-width:0; min-height:42px; }
+.blackshores-root .bs-console .rotation-quick-options { max-height:250px; }
+@media(max-width:600px){.blackshores-root .bs-console .rotation-resonator-toolbar label,.blackshores-root .bs-console .rotation-resonator-toolbar input { width:100%; }.blackshores-root .bs-console .rotation-quick-controls { flex-wrap:wrap; }.blackshores-root .bs-console .rotation-quick-controls button { width:100%; }}
