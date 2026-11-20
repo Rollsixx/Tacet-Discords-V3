@@ -116,6 +116,8 @@ export async function importDiscordHologram(db,snapshot,now=new Date().toISOStri
    const rosterParams=roster.map(player=>player.id);
    await tx.execute({sql:`DELETE FROM hof_roster WHERE tournament_slug=? AND participant_id NOT IN (${rosterParams.map(()=>'?').join(',')})`,args:[slug,...rosterParams]});
   }else await tx.execute({sql:'DELETE FROM hof_roster WHERE tournament_slug=?',args:[slug]});
+  const priorBossRows=await tx.execute({sql:'SELECT id,match_boss FROM hof_matches WHERE tournament_slug=?',args:[slug]});
+  const priorBosses=new Map(priorBossRows.rows.map(row=>[String(row.id),String(row.match_boss||'')]));
   await tx.execute({sql:`UPDATE hof_matches SET phase_state='ready' WHERE tournament_slug=? AND phase_state IN ('setting_up','live')`,args:[slug]});
   const insertMatch=`INSERT INTO hof_matches(id,tournament_slug,round_number,round_label,match_order,bracket_side,participant_a,participant_b,state,winner_id,outcome,outcome_published,bracket_position,phase_state,match_boss,updated_at)
    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
@@ -127,6 +129,10 @@ export async function importDiscordHologram(db,snapshot,now=new Date().toISOStri
    const phase=match.resolved?'complete':active?(match.phase==='running'?'live':'setting_up'):a&&b?'ready':'upcoming';
    const side=match.side==='third_place'?'third_place':'main';
    await tx.execute({sql:insertMatch,args:[match.id,slug,match.round,side==='third_place'?'Third-place match':`Round ${match.round}`,match.number,side,a,b,state,match.winner,match.winner?'Discord tournament result':match.resolved?'No winner':'',match.resolved?1:0,match.number-1,phase,match.boss||'',now]});
+   if(active&&match.boss&&priorBosses.get(match.id)!==match.boss){
+    await tx.execute({sql:`INSERT INTO hof_audit_events(id,tournament_slug,match_id,actor_id,actor_role,action,reason,before_state,after_state,outcome,created_at)
+     VALUES(?,?,?,'discord-bot','integration','boss_roll','',?,?,'success',?)`,args:[randomUUID(),slug,match.id,JSON.stringify({matchBoss:priorBosses.get(match.id)||''}),JSON.stringify({matchId:match.id,matchBoss:match.boss}),now]});
+   }
   }
   await tx.execute({sql:'DELETE FROM hof_match_dependencies WHERE match_id IN (SELECT id FROM hof_matches WHERE tournament_slug=?)',args:[slug]});
   await tx.execute({sql:'DELETE FROM hof_draft_steps WHERE match_id IN (SELECT id FROM hof_matches WHERE tournament_slug=?)',args:[slug]});
