@@ -227,7 +227,7 @@ const slug=url.searchParams.get("slug");
     if(marker?.source==="discord"&&marker?.managed===true)discordSync={managed:true,sourceState:marker.sourceState||"unknown",podiumForReview:marker.podiumForReview||null,revision:Number(revision?.revision||0),receivedAt:revision?.receivedAt||null};
    }catch{}
   }
-  const roundBlocks=mayManageSelected?(await db.execute({sql:"SELECT round_number,round_label,COUNT(*) total,SUM(CASE WHEN phase_state='complete' OR state IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) resolved,SUM(CASE WHEN phase_state='complete' AND state NOT IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) completed,SUM(CASE WHEN state='forfeited' THEN 1 ELSE 0 END) forfeited FROM hof_matches WHERE tournament_slug=? GROUP BY round_number,round_label ORDER BY round_number",args:[slug]})).rows:[]);
+  const roundBlocks=mayManageSelected?(await db.execute({sql:"SELECT round_number,round_label,COUNT(*) total,SUM(CASE WHEN phase_state='complete' OR state IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) resolved,SUM(CASE WHEN phase_state='complete' AND state NOT IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) completed,SUM(CASE WHEN state='forfeited' THEN 1 ELSE 0 END) forfeited FROM hof_matches WHERE tournament_slug=? GROUP BY round_number,round_label ORDER BY round_number",args:[slug]})).rows:[];
   return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},phase3SafetyEnabled,matchFlowEnabled,matchFoundationEnabled,publicMatchViewEnabled,discordSync,roundBlocks,events:events.rows,deletedEvents:deletedEvents.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
  }catch(e){return failure(e);}
 }
