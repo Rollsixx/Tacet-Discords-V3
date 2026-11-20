@@ -20,7 +20,14 @@ const ORDER_4 = Object.freeze([
   ["b", "pick"], ["a", "pick"],
 ]);
 
-export function draftOrder(bansPerPlayer) {
+const ORDER_DISCORD = Object.freeze([
+  ["a", "ban"], ["a", "ban"], ["b", "ban"], ["b", "ban"],
+  ["a", "pick"], ["b", "pick"], ["a", "ban"], ["b", "ban"],
+  ["a", "pick"], ["a", "pick"], ["b", "pick"], ["b", "pick"],
+]);
+
+export function draftOrder(bansPerPlayer, discordRules = false) {
+  if (discordRules) return ORDER_DISCORD;
   if (Number(bansPerPlayer) === 3) return ORDER_3;
   if (Number(bansPerPlayer) === 4) return ORDER_4;
   throw new Error("Bans per player must be 3 or 4.");
@@ -40,8 +47,9 @@ export function validateDraftStep({
   bansPerPlayer,
   bossChosen,
   startedWithoutDetails,
+  discordRules = false,
 }) {
-  const order = draftOrder(bansPerPlayer);
+  const order = draftOrder(bansPerPlayer, discordRules);
   const next = history.length + 1;
   if (Number(stepNumber) !== next) throw new Error(`Enter draft step ${next} next.`);
   if (next > order.length) throw new Error("The draft is already complete.");
