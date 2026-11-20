@@ -315,6 +315,11 @@ export async function POST(request:Request){
    const gold=text(placements.gold,"Champion",80),silver=text(placements.silver,"Second place",80),bronze=placements.bronze?text(placements.bronze,"Third place",80):null;
    const ids=[gold,silver,...(bronze?[bronze]:[])];
    if(new Set(ids).size!==ids.length)throw new HttpError(400,"Each podium place must be a different confirmed participant.");
+   if(!bronze){
+    const markerRow=(await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hof:discord-preview:"+slug]})).rows[0];
+    let allowUnclaimed=false;try{const marker=markerRow?JSON.parse(String(markerRow.value)):null;allowUnclaimed=marker?.source==="discord"&&marker?.managed===true&&marker?.podiumForReview?.bronze===null;}catch{}
+    if(!allowUnclaimed)throw new HttpError(400,"A bronze medal can be left unclaimed only when the Discord source reports no third-place winner.");
+   }
    tx=await db.transaction("write");
    const event=(await tx.execute({sql:"SELECT title,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event)throw new HttpError(404,"Tournament not found.");if(String(event.status)==="cancelled")throw new HttpError(409,"A cancelled tournament cannot publish a podium.");
    const incomplete=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=? AND state NOT IN ('published','no_result','cancelled','forfeited')",args:[slug]});if(Number(incomplete.rows[0]?.total||0))throw new HttpError(409,"Finish or resolve every match before publishing the podium.");
