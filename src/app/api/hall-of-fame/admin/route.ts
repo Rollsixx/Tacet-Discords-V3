@@ -214,8 +214,21 @@ const slug=url.searchParams.get("slug");
   const phase3SafetyEnabled=await isFeatureEnabled("hof-phase-3-safety",db);
   const matchFlowEnabled=await isFeatureEnabled("hof-match-flow",db),matchFoundationEnabled=await isFeatureEnabled("hof-match-foundation",db);
   const publicMatchViewEnabled=await isFeatureEnabled("hof-public-match-view",db);
-  const roundBlocks=slug&&await can(actor,"manage_event",slug,null,db)?(await db.execute({sql:"SELECT round_number,round_label,COUNT(*) total,SUM(CASE WHEN phase_state='complete' OR state IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) resolved,SUM(CASE WHEN phase_state='complete' AND state NOT IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) completed,SUM(CASE WHEN state='forfeited' THEN 1 ELSE 0 END) forfeited FROM hof_matches WHERE tournament_slug=? GROUP BY round_number,round_label ORDER BY round_number",args:[slug]})).rows:[];
-  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},phase3SafetyEnabled,matchFlowEnabled,matchFoundationEnabled,publicMatchViewEnabled,roundBlocks,events:events.rows,deletedEvents:deletedEvents.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
+  const mayManageSelected=Boolean(slug&&await can(actor,"manage_event",slug,null,db));
+  let discordSync:any=null;
+  if(mayManageSelected){
+   const [markerRow,revisionRow]=await Promise.all([
+    db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hof:discord-preview:"+slug]}),
+    db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hof:discord-sync:"+slug]})
+   ]);
+   try{
+    const marker=markerRow.rows[0]?JSON.parse(String(markerRow.rows[0].value)):null;
+    const revision=revisionRow.rows[0]?JSON.parse(String(revisionRow.rows[0].value)):null;
+    if(marker?.source==="discord"&&marker?.managed===true)discordSync={managed:true,sourceState:marker.sourceState||"unknown",podiumForReview:marker.podiumForReview||null,revision:Number(revision?.revision||0),receivedAt:revision?.receivedAt||null};
+   }catch{}
+  }
+  const roundBlocks=mayManageSelected?(await db.execute({sql:"SELECT round_number,round_label,COUNT(*) total,SUM(CASE WHEN phase_state='complete' OR state IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) resolved,SUM(CASE WHEN phase_state='complete' AND state NOT IN ('forfeited','no_result','cancelled') THEN 1 ELSE 0 END) completed,SUM(CASE WHEN state='forfeited' THEN 1 ELSE 0 END) forfeited FROM hof_matches WHERE tournament_slug=? GROUP BY round_number,round_label ORDER BY round_number",args:[slug]})).rows:[];
+  return json({actor:{id:actor.id,role:actor.role,title:actor.title,label:actor.label},phase3SafetyEnabled,matchFlowEnabled,matchFoundationEnabled,publicMatchViewEnabled,discordSync,roundBlocks,events:events.rows,deletedEvents:deletedEvents.rows,participants:people.rows,audit:auditRows.rows,matches,reserves,roster,staff,bossCatalog:bossCatalog.rows,bossPool,draftSteps});
  }catch(e){return failure(e);}
 }
 export async function POST(request:Request){
@@ -298,17 +311,27 @@ export async function POST(request:Request){
     if(!decision){const legacy=(await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hof:forfeited-round:"+slug]})).rows[0];try{if(legacy&&Number(JSON.parse(String(legacy.value)).round)===round)decision=legacy;}catch{}}
     if(!decision)throw new HttpError(409,"Podium is blocked until an Arbiter cancels the event or reschedules the forfeited round.");
    }
-   const placements=body.placements;if(!placements||typeof placements!=="object")throw new HttpError(400,"Choose all three podium participants.");
-   const ids=[text(placements.gold,"Champion",80),text(placements.silver,"Second place",80),text(placements.bronze,"Third place",80)];
-   if(new Set(ids).size!==3)throw new HttpError(400,"Each podium place must be a different confirmed participant.");
+   const placements=body.placements;if(!placements||typeof placements!=="object")throw new HttpError(400,"Choose the podium participants.");
+   const gold=text(placements.gold,"Champion",80),silver=text(placements.silver,"Second place",80),bronze=placements.bronze?text(placements.bronze,"Third place",80):null;
+   const ids=[gold,silver,...(bronze?[bronze]:[])];
+   if(new Set(ids).size!==ids.length)throw new HttpError(400,"Each podium place must be a different confirmed participant.");
+   if(!bronze){
+    const markerRow=(await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hof:discord-preview:"+slug]})).rows[0];
+    let allowUnclaimed=false;try{const marker=markerRow?JSON.parse(String(markerRow.value)):null;allowUnclaimed=marker?.source==="discord"&&marker?.managed===true&&marker?.podiumForReview?.bronze===null;}catch{}
+    if(!allowUnclaimed)throw new HttpError(400,"A bronze medal can be left unclaimed only when the Discord source reports no third-place winner.");
+   }
    tx=await db.transaction("write");
    const event=(await tx.execute({sql:"SELECT title,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];if(!event)throw new HttpError(404,"Tournament not found.");if(String(event.status)==="cancelled")throw new HttpError(409,"A cancelled tournament cannot publish a podium.");
    const incomplete=await tx.execute({sql:"SELECT COUNT(*) total FROM hof_matches WHERE tournament_slug=? AND state NOT IN ('published','no_result','cancelled','forfeited')",args:[slug]});if(Number(incomplete.rows[0]?.total||0))throw new HttpError(409,"Finish or resolve every match before publishing the podium.");
    for(const id of ids){const valid=await tx.execute({sql:"SELECT 1 FROM hof_roster WHERE tournament_slug=? AND participant_id=? AND state='confirmed'",args:[slug,id]});if(!valid.rows.length)throw new HttpError(409,"Only confirmed participants can be on the podium.");}
    const prior=(await tx.execute({sql:"SELECT * FROM hof_medals WHERE tournament_slug=?",args:[slug]})).rows;
-   for(const [medal,index] of [["gold",0],["silver",1],["bronze",2]] as const)await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?) ON CONFLICT(tournament_slug,medal) DO UPDATE SET participant_id=excluded.participant_id,published=1,published_by=excluded.published_by,published_at=excluded.published_at",args:[slug,medal,ids[index],actor.id,now]});
+   for(const [medal,participantId] of [["gold",gold],["silver",silver],["bronze",bronze]] as const){
+    if(!participantId){await tx.execute({sql:"DELETE FROM hof_medals WHERE tournament_slug=? AND medal='bronze'",args:[slug]});continue;}
+    const valid=await tx.execute({sql:"SELECT 1 FROM hof_roster WHERE tournament_slug=? AND participant_id=? AND state='confirmed'",args:[slug,participantId]});if(!valid.rows.length)throw new HttpError(409,"Only confirmed participants can be on the podium.");
+    await tx.execute({sql:"INSERT INTO hof_medals(tournament_slug,medal,participant_id,published,published_by,published_at) VALUES(?,?,?,1,?,?) ON CONFLICT(tournament_slug,medal) DO UPDATE SET participant_id=excluded.participant_id,published=1,published_by=excluded.published_by,published_at=excluded.published_at",args:[slug,medal,participantId,actor.id,now]});
+   }
    await tx.execute({sql:"UPDATE hof_tournaments SET medals_published=1,status='finalized',updated_at=?,version=version+1 WHERE slug=?",args:[now,slug]});
-   await audit(tx,actor,"publish_podium",slug,{medals:prior,status:String(event.status)},{gold:ids[0],silver:ids[1],bronze:ids[2],status:"finalized"});
+   await audit(tx,actor,"publish_podium",slug,{medals:prior,status:String(event.status)},{gold,silver,bronze:bronze||"unclaimed",status:"finalized"});
    await tx.commit();tx=null;return json({ok:true,undoAvailable:true,undoAction:"publish_podium",undoExpiresAt:new Date(Date.now()+10000).toISOString()});
   }
   const phase4Actions=new Set(["begin_match_setup","start_match","start_without_details","save_match_details","save_draft_step","hold_match","set_event_match_rules","set_tournament_boss_pool","upsert_boss_catalog","report_match_winner","hold_and_start_next","declare_walkover","call_next_reserve","declare_double_forfeit","resolve_forfeited_round","cancel_tournament_forfeited_round"]);
@@ -386,7 +409,7 @@ export async function POST(request:Request){
    if(String(current.phase_state)!=="setting_up")throw new HttpError(409,"Open match setup before starting it.");
    if(!String(current.match_boss||""))throw new HttpError(409,"Choose a boss before starting the match, or use Start without details.");
    const draft=(await tx.execute({sql:"SELECT COUNT(*) count FROM hof_draft_steps WHERE match_id=?",args:[matchId]})).rows[0];
-   if(Number(draft?.count)!==draftOrder(Number(current.bans_per_player)).length)throw new HttpError(409,"Complete the draft before going live.");
+   if(Number(draft?.count)!==draftOrder(Number(current.bans_per_player),eventSlug.startsWith("discord-hologram-")).length)throw new HttpError(409,"Complete the draft before going live.");
    const active=await tx.execute({sql:"SELECT id FROM hof_matches WHERE tournament_slug=? AND id<>? AND phase_state IN ('setting_up','live') LIMIT 1",args:[eventSlug,matchId]});if(active.rows.length)throw new HttpError(409,"Another match is already Setting up or Live.");
    const started=await tx.execute({sql:"UPDATE hof_matches SET state='in_progress',phase_state='live',version=version+1,updated_at=? WHERE id=? AND phase_state='setting_up'",args:[now,matchId]});if(!started.rowsAffected)throw new HttpError(409,"Match setup changed before it could start.");
    await audit(tx,actor,"setup_edit",eventSlug,{phaseState:"setting_up"},{phaseState:"live"});await tx.commit();tx=null;return json({ok:true,phaseState:"live"});
@@ -435,9 +458,9 @@ export async function POST(request:Request){
    if(!current.participant_a||!current.participant_b)throw new HttpError(409,"Both match participants must be known before drafting.");
    const name=text(body.resonator,"Resonator",64),resonator=featuredResonators.find((entry)=>entry.name.toLocaleLowerCase("en-US")===name.toLocaleLowerCase("en-US"));if(!resonator)throw new HttpError(400,"Choose a supported Resonator.");
    const rows=await tx.execute({sql:"SELECT step_number,actor_slot,action,resonator FROM hof_draft_steps WHERE match_id=? ORDER BY step_number",args:[matchId]});
-   let step:any;try{step=validateDraftStep({history:rows.rows,stepNumber:Number(body.stepNumber),actorSlot:String(body.actorSlot),action:String(body.stepAction),resonator:resonator.name,bansPerPlayer:Number(current.bans_per_player),bossChosen:Boolean(String(current.match_boss||"")),startedWithoutDetails:Boolean(Number(current.started_without_details))});}catch(error){throw new HttpError(409,error instanceof Error?error.message:"Draft step is invalid.");}
+   let step:any;try{step=validateDraftStep({history:rows.rows,stepNumber:Number(body.stepNumber),actorSlot:String(body.actorSlot),action:String(body.stepAction),resonator:resonator.name,bansPerPlayer:Number(current.bans_per_player),bossChosen:Boolean(String(current.match_boss||"")),startedWithoutDetails:Boolean(Number(current.started_without_details)),discordRules:eventSlug.startsWith("discord-hologram-")});}catch(error){throw new HttpError(409,error instanceof Error?error.message:"Draft step is invalid.");}
    await tx.execute({sql:"INSERT INTO hof_draft_steps(match_id,step_number,actor_slot,action,resonator,created_by,created_at) VALUES(?,?,?,?,?,?,?)",args:[matchId,step.stepNumber,step.actorSlot,step.action,step.resonator,actor.id,now]});
-   await audit(tx,actor,"setup_edit",eventSlug,{draftSteps:rows.rows.length},{draftStep:step});await tx.commit();tx=null;return json({ok:true,step,draftComplete:step.stepNumber===draftOrder(Number(current.bans_per_player)).length});
+   await audit(tx,actor,"setup_edit",eventSlug,{draftSteps:rows.rows.length},{draftStep:step});await tx.commit();tx=null;return json({ok:true,step,draftComplete:step.stepNumber===draftOrder(Number(current.bans_per_player),eventSlug.startsWith("discord-hologram-")).length});
   }
   if(action==="create_staff"){
    if(actor.role!=="owner"&&actor.role!=="hall_of_fame_admin")throw new HttpError(403,"Only full-access Black Shores titles can issue staff credentials.");
