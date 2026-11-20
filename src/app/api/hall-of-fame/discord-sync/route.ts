@@ -4,8 +4,6 @@ import {failure,json,readJson} from '@/lib/server/http';
 import {HttpError} from '@/lib/server/validation';
 import {importDiscordHologram} from '@/lib/server/discord-hologram-import.mjs';
 
-export const runtime='nodejs';
-
 function authorize(request:Request){
  const secret=process.env.DISCORD_HOLOGRAM_SYNC_TOKEN||'';
  if(secret.length<32)throw new HttpError(503,'Discord tournament sync is not configured.');
