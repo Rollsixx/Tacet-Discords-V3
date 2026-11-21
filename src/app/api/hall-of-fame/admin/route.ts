@@ -763,7 +763,7 @@ export async function POST(request:Request){
     if(![4,8,16,32].includes(capacity))throw new HttpError(400,"Choose a bot-supported bracket size: 4, 8, 16, or 32.");
     command.capacity=capacity;command.category="Hologram";
    }else{
-    if(!slug||!/^discord-hologram-[1-9]\\d{0,14}$/.test(slug))throw new HttpError(400,"Choose a Discord-managed Hologram event.");
+    if(!slug||!/^discord-hologram-[1-9]\d{0,14}$/.test(slug))throw new HttpError(400,"Choose a Discord-managed Hologram event.");
     await requireCan(actor,"manage_event",slug,null,db);
     const current=(await db.execute({sql:"SELECT title,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];
     if(!current)throw new HttpError(404,"Tournament not found.");
