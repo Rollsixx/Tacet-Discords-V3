@@ -22,10 +22,10 @@ export async function GET(request:Request){
    if(command.status!=="queued"&&!stale)continue;
    command.status="claimed";command.claimedAt=now;command.attempts=Number(command.attempts||0)+1;
    await tx.execute({sql:"UPDATE app_settings SET value=?,updated_at=? WHERE key=?",args:[JSON.stringify(command),new Date(now).toISOString(),String(row.key)]});
-   await tx.commit();tx=null;
+   await tx.commit();tx.close();tx=null;
    return json({ok:true,command:{id:command.id,action:command.action,title:command.title,capacity:command.capacity,tournamentId:command.tournamentId}});
   }
-  await tx.commit();tx=null;return json({ok:true,command:null});
+  await tx.commit();tx.close();tx=null;return json({ok:true,command:null});
  }catch(error){if(tx)await tx.rollback();return failure(error);}finally{tx?.close();}
 }
 
@@ -42,11 +42,11 @@ export async function POST(request:Request){
   const key="hof:discord-command:"+id,row=(await tx.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:[key]})).rows[0];
   if(!row)throw new HttpError(404,"Command not found.");
   let command:any;try{command=JSON.parse(String(row.value));}catch{throw new HttpError(409,"Command state is unreadable.");}
-  if(command.status==="completed") {await tx.commit();tx=null;return json({ok:true,id,status:"completed"});}
+  if(command.status==="completed") {await tx.commit();tx.close();tx=null;return json({ok:true,id,status:"completed"});}
   command.status=status;command.completedAt=Date.now();
   if(body.tournamentId!==undefined)command.resultTournamentId=Number(body.tournamentId)||null;
   if(body.error)command.error=String(body.error).slice(0,500);
   await tx.execute({sql:"UPDATE app_settings SET value=?,updated_at=? WHERE key=?",args:[JSON.stringify(command),new Date().toISOString(),key]});
-  await tx.commit();tx=null;return json({ok:true,id,status});
+  await tx.commit();tx.close();tx=null;return json({ok:true,id,status});
  }catch(error){if(tx)await tx.rollback();return failure(error);}finally{tx?.close();}
 }
