@@ -40,7 +40,7 @@ their team before Player 2. The site records the same 12 total actions.
 - Revealing the bracket is a staff action. Publishing medals is a separate
   staff action.
 - The bot exporter rejects test entrants and omits raw Discord IDs.
-- The sync is one-way: site edits do not write back to Discord.
+- Tournament snapshots flow from the bot to the site. Staff can also queue event creation and active-event renames from the site; roster, bracket, and draft edits remain bot-owned.
 
 
 ## Create and rename bot-managed tournaments from the website
