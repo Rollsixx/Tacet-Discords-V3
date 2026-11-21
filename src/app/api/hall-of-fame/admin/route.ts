@@ -753,6 +753,32 @@ export async function POST(request:Request){
    await audit(db,actor,action,slug,{title:row.title,boss:row.boss,eventDate:row.event_date},{title,boss,eventDate,rules,publicNotice:notice,artworkChanged:body.artworkDataUrl!==undefined});
    return json({ok:true});
   }
+  if(action==="queue_discord_create"||action==="queue_discord_rename"){
+   const title=text(body.title,"Tournament name",90);
+   const id=randomUUID(),key="hof:discord-command:"+id;
+   let command:any={id,action:action==="queue_discord_create"?"create":"rename",title,status:"queued",createdAt:Date.now(),requestedBy:actor.id};
+   if(action==="queue_discord_create"){
+    await requireCan(actor,"global_admin",null,null,db);
+    const capacity=Number(body.capacity);
+    if(![4,8,16,32].includes(capacity))throw new HttpError(400,"Choose a bot-supported bracket size: 4, 8, 16, or 32.");
+    command.capacity=capacity;command.category="Hologram";
+   }else{
+    if(!slug||!/^discord-hologram-[1-9]\\d{0,14}$/.test(slug))throw new HttpError(400,"Choose a Discord-managed Hologram event.");
+    await requireCan(actor,"manage_event",slug,null,db);
+    const current=(await db.execute({sql:"SELECT title,status FROM hof_tournaments WHERE slug=?",args:[slug]})).rows[0];
+    if(!current)throw new HttpError(404,"Tournament not found.");
+    if(["finalized","archived","cancelled"].includes(String(current.status)))throw new HttpError(409,"Closed tournaments cannot be renamed from the website.");
+    const markerRow=(await db.execute({sql:"SELECT value FROM app_settings WHERE key=?",args:["hof:discord-preview:"+slug]})).rows[0];
+    let managed=false;try{const source=markerRow?JSON.parse(String(markerRow.value)):null;managed=source?.source==="discord"&&source?.managed===true;}catch{}
+    if(!managed)throw new HttpError(409,"Only bot-managed Discord tournaments can be renamed here.");
+    const pending=await db.execute({sql:"SELECT value FROM app_settings WHERE key LIKE 'hof:discord-command:%'",args:[]});
+    for(const row of pending.rows){try{const queued=JSON.parse(String(row.value));if(queued.status==="queued"||queued.status==="claimed")if(queued.action==="rename"&&Number(queued.tournamentId)===Number(slug.slice("discord-hologram-".length)))throw new HttpError(409,"A rename request for this tournament is already waiting for the bot.");}catch(error){if(error instanceof HttpError)throw error;}}
+    command.tournamentId=Number(slug.slice("discord-hologram-".length));command.slug=slug;
+   }
+   await db.execute({sql:"INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?)",args:[key,JSON.stringify(command),now]});
+   await audit(db,actor,action,command.slug||null,{}, {commandId:id,title,capacity:command.capacity||null});
+   return json({ok:true,queued:true,commandId:id});
+  }
   if(action==="create_tournament"){
    await requireCan(actor,"global_admin",null,null,db);
    const title=text(body.title,"Title",120),boss=text(body.boss,"Hologram boss",80),format=body.format==="double_elimination"?"double_elimination":"single_elimination";
