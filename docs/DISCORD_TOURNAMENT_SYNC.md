@@ -41,3 +41,12 @@ their team before Player 2. The site records the same 12 total actions.
   staff action.
 - The bot exporter rejects test entrants and omits raw Discord IDs.
 - The sync is one-way: site edits do not write back to Discord.
+
+
+## Create and rename bot-managed tournaments from the website
+
+Hall of Fame administrators can queue a Hologram event from the Tournaments desk. The bot checks the authenticated `/api/hall-of-fame/discord-commands` endpoint every 15 seconds, creates the event using its configured Discord registration channel, and sends its snapshot back through the existing sync endpoint. The site shows the event as a private draft after the first snapshot.
+
+The bot supports bracket capacities of 4, 8, 16, and 32 entrants for this flow. Staff can queue a rename for an active bot-managed event; the bot updates its database and registration card, and the next snapshot updates the site title. This uses the same `DISCORD_HOLOGRAM_SYNC_URL` and `DISCORD_HOLOGRAM_SYNC_TOKEN`; no additional secret or inbound bot port is required.
+
+Deploy the updated bot after the website change. If the bot is offline, requests remain queued and become available when it reconnects. Failed commands are marked for staff to retry.
