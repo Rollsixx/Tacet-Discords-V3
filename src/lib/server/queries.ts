@@ -387,7 +387,7 @@ export async function homeRankings(db: Client = database()) {
 }
 
 export async function homeFeaturedSettings(db:Client=database()) {
- const supported=leaderboardResonators.map(character=>character.name);
+ const supported=await eligibleMedalCharacters(db);
  const byName=new Map(leaderboardResonators.map(character=>[character.name,character]));
  const readSaved=async(client:Client):Promise<unknown>=>{
   const result=await client.execute({sql:"SELECT value FROM app_settings WHERE key='home_featured_rotation_v1'",args:[]});
@@ -417,7 +417,7 @@ export async function homeFeaturedSettings(db:Client=database()) {
  return {
   selected:names,
   featured:names.map(name=>byName.get(name)!).filter(Boolean),
-  options:leaderboardResonators.map(character=>({name:character.name,label:character.displayName||character.name,element:character.element})),
+  options:supported.map(name=>byName.get(name)!).filter(Boolean).map(character=>({name:character.name,label:character.displayName||character.name,element:character.element})),
   nextShuffleAt:state?new Date(state.nextShuffleAt).toISOString():null,
   cycle:state?.cycle||1,
   featuredThisCycle:state?.played.length||0,
