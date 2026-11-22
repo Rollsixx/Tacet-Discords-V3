@@ -93,6 +93,7 @@ export async function importDiscordHologram(db,snapshot,now=new Date().toISOStri
   const marker=(await tx.execute({sql:'SELECT value FROM app_settings WHERE key=?',args:[markerKey]})).rows[0];
   const current=(await tx.execute({sql:'SELECT value FROM app_settings WHERE key=?',args:[revisionKey]})).rows[0];
   let markerData=null;try{if(marker)markerData=JSON.parse(String(marker.value));}catch{}
+  const autoRevealOnRunning=markerData?.autoRevealOnRunning===true||!existing;
   if(existing&&(!markerData||markerData.source!=='discord'||markerData.managed!==true))throw new HttpError(409,'This event is not managed by the Discord integration.');
   if(existing&&(existing.soft_deleted_at||Number(existing.medals_published)||['finalized','archived','cancelled'].includes(String(existing.status))))throw new HttpError(409,'This Discord event is closed to further updates.');
   let last={revision:0,hash:''};try{if(current)last=JSON.parse(String(current.value));}catch{}
@@ -148,9 +149,13 @@ export async function importDiscordHologram(db,snapshot,now=new Date().toISOStri
   for(const step of steps){
    await tx.execute({sql:'INSERT INTO hof_draft_steps(match_id,step_number,actor_slot,action,resonator,created_by,created_at) VALUES(?,?,?,?,?,?,?)',args:[step.matchId,step.step,step.slot,step.action,step.resonator,'discord-bot',now]});
   }
-  await tx.execute({sql:`INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,args:[markerKey,JSON.stringify({source:'discord',managed:true,sourceState:event.state,podiumForReview:podium}),now]});
+  await tx.execute({sql:`INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,args:[markerKey,JSON.stringify({source:'discord',managed:true,sourceState:event.state,autoRevealOnRunning,podiumForReview:podium}),now]});
   await tx.execute({sql:`INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,args:[revisionKey,JSON.stringify({revision,hash,receivedAt:now}),now]});
   if(existing&&event.state==='running'&&String(existing.status)==='bracket_revealed')await tx.execute({sql:"UPDATE hof_tournaments SET status='in_progress' WHERE slug=?",args:[slug]});
+  if(event.state==='running'&&autoRevealOnRunning){
+   await tx.execute({sql:"UPDATE hof_roster SET published=1,updated_at=? WHERE tournament_slug=? AND state='confirmed'",args:[now,slug]});
+   await tx.execute({sql:"UPDATE hof_tournaments SET status='in_progress',roster_published=1,bracket_published=1 WHERE slug=?",args:[slug]});
+  }
   if(existing&&event.state!=='registration'&&['draft','registration_closed'].includes(String(existing.status)))await tx.execute({sql:"UPDATE hof_tournaments SET status='bracket_prepared' WHERE slug=?",args:[slug]});
   if(existing&&event.state==='completed'&&['bracket_revealed','in_progress'].includes(String(existing.status)))await tx.execute({sql:"UPDATE hof_tournaments SET status='results_pending' WHERE slug=?",args:[slug]});
   await tx.execute({sql:`INSERT INTO hof_audit_events(id,tournament_slug,actor_id,actor_role,action,reason,before_state,after_state,outcome,created_at) VALUES(?,?,'discord-bot','integration','discord_sync','',?,?, 'success',?)`,args:[randomUUID(),slug,JSON.stringify({revision:last.revision||0}),JSON.stringify({revision,roster:roster.length,matches:matches.length}),now]});
