@@ -44,31 +44,31 @@ export async function identifyCrops(crops){return identitiesFromReport(await dia
 export function diagnoseFingerprints(features){
  return features.map(({cost,portrait:ef,sonata:sf},i)=>{
   const rankedSets=rankFingerprint(sf,catalog.sets),rankedEchoes=rankedEchoesFor(ef,cost);
-  let set=matchRanked(rankedSets,.20,.015);
-  const compatible=set?rankedEchoes.filter(e=>e.sets.includes(set.key)):[];
-  let echo=set?(matchRanked(compatible,.18,.025,i>0)||disambiguateSpatial(ef,compatible,cost)):null;
-  if(!set){
-   // Resolve jointly when similar Sonata icons tie: neither the portrait nor
-   // the Sonata may contradict the other or exceed the original thresholds.
-   const plausibleSets=new Set(rankedSets.filter(s=>s.difference<=.20&&s.difference-rankedSets[0].difference<.015).map(s=>s.key));
-   const joint=plausibleSets.size?rankedEchoes.filter(e=>e.sets.some(s=>plausibleSets.has(s))):rankedEchoes;
-   echo=matchRanked(joint,.18,.025,i>0)||disambiguateSpatial(ef,joint,cost);
-   if(echo)set=matchRanked(rankedSets.filter(s=>engine.mainEchoesData[echo.key].sets.includes(s.key)),.20,.015);
-  }
+  // Identify the Echo portrait independently first. Many Echoes can roll
+  // multiple Sonata sets, so a set-icon guess must not narrow the portrait
+  // pool before the Echo itself has had a chance to match. Once identified,
+  // only compare the Sonata icon against sets that Echo can actually roll.
+  let echo=matchRanked(rankedEchoes,.18,.025,i>0)||disambiguateSpatial(ef,rankedEchoes,cost);
+  let set=echo?matchRanked(rankedSets.filter(s=>echo.sets.includes(s.key)),.20,.015):null;
   if(!echo){
-   // A near-tied Sonata can be misclassified even when the Echo portrait is
-   // clear. Re-evaluate both identities from their compatible references;
-   // keep the same score/margin gates so this never becomes a blind fallback.
-   const echoLed=matchRanked(rankedEchoes,.18,.025,i>0)||disambiguateSpatial(ef,rankedEchoes,cost);
-   if(echoLed){
-    const compatibleSets=rankedSets.filter(s=>engine.mainEchoesData[echoLed.key]?.sets.includes(s.key));
-    const verifiedSet=matchRanked(compatibleSets,.20,.015);
-    if(verifiedSet){echo=echoLed;set=verifiedSet;}
-    else if(compatibleSets.some(s=>s.difference<=.20)){
-     // Keep a confidently identified Echo even when its Sonata icon is still
-     // ambiguous. Ranking remains blocked until the Sonata itself is verified.
-     echo=echoLed;set=null;
-    }
+   // If the portrait is ambiguous or unreadable, a confident Sonata can
+   // still narrow the Echo candidates. This remains a fallback: the same
+   // score and margin gates apply, and a second pass resolves Sonata only
+   // among the selected Echo's compatible sets.
+   const setLed=matchRanked(rankedSets,.20,.015);
+   if(setLed){
+    const compatible=rankedEchoes.filter(e=>e.sets.includes(setLed.key));
+    echo=matchRanked(compatible,.18,.025,i>0)||disambiguateSpatial(ef,compatible,cost);
+   }
+   if(echo)set=matchRanked(rankedSets.filter(s=>echo.sets.includes(s.key)),.20,.015);
+   if(!echo){
+    // A near-tied Sonata may be ambiguous even when compatible Echoes can
+    // be distinguished. Consider only sets near the best Sonata score, but
+    // never relax either identity's original acceptance threshold.
+    const plausibleSets=new Set(rankedSets.filter(s=>s.difference<=.20&&s.difference-rankedSets[0].difference<.015).map(s=>s.key));
+    const joint=plausibleSets.size?rankedEchoes.filter(e=>e.sets.some(s=>plausibleSets.has(s))):rankedEchoes;
+    echo=matchRanked(joint,.18,.025,i>0)||disambiguateSpatial(ef,joint,cost);
+    if(echo)set=matchRanked(rankedSets.filter(s=>echo.sets.includes(s.key)),.20,.015);
    }
   }
   const candidates=rankedEchoes.filter(e=>!set||e.sets.includes(set.key)).slice(0,5).map(e=>({key:e.key,name:engine.getEchoData(e.key)?.name||e.key,difference:e.difference}));
