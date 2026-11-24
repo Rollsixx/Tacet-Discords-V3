@@ -12,7 +12,8 @@ import {visualReadiness} from '../scanner/scoring-readiness.ts';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const must=(c,m,status=422)=>{if(!c)throw new HttpError(status,m);};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
-export function identityCatalog(){return Object.values(engine.mainEchoesData).map(e=>({key:e.key,name:e.name,cost:costByClass[e.class],sets:e.sets,image:corrections.echoes.find(c=>c.key===e.key)?.source||e.image}));}
+const echoSets=echo=>Array.isArray(echo?.sets)?echo.sets.filter(key=>typeof key==='string'):[];
+export function identityCatalog(){return Object.values(engine.mainEchoesData).map(e=>({key:e.key,name:e.name,cost:costByClass[e.class],sets:echoSets(e),image:corrections.echoes.find(c=>c.key===e.key)?.source||e.image}));}
 const mainStatKeys={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Healing Bonus':'HealingBonus'};
 function mainStatChecks(slots=[]){return (slots||[]).map((slot,i)=>{const stat=slot.mainStat?.value||'',key=mainStatKeys[stat]||stat.replace(' DMG Bonus',''),cost=Number(slot.cost?.value),expected=engine.statsTable[cost]?.[key]?.[5];return {slot:i+1,cost,stat,expected:typeof expected==='number'?expected:null,display:typeof expected==='number'?expected+'%':'Unavailable'};});}
 export function repairEvidence(row,data){
@@ -37,7 +38,7 @@ export async function identityWorkspace(db,id){
 }
 export function validateIdentities(input,slots){
  must(Array.isArray(input)&&input.length===5,'Confirm all five ordered identities.',400);
- return input.map((s,i)=>{must(s&&s.slot===i+1&&Object.keys(s).every(k=>['slot','echo','set'].includes(k)),'Invalid identity correction fields.',400);const echo=engine.getEchoData(s.echo);must(echo&&costByClass[echo.class]===Number(slots[i].cost.value),'Selected Echo does not match the source-verified cost.',400);must(echo.sets.includes(s.set),'Selected Sonata is not supported by this Echo.',400);return {echo:s.echo,set:s.set};});
+ return input.map((s,i)=>{must(s&&s.slot===i+1&&Object.keys(s).every(k=>['slot','echo','set'].includes(k)),'Invalid identity correction fields.',400);const echo=engine.getEchoData(s.echo);must(echo&&costByClass[echo.class]===Number(slots[i].cost.value),'Selected Echo does not match the source-verified cost.',400);must(echoSets(echo).includes(s.set),'Selected Sonata is not supported by this Echo.',400);return {echo:s.echo,set:s.set};});
 }
 function sourceProofProblems(row,data){
  const a=data.assessment||{},source=a.sourceSlots;

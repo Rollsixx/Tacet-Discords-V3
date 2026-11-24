@@ -11,6 +11,7 @@ import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-ve
 export {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 const attributes={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Basic Attack DMG Bonus':'BasicAttackDMGBonus','Heavy Attack DMG Bonus':'HeavyAttackDMGBonus','Resonance Skill DMG Bonus':'ResonanceSkillDMGBonus','Resonance Liberation DMG Bonus':'ResonanceLiberationDMGBonus','Glacio DMG Bonus':'Glacio','Fusion DMG Bonus':'Fusion','Aero DMG Bonus':'Aero','Electro DMG Bonus':'Electro','Spectro DMG Bonus':'Spectro','Havoc DMG Bonus':'Havoc','Healing Bonus':'HealingBonus',ATK:'ATK',DEF:'DEF',HP:'HP'};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
+const echoSets=echo=>Array.isArray(echo?.sets)?echo.sets.filter(key=>typeof key==='string'):[];
 const echoReferences=[...catalog.echoes,...supplement.echoes].map(e=>corrections.echoes.find(c=>c.key===e.key)||e);
 const allEchoReferences=[...echoReferences,...variants.echoes.flatMap(e=>e.variants.map(v=>({key:e.key,cost:e.cost,sets:e.sets,fingerprint:v.fingerprint})))];
 const echoesByCost=new Map([1,3,4].map(cost=>[cost,allEchoReferences.filter(e=>e.cost===cost)]));
@@ -49,7 +50,7 @@ export function diagnoseFingerprints(features){
   // pool before the Echo itself has had a chance to match. Once identified,
   // only compare the Sonata icon against sets that Echo can actually roll.
   let echo=matchRanked(rankedEchoes,.18,.025,i>0)||disambiguateSpatial(ef,rankedEchoes,cost);
-  let set=echo?matchRanked(rankedSets.filter(s=>echo.sets.includes(s.key)),.20,.015):null;
+  let set=echo?matchRanked(rankedSets.filter(s=>echoSets(echo).includes(s.key)),.20,.015):null;
   if(!echo){
    // If the portrait is ambiguous or unreadable, a confident Sonata can
    // still narrow the Echo candidates. This remains a fallback: the same
@@ -57,22 +58,22 @@ export function diagnoseFingerprints(features){
    // among the selected Echo's compatible sets.
    const setLed=matchRanked(rankedSets,.20,.015);
    if(setLed){
-    const compatible=rankedEchoes.filter(e=>e.sets.includes(setLed.key));
+    const compatible=rankedEchoes.filter(e=>echoSets(e).includes(setLed.key));
     echo=matchRanked(compatible,.18,.025,i>0)||disambiguateSpatial(ef,compatible,cost);
    }
-   if(echo)set=matchRanked(rankedSets.filter(s=>echo.sets.includes(s.key)),.20,.015);
+   if(echo)set=matchRanked(rankedSets.filter(s=>echoSets(echo).includes(s.key)),.20,.015);
    if(!echo){
     // A near-tied Sonata may be ambiguous even when compatible Echoes can
     // be distinguished. Consider only sets near the best Sonata score, but
     // never relax either identity's original acceptance threshold.
     const plausibleSets=new Set(rankedSets.filter(s=>s.difference<=.20&&s.difference-rankedSets[0].difference<.015).map(s=>s.key));
-    const joint=plausibleSets.size?rankedEchoes.filter(e=>e.sets.some(s=>plausibleSets.has(s))):rankedEchoes;
+    const joint=plausibleSets.size?rankedEchoes.filter(e=>echoSets(e).some(s=>plausibleSets.has(s))):rankedEchoes;
     echo=matchRanked(joint,.18,.025,i>0)||disambiguateSpatial(ef,joint,cost);
-    if(echo)set=matchRanked(rankedSets.filter(s=>echo.sets.includes(s.key)),.20,.015);
+    if(echo)set=matchRanked(rankedSets.filter(s=>echoSets(echo).includes(s.key)),.20,.015);
    }
   }
-  const candidates=rankedEchoes.filter(e=>!set||e.sets.includes(set.key)).slice(0,5).map(e=>({key:e.key,name:engine.getEchoData(e.key)?.name||e.key,difference:e.difference}));
-  const sonatas=rankedSets.filter(s=>!echo||engine.mainEchoesData[echo.key].sets.includes(s.key)).slice(0,3).map(s=>({key:s.key,name:engine.echoSetLabelMap[s.key]||s.key,difference:s.difference}));
+  const candidates=rankedEchoes.filter(e=>!set||echoSets(e).includes(set.key)).slice(0,5).map(e=>({key:e.key,name:engine.getEchoData(e.key)?.name||e.key,difference:e.difference}));
+  const sonatas=rankedSets.filter(s=>!echo||echoSets(engine.mainEchoesData[echo.key]).includes(s.key)).slice(0,3).map(s=>({key:s.key,name:engine.echoSetLabelMap[s.key]||s.key,difference:s.difference}));
   return {slot:i+1,cost,echo:echo?.key||null,set:set?.key||null,echoMatch:echo,setMatch:set,echoCandidates:candidates,sonataCandidates:sonatas,problem:!echo?'Echo '+(i+1)+' is unknown or ambiguous.':!set?'Sonata '+(i+1)+' is unknown or ambiguous.':null};
  });
 }
@@ -150,6 +151,6 @@ export async function assessEquipment(character,slots,identities){
  const c=await engine.getCharByName(character);
  if(scoringPreset(character,c))return {eligible:true,awaitingRotation:false,calculation:await calculateStandard(character,slots,identities)};
  if(!SUPPORTED.includes(character)||slots.length!==5||identities.length!==5||slots.some(s=>validateEchoSlot(s).length))throw Error('Verified scoring inputs are incomplete.');
- for(let i=0;i<5;i++){const e=engine.getEchoData(identities[i].echo);if(!e||costByClass[e.class]!==Number(slots[i].cost.value)||!e.sets.includes(identities[i].set))throw Error('Echo/Sonata catalog mismatch.');}
+ for(let i=0;i<5;i++){const e=engine.getEchoData(identities[i].echo);if(!e||costByClass[e.class]!==Number(slots[i].cost.value)||!echoSets(e).includes(identities[i].set))throw Error('Echo/Sonata catalog mismatch.');}
  return {eligible:false,awaitingRotation:true,calculation:{character,score:null,engineVersion:ENGINE_VERSION,dataVersion:DATA_VERSION,identities},reason:'Equipment verified. Awaiting the owner’s first published rotation; this build remains unranked.'};
 }
