@@ -11,7 +11,16 @@ import {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-ve
 export {ENGINE_VERSION,DATA_VERSION,POLICY_VERSION,SUPPORTED} from './scoring-versions.mjs';
 const attributes={'Crit. Rate':'CritRate','Crit. DMG':'CritDMG','Energy Regen':'EnergyRegen','Basic Attack DMG Bonus':'BasicAttackDMGBonus','Heavy Attack DMG Bonus':'HeavyAttackDMGBonus','Resonance Skill DMG Bonus':'ResonanceSkillDMGBonus','Resonance Liberation DMG Bonus':'ResonanceLiberationDMGBonus','Glacio DMG Bonus':'Glacio','Fusion DMG Bonus':'Fusion','Aero DMG Bonus':'Aero','Electro DMG Bonus':'Electro','Spectro DMG Bonus':'Spectro','Havoc DMG Bonus':'Havoc','Healing Bonus':'HealingBonus',ATK:'ATK',DEF:'DEF',HP:'HP'};
 const costByClass={Calamity:4,Overlord:4,Elite:3,Common:1};
-const echoSets=echo=>Array.isArray(echo?.sets)?echo.sets.filter(key=>typeof key==='string'):[];
+// `matchRanked` returns a compact {key, difference, margin} decision rather
+// than retaining the reference object. Resolve compatibility from the pinned
+// game catalog first; use reference metadata only for future staged data that
+// is not yet represented in the scoring engine.
+const echoSets=echo=>{
+ const key=typeof echo==='string'?echo:echo?.key;
+ const canonical=key?engine.mainEchoesData[key]?.sets:undefined;
+ const sets=Array.isArray(canonical)?canonical:echo?.sets;
+ return Array.isArray(sets)?sets.filter(value=>typeof value==='string'):[];
+};
 const echoReferences=[...catalog.echoes,...supplement.echoes].map(e=>corrections.echoes.find(c=>c.key===e.key)||e);
 const allEchoReferences=[...echoReferences,...variants.echoes.flatMap(e=>e.variants.map(v=>({key:e.key,cost:e.cost,sets:e.sets,fingerprint:v.fingerprint})))];
 const echoesByCost=new Map([1,3,4].map(cost=>[cost,allEchoReferences.filter(e=>e.cost===cost)]));
