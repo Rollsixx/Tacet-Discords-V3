@@ -22,7 +22,7 @@
     "verify": "npm test && npm run lint && npm run build",
     "db:backup": "node --env-file-if-exists=.env.local scripts/backup.mts",
     "catalog:check": "node scripts/check-catalog-completeness.mjs && node scripts/check-scanner-coverage.mjs",
-    "scanner:regression": "node --test src/lib/scanner/*.test.mjs src/lib/server/ocr-agreement.test.mjs src/lib/server/scanner-regression-matrix.test.mjs src/lib/leaderboards/rank-history.test.mjs",
+    "scanner:regression": "node --test src/lib/scanner/*.test.mjs src/lib/server/ocr-agreement.test.mjs src/lib/server/scanner-regression-matrix.test.mjs src/lib/server/catalog-recognition.test.mjs src/lib/leaderboards/rank-history.test.mjs",
     "bundles:report": "node scripts/function-bundle-report.mjs --check",
     "bundles:smoke": "node scripts/smoke-function-runtime.mjs"
   },
