@@ -12,7 +12,7 @@ test('blank/transparent colour evidence cannot disambiguate portraits and known 
  assert.equal(spatialDistance({},{}),Infinity);assert.equal(spatialDistance({spatial:'AA=='},{spatial:'AA=='}),Infinity);
  const transparent=await fingerprint(await sharp({create:{width:192,height:182,channels:4,background:'#00000000'}}).png().toBuffer(),undefined,true);assert.equal(spatialDistance(transparent,transparent),Infinity);
  const portrait=variants.echoes.find(e=>e.key==='KernelPuppetAnger').variants[0].fingerprint,sonata=base.sets.find(s=>s.key==='WishesofQuietSnowfall').fingerprint;
- const r=diagnoseFingerprints([{cost:1,portrait,sonata}])[0];assert.equal(r.echo,null);assert.equal(r.set,'WishesofQuietSnowfall');assert.ok(r.problem);
+ const r=diagnoseFingerprints([{cost:1,portrait,sonata}])[0];assert.equal(r.echo,'KernelPuppetAnger');assert.equal(r.set,null);assert.match(r.problem,/Sonata 1/,'an incompatible Sonata must stay unresolved instead of being assigned to the Echo');
 });
 test('reported Kernel Puppet and green Sonata screenshot resolves jointly without changing costs or thresholds',{skip:!process.env.USER_BUILD_CARDS_DIRECTORY},async()=>{
  const path=process.env.USER_BUILD_CARDS_DIRECTORY+'/image(20261029-041830).png';
